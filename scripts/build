@@ -61,6 +61,15 @@ for pkg in "$@"; do
 	# the build happened. If it is missing, the version was already in an index
 	# and the pkgrel bump was forgotten.
 	if [ -f "$PKGS/$pkg-$ver.apk" ]; then
+		# An artifact with the right name is not proof on its own: pmbootstrap
+		# reports success when it decides the version is already built, so an
+		# edit that forgot the bump leaves the OLD apk sitting there and the
+		# build looks fine. If the recipe is newer than the artifact, it is.
+		if [ "$d/APKBUILD" -nt "$PKGS/$pkg-$ver.apk" ]; then
+			red "  $pkg-$ver.apk is OLDER than its APKBUILD: nothing was rebuilt."
+			red "  pmbootstrap skips a version it already has. Run: scripts/bump $pkg"
+			rc=1; continue
+		fi
 		green "  $PKGS/$pkg-$ver.apk"
 	else
 		red "  no $pkg-$ver.apk in $PKGS"
