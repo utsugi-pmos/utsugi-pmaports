@@ -1,0 +1,7 @@
+// Without this the shell cannot claim the sensors and rotation never arrives.
+polkit.addRule(function(action, subject) {
+    if (action.id == "net.hadess.SensorProxy.claim-sensor" &&
+        subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

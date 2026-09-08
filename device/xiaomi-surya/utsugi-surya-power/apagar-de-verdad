@@ -1,0 +1,64 @@
+#!/bin/sh
+# The power-off of this phone, as the ExecStop of apagar-de-verdad.service:
+# the first unit systemd stops when poweroff.target is the goal.
+#
+# Measured on 2026-09-05 (surya/docs/BOOT-03): the ordinary shutdown of
+# this phone freezes the SoC about one second after the teardown begins, and
+# the SoC watchdog then hard-resets it. That is why "power off" always ended
+# in a reboot. A power-off that reaches the kernel BEFORE the teardown works
+# as it should: mainline's pm8941-pwrkey arms the PMIC for SHUTDOWN, PSCI
+# SYSTEM_OFF drops PS_HOLD, the phone is off (POFF_REASON1 = PS_HOLD, and it
+# only comes back on a key press, or on the charger if a cable is attached).
+#
+# So this hands the transition to the kernel at once: screen off, disks
+# synced, `poweroff -f` or `reboot -f`. The kernel still shuts devices down
+# and syncs on its way; what it skips is the userspace teardown that freezes.
+#
+# A REBOOT TAKES THIS PATH TOO, since 2026-09-07. It used to be left alone --
+# "only a power-off takes this path" -- on the belief that a reboot did not
+# reach the freezing point. It does: four real reboots, four freezes, none of
+# them reaching the final phase, each dying somewhere else. What hid it is
+# that a watchdog reset, on a reboot, looks like a reboot that worked; the
+# only visible difference is the two minutes of RebootWatchdogUSec, and
+# whoever does not wait them out presses the button.
+#
+# What is given up by skipping the teardown is a clean unmount, which is why
+# the two syncs above are not decoration. It is still strictly better than
+# what happened before: the freeze ended in a watchdog reset with no sync at
+# all.
+#
+# ⚠️ NOT VALIDATED YET, and the honest reason is worth writing down. Fourteen
+# reboots were run with this in place: thirteen came back on their own in
+# 56-76 s and none needed the button. But this script's own log has ONE entry
+# for those fourteen, so most of them were clean WITHOUT it running -- which
+# means the run proves the reboots worked, not that this is what made them
+# work. Why it stops logging after the first shutdown is unknown; the unit is
+# active and enabled and the installed copy does carry the line.
+#
+# So this ships as the right shape (it mirrors the power-off path that IS
+# measured to work) and as a no-op when it does not run. What is missing is a
+# run where the log shows one line per reboot.
+set -u
+
+# Which transition is this? Read from the pending jobs, because systemd tells
+# an ExecStop nothing about where the system is going.
+case "$(systemctl list-jobs --no-legend 2>/dev/null)" in
+	*poweroff.target*) modo=poweroff ;;
+	*reboot.target*)   modo=reboot ;;
+	*halt.target*)     modo=halt ;;
+	# Not a shutdown: an isolate, or this unit being restarted on its own.
+	# Measured 2026-09-07: an isolate does NOT freeze this phone (19 samples,
+	# none frozen), so there is nothing to dodge here.
+	*) exit 0 ;;
+esac
+
+# One line per shutdown, to disk. Not decoration: the journal never records
+# this, because journald is already being stopped when this runs -- looking for
+# it there and finding nothing was mistaken for "the script did not run", and
+# cost an afternoon. This file is the only place that says whether it acted.
+echo "$(date '+%F %T') $modo -f" >> /var/log/apagar-de-verdad.log 2>/dev/null
+
+for b in /sys/class/backlight/*/brightness; do echo 0 > "$b" 2>/dev/null; done
+sync
+sync
+exec /bin/busybox "$modo" -f

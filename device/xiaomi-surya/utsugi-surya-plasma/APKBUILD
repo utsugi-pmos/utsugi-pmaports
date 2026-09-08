@@ -1,0 +1,124 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# The Plasma Mobile side of the POCO X3 NFC: the quick settings the shell does
+# not ship, the defaults it ships wrong, and the small services that make the
+# session usable.
+#
+# Everything here used to be written into $HOME by an installer, which meant it
+# was invisible to apk, survived nothing and had to be reapplied by hand. Now:
+#
+#   quick settings   /usr/share/plasma/quicksettings   (the shell enables a new
+#                    one on its own, so no config edit is needed)
+#   user services    /usr/lib/systemd/user + a preset  (postmarketOS runs
+#                    "systemctl preset --global" from an apk trigger)
+#   KConfig defaults /etc/xdg                          (the layer under $HOME,
+#                    so anything the user changes still wins)
+#   bar margins      a Plasma Mobile device preset, which is the mechanism made
+#                    for it, instead of writing plasmamobilerc by hand
+#
+# NOT here: the mobiletaskswitcher patch that keeps applications alive. It
+# belongs with the appsvivas application that manages its list.
+pkgname=utsugi-surya-plasma
+pkgver=1
+pkgrel=0
+pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="kconfig plasma-dialer-utsugi"
+subpackages="$pkgname-systemd"
+source="location-switch
+	power-saving-switch
+	usb-power-switch
+	power-saving-agent
+	sonido-avisos
+	precalentar-marcador
+	location-metadata.json
+	location-main.qml
+	power-saving-metadata.json
+	power-saving-main.qml
+	usb-power-metadata.json
+	usb-power-main.qml
+	geoclue-agent.service
+	power-saving-agent.service
+	sonido-avisos.service
+	precalentar-marcador.service
+	10-utsugi-scale.conf
+	powerdevilrc
+	plasmanotifyrc
+	surya-device-preset.conf
+	80-utsugi-surya-plasma.preset
+	"
+
+package() {
+	local sw
+	for sw in location-switch power-saving-switch usb-power-switch; do
+		install -Dm755 "$srcdir/$sw" -t "$pkgdir"/usr/bin/
+	done
+	local helper
+	for helper in power-saving-agent sonido-avisos precalentar-marcador; do
+		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
+	done
+
+	# The quick settings. @SWITCH@ is substituted here because Plasma's executable
+	# data engine expands no variables and plasmashell's PATH is not ours.
+	local qs id
+	for qs in location power-saving usb-power; do
+		case "$qs" in
+			location) id=org.kde.plasma.quicksetting.location; sw=location-switch ;;
+			power-saving) id=org.kde.plasma.quicksetting.powersaving; sw=power-saving-switch ;;
+			usb-power) id=org.kde.plasma.quicksetting.usbpower; sw=usb-power-switch ;;
+		esac
+		install -Dm644 "$srcdir/$qs-metadata.json" \
+			"$pkgdir"/usr/share/plasma/quicksettings/$id/metadata.json
+		sed "s|@SWITCH@|/usr/bin/$sw|g" "$srcdir/$qs-main.qml" > "$srcdir/$qs-main.qml.fixed"
+		install -Dm644 "$srcdir/$qs-main.qml.fixed" \
+			"$pkgdir"/usr/share/plasma/quicksettings/$id/contents/ui/main.qml
+	done
+
+	# KConfig cascades, so these are defaults: anything the user changes lands in
+	# $HOME and still wins.
+	install -Dm644 "$srcdir"/powerdevilrc "$srcdir"/plasmanotifyrc -t "$pkgdir"/etc/xdg/
+
+	# The file name IS the match: the shell looks up the first string in
+	# /sys/firmware/devicetree/base/compatible. abuild forbids a comma in a
+	# source file name, so it is carried under a plain name and renamed here.
+	install -Dm644 "$srcdir"/surya-device-preset.conf \
+		"$pkgdir"/usr/share/plasma-mobile-device-presets/xiaomi,surya.conf
+
+	local unit
+	for unit in geoclue-agent power-saving-agent sonido-avisos precalentar-marcador; do
+		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/user/
+	done
+	install -Dm644 "$srcdir"/10-utsugi-scale.conf \
+		-t "$pkgdir"/usr/lib/systemd/user/plasma-xdg-desktop-portal-kde.service.d/
+	install -Dm644 "$srcdir"/80-utsugi-surya-plasma.preset \
+		-t "$pkgdir"/usr/lib/systemd/user-preset/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+b3be4dfccb85b36004b7ad3865a81fb11a8aa853c73a1821141d7e54a840ba7138c299c9eb79173722dbf5fdb4bf7a975133897e30bdb5d425fd642c10eecbd5  location-switch
+f8fbe05b3a77c2a0ee2c85895acc4169150b2f6075a71b77c2a860ae7f16e337306e76bc2c67dfa5cc17e7aa132a73e53b036c049a77e135c1c79eb7409061fd  power-saving-switch
+c1f97d776a1331944864e80ce50e07fcda81d6a0f5b055af687fb12e5fd8e7b7a784477f16335978bc96ce2b8269d9c8a77b613a4a61914480063e132325179d  usb-power-switch
+241381bba12901bac0d25ea47be07875165177d84659568cc8ff7f00e252bf77fd094675bbd4118ebe833781a4f5c693668fc204c43052910fb5d91d03aa8d20  power-saving-agent
+627ae6da8cbed28c63461b012c1f2154625d77fe94e30a277f376d682fa345e2a69718842ccfe7d5990b8b4d3dd9acd89e4f7a592df6258e20ab74622d7d906c  sonido-avisos
+36bd96fa67741112d2874abeb6f5fa4da337583ae0913b131e4faa8cf017d90d1b106750a73b33d080b83c609f664f67a5fd2bb0772fe1f9b91e6ae947ce6a7b  precalentar-marcador
+57f8f99521d2d7e878a67f35b46984276b7969306e8936b1bdb25ea2e088a839e9ad951148ec989936fd782a4ce79ac2a335310397c7ffffe165e3b7a1a966c0  location-metadata.json
+6dc5b3f0036c26addc98fdbd5f06418ef31c4eefa9f0b7701de982f8592ec601dbf84cd2df378b899a82db99b782bba4b88bd8d85d6d173d374ef65a720bf154  location-main.qml
+da94e98efbd0780a69b0dfe03972aab47f0d5cd864fed8c9aebc976482b9920599fcdefdd0b7993dd5197c5dcd17ceacbc4cace7762f19bbc7e88bfa0d590c79  power-saving-metadata.json
+6659eb95382c3e9d0c63594982b15abc43ba659ae8f8c421cb451e3de038d74af467ae67cb49dcb21b940cce380b8893dbf2af9e4b02d160d48fa4354d3664d7  power-saving-main.qml
+6dd47652baabb540899d22f914a8886ad01a8a48b284aa0459b159700a3b16b05880d589a8a6658196dd43a5c64d413b0a75c355e82004e122c9975c551e4452  usb-power-metadata.json
+79fc6c4992b947223bff2171a1c737b70299e2e2079b83c4bbfbdcc99c5fdfc69f3e6d16a2572b19ad6bf7ddda43464aa4bc673ac800c6853c450771133574fb  usb-power-main.qml
+63d4104d68beb471b7a92d3795249b07b295a659589fa1ddf8f06589450d8d261be582d8af6c1a7d0c601feaabf95b2a997c37b4df760a9bd53dbe5c574c3099  geoclue-agent.service
+9f2dbf2ee26e230265c9129915de8364a109b368d1190ca52b81a3594ed4a79c04ce8912ebf71bfe82f07fbf11a096e741ed3b71ab93cc5543764a2c901052bc  power-saving-agent.service
+0eb0a773aa0549f461badb3fd637e41c8495ad9968359c50db094ff53ba0ccf356c8d81afd190bad11a3102e9e70f8b7304c9b12f870214598353bc020dff95a  sonido-avisos.service
+36300491562501c63a43400576f441cd44eddd6c4094807f045a5ee4dd8093357c5d60afea7277c84bc076bbd072ab8f89b393ff7f033e7468203497def96d14  precalentar-marcador.service
+baa18b5a81b14541dd63e25aee1c229f166232d5ec4f259d6ac53c0c70159f44309a7e61ffadfce5ff090351cf2cb5d42cf174680c305c0b0af2c09c8103f392  10-utsugi-scale.conf
+fbe3156ee0b7f6ab9513474ac3338419be1ecf12d6ef5033b55b3cd18f7edeac028d2ede5b98ded1fddf1e87d0da231dcdfd0c3e8c3cbb154d8d8d6cf3267c58  powerdevilrc
+c7dd56d3a8b4a6481b694cf9aa63687b3463ea8f39dded17dd3956c6a1e8ff29c9cead3bdc977d18672103ec2c2c21e2073742e08bc225b2952013f83cdcc480  plasmanotifyrc
+53d1b8d82628baa296babd0432f620055e31246dbe44ded77f471a2e7148247113128463aa581703619a454873d519c7eb1fc906297e3728c24418fe13ec2458  surya-device-preset.conf
+c426967a50c9f6f2e4c1d95e5e9c8abea0c97e3b3ef6d937159d001c6c010d665e731d337f1f6047d188640cd587c05763f1cb147aa8ab9e7f751aafb6eae68a  80-utsugi-surya-plasma.preset
+"

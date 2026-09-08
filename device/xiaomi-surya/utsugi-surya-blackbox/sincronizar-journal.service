@@ -1,0 +1,18 @@
+[Unit]
+Description=Force journald to flush to disk every second (must die among the LAST)
+DefaultDependencies=no
+After=systemd-journald.service
+# No Conflicts=shutdown.target ON PURPOSE: this way systemd does not stop it when
+# the power-off begins, and it keeps syncing to the end. Before, it stopped early
+# and what got measured was when the instrument died, not when the phone hung.
+Before=shutdown.target
+IgnoreOnIsolate=yes
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/sincronizar-journal
+KillMode=mixed
+TimeoutStopSec=1
+
+[Install]
+WantedBy=sysinit.target

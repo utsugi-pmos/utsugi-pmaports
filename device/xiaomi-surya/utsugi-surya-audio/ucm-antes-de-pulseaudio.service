@@ -1,0 +1,18 @@
+[Unit]
+Description=Apply the card's UCM before PulseAudio probes it
+# Before the graphical session, which is what launches PulseAudio. If PulseAudio
+# probes first, it finds no profile and enters the retry loop that hammers the
+# DSP.
+Before=display-manager.service sddm.service greetd.service
+After=sound.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/utsugi-surya/ucm-antes-de-pulseaudio
+TimeoutStartSec=90
+
+[Install]
+WantedBy=multi-user.target

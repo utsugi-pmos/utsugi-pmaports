@@ -1,0 +1,45 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# The GPS on this phone works. A pmaports bug was blocking it.
+#
+# modem-gnss.service (device/community/soc-qcom) starts the location engine with
+# --loc-set-engine-lock=mt, and with that value the modem firmware rejects any
+# session of its own with "QMI protocol error (46)". GeoClue tries once at
+# startup, swallows the error and never retries, so maps silently fall back to
+# IP-based position.
+#
+# Measured by alternating five times: none/mi start the engine, mt/all always
+# fail. The firmware reads the value as "which type is allowed", with mi and mt
+# swapped relative to the QMI spec. 'mi' is used rather than 'none' because it
+# still blocks the position requests made by the NETWORK, which is what the
+# original value was trying to do.
+#
+# The bug is upstream and affects every Qualcomm device on postmarketOS.
+pkgname=utsugi-surya-gps
+pkgver=1
+pkgrel=0
+pkgdesc="Unlock the GPS engine that pmaports leaves unusable"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="qmi-utils"
+subpackages="$pkgname-systemd"
+source="gnss-listo
+	10-utsugi-surya.conf
+	"
+
+package() {
+	install -Dm755 "$srcdir"/gnss-listo -t "$pkgdir"/usr/libexec/utsugi-surya/
+	# A drop-in, not a replacement unit: soc-qcom keeps owning modem-gnss.service
+	# and only the ExecStart chain is overridden.
+	install -Dm644 "$srcdir"/10-utsugi-surya.conf \
+		-t "$pkgdir"/usr/lib/systemd/system/modem-gnss.service.d/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+6c1905c7515708f6ee1ac115d5c66fe1ee1944794caa6c71b7feac25cf455cf3a2b4ff1b6622a432672cb74457a5571b4820332a61a6416dd4d4b35ed1039733  gnss-listo
+23a2dedbf86d83266206e4f88052261acf731098b93fd7ec6b9214036ea9c942af2223efc7e6ceb85f24b81c22668a822e9604ccf2f24a28a62740b121b9fbad  10-utsugi-surya.conf
+"

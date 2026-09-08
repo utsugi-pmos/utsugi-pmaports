@@ -1,0 +1,77 @@
+# Audio on the POCO X3 NFC, packaged so that it survives a reboot without anyone
+# running an installer.
+#
+# What it solves, in order:
+#   1. the ADSP does not publish its APR services at boot, so the sound card is
+#      never created; restarting the ADSP once fixes it
+#   2. the UCM has to be applied BEFORE PulseAudio probes the card, or PulseAudio
+#      finds no profile and hammers the DSP retrying
+#   3. both chips boot around -36 dB and the phone seems mute; the saved ALSA
+#      state is what alsa-restore writes on the next boot, so it is written once
+#      here and stored
+#
+# The volume is written ONLY by salida-audio, and only over ALSA. alsa-restore
+# writes over ALSA on every boot, so a second writer (direct I2C, or the UCM)
+# ends up fighting it and the result depends on who runs last.
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+pkgname=utsugi-surya-audio
+pkgver=1
+pkgrel=0
+pkgdesc="Audio for the Xiaomi POCO X3 NFC: both speakers, saved volume, UCM ordering"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="alsa-utils"
+subpackages="$pkgname-systemd"
+source="adsp-audio-init
+	audio-volumen
+	salida-audio
+	ucm-antes-de-pulseaudio
+	adsp-audio-init.service
+	audio-volumen.service
+	ucm-antes-de-pulseaudio.service
+	q6voiced.conf
+	80-utsugi-surya-audio.preset
+	"
+
+package() {
+	# User-facing command: 'salida-audio estado' is meant to be typed.
+	install -Dm755 "$srcdir"/salida-audio -t "$pkgdir"/usr/bin/
+
+	# Unit-only helpers. They used to live in /usr/local/bin, which no package
+	# may own.
+	local helper
+	for helper in adsp-audio-init audio-volumen ucm-antes-de-pulseaudio; do
+		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
+	done
+
+	# q6voiced.service (from soc-qcom) refuses to start without this file:
+	# ConditionPathExists=/usr/share/q6voiced/q6voiced.conf. No package ships it
+	# for this device.
+	install -Dm644 "$srcdir"/q6voiced.conf -t "$pkgdir"/usr/share/q6voiced/
+
+	local unit
+	for unit in adsp-audio-init audio-volumen ucm-antes-de-pulseaudio; do
+		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/system/
+	done
+	install -Dm644 "$srcdir"/80-utsugi-surya-audio.preset \
+		-t "$pkgdir"/usr/lib/systemd/system-preset/
+}
+
+systemd() {
+	# Takes the units AND the preset: default_systemd moves all of
+	# usr/lib/systemd, which is where both live.
+	default_systemd
+}
+sha512sums="
+921446864342abef0b633b4044fc91309debe8d3ab24f9733f28d0975463720014e38ea89acdc8e3d0a6872d3c171034b611b225cc9babc32b4b799d56eb657a  adsp-audio-init
+d887e151985554f5ffc2c76f516d28884de44a65eeea96e2865f0ad5eaa5957b57f662a525d3156a8a92d5ddf4bb76877473b3e2fdc42a47c18b3b586732c847  audio-volumen
+77980d7863d54783bf5b09f2ca2de363971f74ea2067ea72e3b316ff0cb6c238b3df5fa8ee66dd8ea12ce60b6230ded73f7cf9af51be0463da78be0a33cecbf9  salida-audio
+afffeded471926e239510730670d10934cc60604b034b75c4c20aeb263b5f429d606e4fadd088702af30daaf3f2099eef1d8c201cd22ebbecd2420f69d6a4030  ucm-antes-de-pulseaudio
+db5b6563bdde81ac0b826c0481f8a8eb3798baa8a6a79f38f0983eb5793c1f96d416001932b141bd45bb4d27ede0aae85c065dd1c69e49363aedf6c999b693e9  adsp-audio-init.service
+c1785d9822d54b7ad1e82f9a395d29334796f37a711df6fd42731664aadd3f40fc430f577c815e4b0e6659ab8829cef9f599dd97adb07048c40fe62e8c0de693  audio-volumen.service
+fbb2f239adc34b19d9bc594b8fbdb8eb4dcd161671e16ceb9e177a3ba738fcffce0367a014e0e147997d294687d0d6a592d26ae6e1edb7cfe6b501a75b3f8ac9  ucm-antes-de-pulseaudio.service
+1c71788e4b6be4713b2149ccd5920dd27d400b3d61835b5d54bc410dd7c044b23f41215d2b0427816c97c10bcd75f6459db2875825bb413efe1cf68aded874d8  q6voiced.conf
+7e31315b50f218eef6ba6f2a1ff55fbca50c3a78605b15f9fc5ff17bcc0bf34891c3b564487e0777212d4a7b56cd63b2bf132e3d2f02eb1570324f4c39e4efb0  80-utsugi-surya-audio.preset
+"

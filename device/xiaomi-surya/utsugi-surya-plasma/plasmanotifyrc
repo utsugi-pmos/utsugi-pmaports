@@ -1,0 +1,4 @@
+# "Connection activated/deactivated" pops up on every wifi-to-data switch and
+# covers whatever you are reading.
+[Services][networkmanagement]
+ShowPopups=false

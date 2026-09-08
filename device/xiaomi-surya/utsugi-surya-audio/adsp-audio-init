@@ -1,0 +1,35 @@
+#!/bin/sh
+# The SM7150's sound card does not get created at boot:
+#
+#   platform sound: deferred probe pending:
+#     snd-sm8250: MultiMedia1: error getting cpu dai name
+#
+# The MultiMedia1 DAI is published by q6asm-dai from the ADSP, and that service
+# only registers when the ADSP boots or restarts. With the deferred
+# probe stuck there is no card, no sink, no sound.
+#
+# Restarting the ADSP once resolves the probe and the card appears.
+# It has to be done BEFORE PulseAudio starts, or it stays at
+# auto_null and does not look again.
+
+RP=/sys/class/remoteproc/remoteproc0
+
+# wait for the ADSP to be up
+for i in $(seq 1 60); do
+	[ "$(cat $RP/name 2>/dev/null)" = "adsp" ] && \
+	[ "$(cat $RP/state 2>/dev/null)" = "running" ] && break
+	sleep 1
+done
+
+# if the card already exists, there is nothing to do
+[ -e /dev/snd/controlC0 ] && exit 0
+
+echo stop  > $RP/state 2>/dev/null; sleep 4
+echo start > $RP/state 2>/dev/null
+
+for i in $(seq 1 40); do
+	[ -e /dev/snd/controlC0 ] && { echo "sound card present"; exit 0; }
+	sleep 1
+done
+echo "warning: the card did not appear after restarting the ADSP" >&2
+exit 1

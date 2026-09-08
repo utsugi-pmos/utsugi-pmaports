@@ -1,0 +1,351 @@
+#!/bin/sh
+# Power saving switch for Plasma Mobile, which ships no power profile quick
+# setting of its own.
+#
+# Three levers, none of which needs root:
+#
+#   1. The power profile, via PowerDevil on the SESSION bus. PowerDevil talks
+#      to tuned-ppd on the system bus for us, and polkit already grants the
+#      active session that call -- so no helper and no polkit rule of our own.
+#      What the profile actually does to the SoC lives in tuned.conf next door;
+#      out of the box it did nothing at all on this hardware.
+#
+#   2. Screen brightness, via org.kde.ScreenBrightness. On a phone the panel
+#      outweighs the SoC by a wide margin, so this is the lever that saves the
+#      most -- more than the clock ceilings do.
+#
+#   3. The idle timeouts in powerdevilrc: dim sooner, blank sooner, suspend
+#      sooner.
+#
+# Levers 2 and 3 are 'apply'/'restore' rather than part of on/off, because the
+# tile drives them from the profile STATE, not from the button press. That way
+# changing the profile from System Settings or over ssh dims the screen too.
+#
+# Both are idempotent and both restore what was there before, which is why the
+# previous values are written to disk rather than kept in memory: plasmashell
+# restarts, and a phone reboots with saving still on.
+set -u
+
+ESTADO="${XDG_STATE_HOME:-$HOME/.local/state}/power-saving"
+PREVIO="$ESTADO/brightness"
+TIEMPOS="$ESTADO/timeouts"
+REFRESCO="$ESTADO/refresh"
+NAVEGADOR="$ESTADO/browser-fps"
+
+PD=org.kde.Solid.PowerManagement
+PERFIL_PATH=/org/kde/Solid/PowerManagement/Actions/PowerProfile
+PERFIL_IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
+
+AHORRO=power-saver
+NORMAL=balanced
+
+# Fraction of full brightness to drop to, and the idle timeouts in seconds.
+BRILLO_PCT=30
+DIM_SEC=20
+APAGAR_SEC=30
+SUSPENDER_SEC=60
+
+# Refresh rate to drop to. Empty would mean "do not touch it".
+#
+# This needs kernel patch 0105, and that patch had to be written twice, which
+# is worth knowing before touching this number.
+#
+# This panel does NOT change refresh rate by changing the clock. The vendor
+# device tree asks for "dfps_immediate_porch_mode_vfp": the pixel clock stays
+# put and the VERTICAL FRONT PORCH grows. The first version of the patch did
+# the obvious thing instead -- same porches, half the clock -- and filled the
+# screen with glitches while kscreen, wayland-info and dmesg all reported
+# success. That was only caught by a human looking at the panel.
+#
+# With the porch method, verified on the phone: mode applies, the DSI bit clock
+# stays at 860427759 exactly as at 120 Hz, no dpu/dsi/drm error is logged, and
+# the picture is clean.
+HZ_AHORRO=60
+
+TAB="$(printf '\t')"
+
+# --- profile ----------------------------------------------------------------
+
+perfil_actual() {
+	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.currentProfile" 2>/dev/null
+}
+
+poner_perfil() {
+	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.setProfile" "$1" >/dev/null 2>&1
+}
+
+# --- brightness -------------------------------------------------------------
+
+# The object path is looked up rather than hardcoded to display0: it is indexed
+# per display, and this phone grows a second one whenever it is docked.
+brillo_path() {
+	qdbus6 "$PD" 2>/dev/null | grep -m1 '^/org/kde/ScreenBrightness/display'
+}
+
+brillo_get() {
+	p="$(brillo_path)" || return 1
+	[ -n "$p" ] || return 1
+	qdbus6 "$PD" "$p" org.kde.ScreenBrightness.Display.Brightness 2>/dev/null
+}
+
+brillo_max() {
+	p="$(brillo_path)"
+	[ -n "$p" ] || return 1
+	qdbus6 "$PD" "$p" org.kde.ScreenBrightness.Display.MaxBrightness 2>/dev/null
+}
+
+brillo_set() {
+	p="$(brillo_path)"
+	[ -n "$p" ] || return 1
+	# The second argument is a flags bitfield; 0 means no OSD popup, which is
+	# what we want for a change the user did not make with the slider.
+	qdbus6 "$PD" "$p" org.kde.ScreenBrightness.Display.SetBrightness "$1" 0 \
+		>/dev/null 2>&1
+}
+
+# --- refresh rate -----------------------------------------------------------
+#
+# 120 -> 60 Hz, which on a phone panel is the single biggest saving available
+# here, ahead of the clock ceilings.
+#
+# This needs kernel patch 0105. Before it the panel driver returned ONE fixed
+# mode via drm_connector_helper_get_modes_fixed(), so there was nothing to
+# select -- not a setting we had failed to find, a mode that did not exist.
+# After the patch:
+#
+#     Modes:  1:1080x2400@120.00*!  2:1080x2400@60.00
+#
+# Switching live was the open question, and it works: measured going to 60 and
+# back with no DPU or DSI error logged, so the 10nm PHY reprograms its PLL
+# cleanly with DSC enabled.
+#
+# If the kernel is older, every function here fails harmlessly and the rest of
+# the switch carries on -- the tile simply saves a little less.
+
+# kscreen-doctor emits ANSI colour even into a pipe, so it has to be stripped
+# before anything can be parsed out of it.
+kd_plano() {
+	kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
+}
+
+salida() {
+	kd_plano | awk '/^Output:/ { print $3; exit }'
+}
+
+# Modes are printed as "1:1080x2400@120.00*!  2:1080x2400@60.00", where '*'
+# marks the one in use and '!' the preferred one.
+modo_en_uso() {
+	kd_plano | tr ' ' '\n' | grep '\*'
+}
+
+hz_actual() {
+	modo_en_uso | sed 's/.*@//; s/\..*//'
+}
+
+poner_hz() {
+	o="$(salida)"
+	[ -n "$o" ] || return 1
+	# The resolution is taken from the mode in use rather than hardcoded, so
+	# this does not bake the panel geometry into the switch.
+	res="$(modo_en_uso | sed 's/^[0-9]*://; s/@.*//')"
+	[ -n "$res" ] || return 1
+	kscreen-doctor "output.$o.mode.$res@$1" >/dev/null 2>&1
+}
+
+# --- browser frame rate -----------------------------------------------------
+#
+# The 'navegador' ajuste pins layout.frame_rate to 120 in Firefox and LibreWolf
+# because their autodetection does not work here: measured at 59,7 fps on a
+# 120 Hz panel, and setting -1 leaves it at 59,9. Pinning it was right while
+# the panel could ONLY do 120.
+#
+# With the screen dropped to 60 Hz that number becomes actively harmful: the
+# browser composites twice as many frames as the panel can show, so in power
+# saving mode it turns into the biggest consumer on the phone -- the opposite
+# of the point.
+#
+# Two deliberate limits:
+#
+#   - The browser is NOT restarted. Firefox reads these files at startup, so an
+#     already-open window keeps its old rate until the user closes it. Killing
+#     somebody's browser to save a few mA is a bad trade; this just makes the
+#     NEXT start correct.
+#   - The files live in /usr/lib and belong to root, so this needs sudo -n. If
+#     that fails -- no NOPASSWD, no privileges -- it is skipped in silence and
+#     everything else still applies.
+NAVEGADORES="/usr/lib/firefox/browser/defaults/preferences/surya-120hz.js
+/usr/lib/librewolf/browser/defaults/preferences/surya-120hz.js"
+
+navegador_fps_actual() {
+	for f in $NAVEGADORES; do
+		[ -f "$f" ] || continue
+		sed -n 's/^pref("layout\.frame_rate", \([0-9]*\));.*/\1/p' "$f" | head -1
+		return
+	done
+}
+
+navegador_fps_poner() {
+	for f in $NAVEGADORES; do
+		[ -f "$f" ] || continue
+		sudo -n sed -i \
+			"s/^pref(\"layout\.frame_rate\", [0-9]*);/pref(\"layout.frame_rate\", $1);/" \
+			"$f" 2>/dev/null || true
+	done
+}
+
+# --- idle timeouts ----------------------------------------------------------
+#
+# Written to all three profile groups on purpose. PowerDevil picks AC, Battery
+# or LowBattery depending on what UPower reports, and this phone sits in an
+# awkward spot: plugged into the USB cable it is developed over, battery full,
+# status "Not charging". Rather than guess which group is live, set all three.
+PERFILES_PD="AC Battery LowBattery"
+
+# Subgroups are nested: [AC][Display] and [AC][SuspendAndShutdown].
+tiempos_poner() {
+	: > "$TIEMPOS"
+	for pf in $PERFILES_PD; do
+		guardar_y_poner "$pf" Display DimDisplayIdleTimeoutSec "$DIM_SEC"
+		guardar_y_poner "$pf" Display TurnOffDisplayIdleTimeoutSec "$APAGAR_SEC"
+		guardar_y_poner "$pf" SuspendAndShutdown \
+			AutoSuspendIdleTimeoutSec "$SUSPENDER_SEC"
+	done
+}
+
+guardar_y_poner() {
+	pf="$1"; gr="$2"; cl="$3"; val="$4"
+	antes="$(kreadconfig6 --file powerdevilrc --group "$pf" --group "$gr" \
+		--key "$cl" 2>/dev/null)"
+	printf '%s\t%s\t%s\t%s\n' "$pf" "$gr" "$cl" "$antes" >> "$TIEMPOS"
+	kwriteconfig6 --notify --file powerdevilrc --group "$pf" --group "$gr" \
+		--key "$cl" "$val"
+}
+
+tiempos_restaurar() {
+	[ -f "$TIEMPOS" ] || return 0
+	while IFS="$TAB" read -r pf gr cl antes; do
+		[ -n "$pf" ] || continue
+		if [ -z "$antes" ]; then
+			# There was no key before: deleting restores the default,
+			# whereas writing a number would freeze today's default in
+			# place forever.
+			kwriteconfig6 --notify --file powerdevilrc --group "$pf" \
+				--group "$gr" --key "$cl" --delete
+		else
+			kwriteconfig6 --notify --file powerdevilrc --group "$pf" \
+				--group "$gr" --key "$cl" "$antes"
+		fi
+	done < "$TIEMPOS"
+	rm -f "$TIEMPOS"
+}
+
+# --- apply / restore --------------------------------------------------------
+
+apply() {
+	# Idempotent by the presence of the saved state, NOT by the current
+	# profile. This runs on every plasmashell start, and if it re-saved the
+	# brightness each time it would eventually record the DIMMED value as the
+	# one to go back to -- and "off" would leave the screen dark for good.
+	[ -f "$PREVIO" ] && return 0
+
+	mkdir -p "$ESTADO"
+
+	actual="$(brillo_get)" || actual=""
+	maximo="$(brillo_max)" || maximo=""
+
+	if [ -n "$actual" ] && [ -n "$maximo" ] && [ "$maximo" -gt 0 ]; then
+		echo "$actual" > "$PREVIO"
+		objetivo=$(( maximo * BRILLO_PCT / 100 ))
+		# Never raise the brightness: if the screen is already below the
+		# target, "saving" must not make it brighter.
+		[ "$objetivo" -lt "$actual" ] && brillo_set "$objetivo"
+	fi
+
+	# Skipped while HZ_AHORRO is empty; see the comment on it. Same rule as
+	# brightness when enabled: only ever go down.
+	if [ -n "$HZ_AHORRO" ]; then
+		hz="$(hz_actual)"
+		if [ -n "$hz" ] && [ "$hz" -gt "$HZ_AHORRO" ] 2>/dev/null; then
+			echo "$hz" > "$REFRESCO"
+			poner_hz "$HZ_AHORRO" || rm -f "$REFRESCO"
+		fi
+
+		# Follow the panel's REAL rate, not the one we asked for. On a
+		# kernel without patch 0105 the mode change above fails and the
+		# screen stays at 120; pinning the browser to 60 there would
+		# throw away smoothness without saving anything -- worse than
+		# doing nothing. Only ever downwards, as everywhere else.
+		hz_real="$(hz_actual)"
+		bfps="$(navegador_fps_actual)"
+		if [ -n "$bfps" ] && [ -n "$hz_real" ] &&
+		   [ "$bfps" -gt "$hz_real" ] 2>/dev/null; then
+			echo "$bfps" > "$NAVEGADOR"
+			navegador_fps_poner "$hz_real"
+		fi
+	fi
+
+	tiempos_poner
+}
+
+restore() {
+	if [ -f "$PREVIO" ]; then
+		antes="$(cat "$PREVIO")"
+		[ -n "$antes" ] && brillo_set "$antes"
+		rm -f "$PREVIO"
+	fi
+	if [ -f "$REFRESCO" ]; then
+		hz="$(cat "$REFRESCO")"
+		[ -n "$hz" ] && poner_hz "$hz"
+		rm -f "$REFRESCO"
+	fi
+	if [ -f "$NAVEGADOR" ]; then
+		bfps="$(cat "$NAVEGADOR")"
+		[ -n "$bfps" ] && navegador_fps_poner "$bfps"
+		rm -f "$NAVEGADOR"
+	fi
+	tiempos_restaurar
+	rmdir "$ESTADO" 2>/dev/null || true
+}
+
+# --- interface --------------------------------------------------------------
+
+case "${1:-status}" in
+status)
+	# Machine-readable on purpose: the QML side turns these tokens into
+	# translated text. Keep them stable.
+	if [ "$(perfil_actual)" = "$AHORRO" ]; then
+		razon="$(qdbus6 "$PD" "$PERFIL_PATH" \
+			"$PERFIL_IFACE.performanceDegradedReason" 2>/dev/null)"
+		[ -n "$razon" ] && echo "on degraded" || echo "on"
+	else
+		echo "off"
+	fi
+	;;
+
+on)
+	poner_perfil "$AHORRO"
+	apply
+	;;
+
+off)
+	poner_perfil "$NORMAL"
+	restore
+	;;
+
+toggle)
+	if [ "$(perfil_actual)" = "$AHORRO" ]; then "$0" off; else "$0" on; fi
+	;;
+
+apply)
+	apply
+	;;
+
+restore)
+	restore
+	;;
+
+*)
+	echo "usage: $(basename "$0") [status|on|off|toggle|apply|restore]" >&2
+	exit 1
+	;;
+esac

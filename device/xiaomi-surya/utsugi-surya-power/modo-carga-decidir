@@ -1,0 +1,63 @@
+#!/bin/sh
+# Decides whether this boot is "the cable was plugged into me" or "a person
+# turned me on", and leaves the answer in /run/modo-carga so the other
+# units can read it.
+#
+# WHY IT CAN BE KNOWN
+# ----------------------
+# The PMIC notes the power-on reason in PON_REASON1 (0x8c0 of the
+# pon@800 block). Measured on the surya on 2026-09-05:
+#
+#     0x10  USB_CHG      the charger turned it on
+#     0x80  KPDPWR_N     the button turned it on
+#     0x01  HARD_RESET   it came from a reboot
+#
+# That is what Android does in the bootloader, and it is exactly what
+# postmarketOS lacks on other phones: its charging-sdl needs the
+# bootloader to add 'androidboot.mode=charger' to the command line, and that is why it does not
+# work on the PinePhone. Here we depend on nobody: the data is in the
+# hardware.
+#
+# It is read via the debugfs regmap because the mainline driver does not publish the
+# reason. If one day it does publish it -or it is added-, change only this function.
+set -u
+
+RUN=/run/modo-carga
+USB_CHG=16      # BIT(4)
+DC_CHG=8        # BIT(3)
+KPDPWR=128      # BIT(7)
+CHG=/sys/class/power_supply/pm8150b-charger
+
+motivo() {
+	# The main PMIC is SID 0. It is searched by name and not by fixed path
+	# so it does not depend on the order in which the regmaps appear.
+	for d in /sys/kernel/debug/regmap/0-00 /sys/kernel/debug/regmap/*; do
+		[ -r "$d/registers" ] || continue
+		[ "$(cat "$d/name" 2>/dev/null)" = pmic-spmi ] || continue
+		v=$(grep -E '^0*8c0: ' "$d/registers" 2>/dev/null | awk '{print $2}')
+		[ -n "$v" ] && { echo "$((0x$v))"; return 0; }
+	done
+	return 1
+}
+
+# With --decir it only reports, without touching /run: that way the setting can show what
+# it would decide without deciding it, which with the session already up would lock Plasma.
+SOLO_DECIR=0
+[ "${1:-}" = --decir ] && SOLO_DECIR=1
+
+[ "$SOLO_DECIR" = 1 ] || rm -f "$RUN"
+
+n=$(motivo) || { echo "cannot read PON_REASON1: normal boot"; exit 0; }
+
+# The charger check is not decoration: if the reason says cable but the
+# cable is no longer there, entering charge mode would leave the phone on a screen that
+# can do nothing. When in doubt, normal boot.
+online=$(cat "$CHG/online" 2>/dev/null || echo 0)
+
+if [ $(( n & (USB_CHG | DC_CHG) )) -ne 0 ] && [ $(( n & KPDPWR )) -eq 0 ] && [ "$online" = 1 ]; then
+	[ "$SOLO_DECIR" = 1 ] || : > "$RUN"
+	echo "turned on by the charger (PON_REASON1=$n): charge mode"
+else
+	echo "normal power-on (PON_REASON1=$n, charger=$online): full session"
+fi
+exit 0

@@ -1,0 +1,69 @@
+#!/bin/sh
+# Keeps brightness and the idle timeouts in step with the power profile.
+#
+# WHY THIS IS NOT IN THE TILE'S QML
+# ---------------------------------
+# It was, first, and it silently did nothing. Plasma Mobile instantiates a
+# quick setting's QML LAZILY -- the component does not exist until the user
+# pulls the panel down. Measured: setting the profile to power-saver from
+# outside moved every clock ceiling as intended, and the screen never dimmed,
+# because no QML was alive to notice.
+#
+#     perfil=power-saver  max0=1324800  max6=1324800  gpu=430000000
+#     brillo=5476  (sin cambiar)   estado=(vacio)
+#
+# Anything that must happen WHENEVER the profile changes therefore cannot live
+# in the tile. It belongs to the session, which is what this is: the same
+# conclusion the location switch next door reached about its GeoClue agent.
+#
+# Listening to the signal instead of polling means the extras also follow a
+# profile changed from System Settings, from the battery applet, or over ssh.
+set -u
+
+SWITCH="@SWITCH@"
+
+PD=org.kde.Solid.PowerManagement
+PP=/org/kde/Solid/PowerManagement/Actions/PowerProfile
+IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
+
+AHORRO=power-saver
+
+aplicar_segun() {
+	if [ "$1" = "$AHORRO" ]; then
+		"$SWITCH" apply
+	else
+		"$SWITCH" restore
+	fi
+}
+
+# Catch up before listening. The phone can boot with saving still on, and the
+# signal only fires on CHANGES -- without this the extras would stay off until
+# the user happened to toggle something. Both sides are idempotent, so doing
+# this on every start is safe.
+espera=0
+while [ $espera -lt 30 ]; do
+	actual="$(qdbus6 "$PD" "$PP" "$IFACE.currentProfile" 2>/dev/null)"
+	[ -n "$actual" ] && break
+	espera=$((espera + 1))
+	sleep 1
+done
+[ -n "${actual:-}" ] && aplicar_segun "$actual"
+
+# gdbus rather than dbus-monitor: it prints one line per signal with the
+# argument inline, so no multi-line parsing is needed. A line looks like
+#
+#   /org/kde/.../PowerProfile: ...PowerProfile.currentProfileChanged ('power-saver',)
+#
+# This survives PowerDevil restarting, because the match is on the bus, not on
+# a connection to a particular process.
+gdbus monitor --session --dest "$PD" --object-path "$PP" 2>/dev/null |
+while IFS= read -r linea; do
+	case "$linea" in
+	*currentProfileChanged*)
+		case "$linea" in
+		*"'$AHORRO'"*) aplicar_segun "$AHORRO" ;;
+		*)             aplicar_segun other ;;
+		esac
+		;;
+	esac
+done

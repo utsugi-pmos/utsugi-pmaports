@@ -1,0 +1,19 @@
+[Unit]
+Description=Beats every 30 s to know how long the phone stayed alive
+
+[Timer]
+# 30 s is the compromise: enough to tell "died on the spot" from "held on for two
+# hours", and with the 2 MB pmsg buffer it gives about ten days of history before
+# it wraps around.
+OnBootSec=30s
+OnUnitActiveSec=30s
+# Let systemd batch the firing with other timers instead of waking the CPU on its
+# own. It does not matter if a heartbeat arrives late; what matters is that the
+# last one is close to the hang.
+AccuracySec=10s
+# It does NOT wake the sleeping phone, on purpose: the processes are frozen while
+# it sleeps and that is already part of the reading. A WakeSystem=true here would
+# waste battery and also falsify the diagnosis.
+
+[Install]
+WantedBy=timers.target

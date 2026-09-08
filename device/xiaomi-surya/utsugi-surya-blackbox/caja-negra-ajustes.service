@@ -1,0 +1,32 @@
+[Unit]
+Description=Leave the kernel ready to leave a trace if it hangs
+DefaultDependencies=no
+After=sysinit.target
+Before=sleep.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+
+# 1. Keep the console from turning OFF on suspend.
+#
+# The kernel silences the consoles before sleeping ("printk: Suspending
+# console(s) (use no_console_suspend to debug)"), and here the console is
+# ramoops: 1 MB of RAM that survives the reboot. So exactly in the stretch where
+# this phone dies -- suspend and resume -- nothing was being saved.
+#
+# With this, the suspend and resume printk DO get recorded, and after a hang they
+# are read with 'caja-negra'.
+ExecStart=/bin/sh -c 'echo N > /sys/module/printk/parameters/console_suspend'
+
+# 2. Let more than just errors reach the console.
+#
+# The boot line carries 'quiet', which leaves the console level at 4: only
+# warning and worse. The drivers' messages on suspend are 'info' (6) and were
+# being lost. Only the console is raised to 7; the journal does not change.
+#
+# It costs little: the console is RAM, not a serial port.
+ExecStart=/sbin/sysctl -q -w kernel.printk="7 4 1 7"
+
+[Install]
+WantedBy=multi-user.target

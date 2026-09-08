@@ -1,0 +1,20 @@
+[Unit]
+# Brightness and the idle timeouts follow the power profile from here, and not
+# from the quick setting's QML, because Plasma Mobile only instantiates a quick
+# setting when the panel is pulled down -- so the tile is not alive to react.
+# See power-saving-agent for the measurement that showed it.
+Description=Power saving extras: brightness and idle timeouts follow the profile
+PartOf=graphical-session.target
+After=plasma-powerdevil.service
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/utsugi-surya/power-saving-agent
+# Unlike the GeoClue agent next door, restarting this one is always right:
+# stopping it is not how the user turns anything off -- the profile is -- so
+# there is no switch for it to fight.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical-session.target

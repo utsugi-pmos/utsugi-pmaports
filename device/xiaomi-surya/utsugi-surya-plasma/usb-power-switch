@@ -1,0 +1,64 @@
+#!/bin/sh
+# USB power direction switch for Plasma Mobile: does the phone TAKE power
+# from the cable, or GIVE it?
+#
+# Why this exists: as shipped, the device tree declared the Type-C connector
+# source-only, and against a laptop's USB-C port the phone won the Power
+# Delivery negotiation and powered the LAPTOP all night, down to a PMIC
+# under-voltage cut and a reboot loop (2026-09-05). The connector is dual now
+# (kernel patch 0113), it asks for power first, and this is the switch Android
+# shows as "Charge this device / Charge connected device".
+#
+# The lever is one sysfs file: writing "sink" or "source" to
+# /sys/class/typec/port0/power_role makes the kernel request a PD power role
+# swap. It needs root, and this phone's sudo is passwordless for the session
+# user, so no helper or polkit rule of its own.
+#
+# The write is refused when there is no PD partner (a dumb charger, a USB-A
+# port, nothing plugged in): those cannot swap, and then there is nothing to
+# choose. The tile reports that rather than pretending.
+set -u
+
+PORT=/sys/class/typec/port0
+CHARGER=/sys/class/power_supply/pm8150b-charger
+
+# The bracketed word is the current role: "source [sink]" -> sink.
+role() {
+	sed -n 's/.*\[\([a-z]*\)\].*/\1/p' "$PORT/power_role" 2>/dev/null
+}
+partner() {
+	[ -d "$PORT-partner" ]
+}
+charging() {
+	[ "$(cat "$CHARGER/online" 2>/dev/null)" = 1 ]
+}
+
+case "${1:-status}" in
+status)
+	# Machine-readable on purpose: the QML side turns these tokens into
+	# translated text. Keep them stable.
+	if ! partner; then
+		echo "none"
+	elif [ "$(role)" = source ]; then
+		echo "source"
+	elif charging; then
+		echo "sink charging"
+	else
+		echo "sink idle"
+	fi
+	;;
+
+sink|source)
+	partner || { echo "nothing on the other end of the cable" >&2; exit 1; }
+	echo "$1" | sudo -n tee "$PORT/power_role" >/dev/null
+	;;
+
+toggle)
+	if [ "$(role)" = source ]; then "$0" sink; else "$0" source; fi
+	;;
+
+*)
+	echo "usage: $(basename "$0") [status|sink|source|toggle]" >&2
+	exit 1
+	;;
+esac

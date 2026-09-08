@@ -1,0 +1,240 @@
+#!/usr/bin/env python3
+"""The screen shown with the phone plugged in and powered off: a battery with its
+fill, the charging bolt and the percentage.
+
+It is drawn DIRECTLY to /dev/fb0 and not with Plymouth. Plymouth is fine for a
+boot -- a fixed image and some text -- but here a changing value has to be
+repainted, and its theme on this phone is the postmarketOS logo, which is
+exactly what makes you think the phone has hung while booting.
+
+Drawing by hand also avoids depending on themes being installed, of which on this
+system there are none (`plymouth-set-default-theme --list` returns nothing).
+
+The brightness is NOT touched here: it is set by the script that calls this, because
+it also turns it off after a while of inactivity.
+"""
+import fcntl
+import os
+import sys
+
+# KDSETMODE on the virtual console: it is how Plymouth and the compositors
+# silence fbcon. KD_GRAPHICS does not turn off logging, it only stops PAINTING it.
+KDSETMODE = 0x4B3A
+KD_TEXT, KD_GRAPHICS = 0x00, 0x01
+
+FB = "/dev/fb0"
+SYS_FB = "/sys/class/graphics/fb0"
+QG = "/sys/class/power_supply/qcom_qg"
+
+FONDO = (0, 0, 0)
+BORDE = (150, 150, 150)
+CARGANDO = (76, 175, 80)     # green
+LLENA = (255, 255, 255)
+BAJA = (229, 115, 115)       # soft red below 15 %
+RAYO = (20, 20, 20)          # the bolt is cut out over the fill
+
+
+def consola(modo):
+    """Silences (or restores) the framebuffer console.
+
+    Without this fbcon writes the kernel messages ON TOP of the drawing, and this
+    phone boots with the console at level 7 on purpose so that a hang leaves a
+    trace (see the caja-negra setting): meaning it writes a lot. The console
+    drawing is turned off, not the logging; not a single line is lost.
+    """
+    try:
+        fd = os.open("/dev/tty0", os.O_RDWR | os.O_NOCTTY)
+    except OSError:
+        return
+    try:
+        fcntl.ioctl(fd, KDSETMODE, modo)
+    except OSError:
+        pass
+    finally:
+        os.close(fd)
+
+
+def leer(ruta, por_defecto=""):
+    try:
+        with open(ruta) as f:
+            return f.read().strip()
+    except OSError:
+        return por_defecto
+
+
+def geometria():
+    ancho, alto = (int(v) for v in leer(f"{SYS_FB}/virtual_size", "1080,2400").split(","))
+    paso = int(leer(f"{SYS_FB}/stride", str(ancho * 4)))
+    bpp = int(leer(f"{SYS_FB}/bits_per_pixel", "32"))
+    if bpp != 32:
+        raise SystemExit(f"only 32-bit drawing is supported, and this screen uses {bpp}")
+    return ancho, alto, paso
+
+
+class Lienzo:
+    """A rectangle in memory that is then flushed row by row to the framebuffer.
+
+    Only the box the drawing occupies is painted and not the whole screen: that is
+    2 MB instead of 10, and this repaints every few seconds throughout a whole
+    night of charging.
+    """
+
+    def __init__(self, x, y, ancho, alto):
+        self.x, self.y, self.ancho, self.alto = x, y, ancho, alto
+        self.datos = bytearray(ancho * alto * 4)
+
+    def rect(self, x, y, ancho, alto, color):
+        r, g, b = color
+        # The framebuffer is 32-bit XRGB in little-endian: B, G, R, X.
+        pixel = bytes((b, g, r, 255))
+        x0, y0 = max(0, x), max(0, y)
+        x1, y1 = min(self.ancho, x + ancho), min(self.alto, y + alto)
+        if x1 <= x0 or y1 <= y0:
+            return
+        fila = pixel * (x1 - x0)
+        for fy in range(y0, y1):
+            i = (fy * self.ancho + x0) * 4
+            self.datos[i:i + len(fila)] = fila
+
+    def marco(self, x, y, ancho, alto, grosor, color):
+        self.rect(x, y, ancho, grosor, color)
+        self.rect(x, y + alto - grosor, ancho, grosor, color)
+        self.rect(x, y, grosor, alto, color)
+        self.rect(x + ancho - grosor, y, grosor, alto, color)
+
+    def poligono(self, puntos, color):
+        """Scanline fill. Used by the bolt, which is not a rectangle."""
+        if not puntos:
+            return
+        ys = [p[1] for p in puntos]
+        for fy in range(max(0, min(ys)), min(self.alto, max(ys) + 1)):
+            cortes = []
+            for i in range(len(puntos)):
+                x1, y1 = puntos[i]
+                x2, y2 = puntos[(i + 1) % len(puntos)]
+                if y1 == y2:
+                    continue
+                if min(y1, y2) <= fy < max(y1, y2):
+                    cortes.append(x1 + (fy - y1) * (x2 - x1) / (y2 - y1))
+            cortes.sort()
+            for i in range(0, len(cortes) - 1, 2):
+                self.rect(int(cortes[i]), fy, int(cortes[i + 1]) - int(cortes[i]) + 1, 1, color)
+
+    def volcar(self, fb, paso):
+        ancho = self.ancho * 4
+        for fila in range(self.alto):
+            fb.seek((self.y + fila) * paso + self.x * 4)
+            fb.write(self.datos[fila * ancho:(fila + 1) * ancho])
+
+
+# Seven-segment digits: no fonts to install, and at this size they can be read
+# from across the room, which is how a charging phone is looked at.
+SEGMENTOS = {
+    "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
+    "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg",
+}
+
+
+def cifra(lienzo, x, y, ancho, alto, grosor, c, color):
+    on = SEGMENTOS.get(c, "")
+    medio = y + (alto - grosor) // 2
+    if "a" in on: lienzo.rect(x, y, ancho, grosor, color)
+    if "g" in on: lienzo.rect(x, medio, ancho, grosor, color)
+    if "d" in on: lienzo.rect(x, y + alto - grosor, ancho, grosor, color)
+    if "f" in on: lienzo.rect(x, y, grosor, alto // 2, color)
+    if "b" in on: lienzo.rect(x + ancho - grosor, y, grosor, alto // 2, color)
+    if "e" in on: lienzo.rect(x, medio, grosor, alto - alto // 2, color)
+    if "c" in on: lienzo.rect(x + ancho - grosor, medio, grosor, alto - alto // 2, color)
+
+
+def porciento(lienzo, x, y, alto, grosor, color):
+    d = alto // 3
+    lienzo.marco(x, y, d, d, grosor, color)
+    lienzo.marco(x + alto - d, y + alto - d, d, d, grosor, color)
+    lienzo.poligono([(x + alto - grosor, y), (x + alto, y),
+                     (x + grosor, y + alto), (x, y + alto)], color)
+
+
+def numero(lienzo, texto, cx, y, alto, color):
+    grosor = max(6, alto // 9)
+    ancho = int(alto * 0.55)
+    hueco = grosor * 2
+    total = len(texto) * ancho + (len(texto) - 1) * hueco
+    x = cx - total // 2
+    for c in texto:
+        if c == "%":
+            porciento(lienzo, x, y + alto // 3, alto * 2 // 3, grosor, color)
+        else:
+            cifra(lienzo, x, y, ancho, alto, grosor, c, color)
+        x += ancho + hueco
+
+
+def limpiar(fb, alto, paso):
+    negro = bytes(paso)
+    fb.seek(0)
+    for _ in range(alto):
+        fb.write(negro)
+
+
+def main():
+    ancho, alto, paso = geometria()
+
+    try:
+        cap = int(leer(f"{QG}/capacity", "0"))
+    except ValueError:
+        cap = 0
+    cap = max(0, min(100, cap))
+    estado = leer(f"{QG}/status")
+
+    color = CARGANDO if estado == "Charging" else (BAJA if cap < 15 else LLENA)
+
+    # The drawing box, centered. Outside it the screen stays black.
+    caja_w, caja_h = 480, 1120
+    x0, y0 = (ancho - caja_w) // 2, (alto - caja_h) // 2
+    L = Lienzo(x0, y0, caja_w, caja_h)
+
+    # Battery: the cap on top and the body below.
+    pico_w, pico_h = 120, 30
+    cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h = 50, pico_h, 380, 760
+    grosor = 8
+    L.rect((caja_w - pico_w) // 2, 0, pico_w, pico_h, BORDE)
+    L.marco(cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h, grosor, BORDE)
+
+    # Fill, from bottom to top. A margin is left so it does not touch the
+    # frame: flush against it, it reads as a single block and stops looking like a battery.
+    margen = grosor + 12
+    hueco_x = cuerpo_x + margen
+    hueco_y = cuerpo_y + margen
+    hueco_w = cuerpo_w - 2 * margen
+    hueco_h = cuerpo_h - 2 * margen
+    relleno = int(hueco_h * cap / 100)
+    if relleno > 0:
+        L.rect(hueco_x, hueco_y + hueco_h - relleno, hueco_w, relleno, color)
+
+    # The bolt, only while charging: it is what tells "plugged in" apart from
+    # "powered on with battery". It is drawn in the background color, cut out.
+    if estado == "Charging":
+        cx = caja_w // 2
+        cy = cuerpo_y + cuerpo_h // 2
+        L.poligono([(cx + 55, cy - 150), (cx - 15, cy + 20), (cx + 20, cy + 20),
+                    (cx - 55, cy + 150), (cx + 5, cy - 10), (cx - 30, cy - 10)],
+                   RAYO if relleno > cuerpo_h // 2 else color)
+
+    numero(L, f"{cap}%", caja_w // 2, cuerpo_y + cuerpo_h + 60, 150, BORDE)
+
+    if "--consola" in sys.argv:
+        consola(KD_TEXT)
+        return
+    consola(KD_GRAPHICS)
+
+    with open(FB, "r+b", buffering=0) as fb:
+        if "--solo-limpiar" in sys.argv:
+            limpiar(fb, alto, paso)
+            return
+        if "--limpiar" in sys.argv:
+            limpiar(fb, alto, paso)
+        L.volcar(fb, paso)
+
+
+if __name__ == "__main__":
+    main()

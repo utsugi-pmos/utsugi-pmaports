@@ -1,0 +1,125 @@
+#!/bin/sh
+# Saves, BEFORE it is lost, what was left from the previous boot.
+#
+# TWO THINGS THAT ARE LOST FOR DIFFERENT REASONS
+# ----------------------------------------------
+# 1. The LAST SIGN OF LIFE (/var/log/caja-negra/latido). It is a one-line
+#    file that the heartbeat OVERWRITES every 30 s. If it is not moved aside now, the first
+#    heartbeat of this boot overwrites the one from the freeze -- exactly the data of interest.
+#    That is why the heartbeat timer starts AFTER this service.
+#
+# 2. The ramoops trace. systemd-pstore empties /sys/fs/pstore on every boot
+#    and leaves the files in /var/lib/systemd/pstore/ with FIXED names:
+#    console-ramoops-0, pmsg-ramoops-0... The next freeze overwrites them, and with
+#    two in a row you are left only with the second, which is when comparing them
+#    is most needed.
+#
+#    NOTE: on this phone ramoops does NOT survive the reboot (measured on 2026-09-04,
+#    neither with an orderly reboot nor with a panic and a warm reboot). Here almost
+#    always there will be nothing to archive by this route, and it is not a bug of this
+#    script. The sign of life from point 1 is the one that does work.
+set -eu
+
+ORIGEN=/var/lib/systemd/pstore
+BASE=/var/log/caja-negra
+LATIDO="$BASE/latido"
+
+mkdir -p "$BASE"
+
+# Is there anything to archive? The sign of life, the ramoops trace, or neither.
+# The heartbeat is only archived if it is from a PREVIOUS boot. Without this, running
+# this script by hand with the phone working takes away the CURRENT sign of life
+# and fabricates a trace of a freeze that has not happened. It happens when testing.
+#
+# The check needs nothing saved: the line carries 't=' (the instant at
+# which it was written) and this system booted at 'now - uptime'. If the heartbeat is
+# later than that boot, it is from the current session and is not touched.
+hay_latido=0
+if [ -s "$LATIDO" ]; then
+	t="$(tr ' ' '\n' < "$LATIDO" | sed -n 's/^t=//p' | head -1 | tr -dc 0-9)"
+	arranque=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
+	if [ -z "$t" ]; then
+		# Without 't=' it cannot be dated: it is archived, which is the prudent side --
+		# losing a freeze's mark is worse than archiving one too many.
+		hay_latido=1
+	elif [ "$t" -lt "$arranque" ]; then
+		hay_latido=1
+	fi
+fi
+# Ramoops ONLY counts if it is NEW. systemd-pstore leaves its files there and does not
+# delete them, so without this check each boot would copy the
+# same old dump again to a new directory -- and the reader would present it as
+# this freeze's dump. It happened: the 2026-09-04 trace came out "WITH a panic
+# dump" showing the oops from September 1st.
+#
+# The boundary is the date of the most recent one already archived, kept aside.
+ESTADO="$BASE/.ramoops-archivado"
+visto=0
+[ -f "$ESTADO" ] && visto="$(cat "$ESTADO" 2>/dev/null | tr -dc 0-9)"
+[ -n "$visto" ] || visto=0
+
+hay_ramoops=0
+nuevo_visto="$visto"
+for f in "$ORIGEN"/*-ramoops-*; do
+	[ -e "$f" ] || continue
+	m="$(date -r "$f" +%s 2>/dev/null || echo 0)"
+	[ "$m" -gt "$visto" ] || continue
+	hay_ramoops=1
+	[ "$m" -gt "$nuevo_visto" ] && nuevo_visto="$m"
+done
+[ "$hay_latido" = 1 ] || [ "$hay_ramoops" = 1 ] || exit 0
+
+# The directory's mark comes from the time of the LAST HEARTBEAT, which is the real time
+# at which the phone stopped giving signals. If there is no heartbeat -- because the black box
+# was not set on that boot -- it falls back to the date of the ramoops trace.
+marca=""
+if [ "$hay_latido" = 1 ]; then
+	marca="$(date -r "$LATIDO" +%Y%m%d-%H%M%S 2>/dev/null || true)"
+fi
+if [ -z "$marca" ] && [ "$hay_ramoops" = 1 ]; then
+	marca="$(date -r "$(ls -t "$ORIGEN"/*-ramoops-* | head -1)" +%Y%m%d-%H%M%S 2>/dev/null || true)"
+fi
+[ -n "$marca" ] || marca="$(date +%Y%m%d-%H%M%S)"
+
+dir="$BASE/$marca"
+[ -d "$dir" ] && exit 0   # already archived in a previous boot
+mkdir -p "$dir"
+
+# 1. The sign of life. It is MOVED, not copied: this way this boot's heartbeat
+#    starts from zero and no old copy is left confusing things.
+if [ "$hay_latido" = 1 ]; then
+	mv "$LATIDO" "$dir/ultimo-latido"
+fi
+
+# 2. The ramoops trace, and ONLY the one not already archived (see above).
+if [ "$hay_ramoops" = 1 ]; then
+	for f in "$ORIGEN"/*-ramoops-*; do
+		[ -e "$f" ] || continue
+		m="$(date -r "$f" +%s 2>/dev/null || echo 0)"
+		[ "$m" -gt "$visto" ] || continue
+		cp -a "$f" "$dir"/ 2>/dev/null || true
+	done
+	printf '%s\n' "$nuevo_visto" > "$ESTADO"
+fi
+
+# 3. The previous boot's journal, alongside the rest. Without this you have to remember
+#    the '-b -1', and after two reboots it is no longer -1.
+#
+#    IT CARRIES A HEADER ON PURPOSE: the journal is the one from the boot BEFORE THIS, and
+#    the ramoops trace may be from another, much older event if nobody
+#    rebooted since then. It happened first time: a directory dated September 1st
+#    had inside it the journal of the freeze from the 3rd.
+{
+	echo "# Journal of the boot BEFORE the one archiving this (journalctl -b -1)."
+	echo "# If this directory has *-ramoops-* files, they may be from another"
+	echo "# different and older event: check their dates."
+	printf '# That boot: '
+	journalctl --list-boots --no-pager 2>/dev/null | awk '$1 == "-1"' || echo "(not recorded)"
+	echo "#"
+	journalctl -b -1 --no-pager 2>/dev/null
+} > "$dir/diario-del-arranque-anterior.txt" 2>/dev/null || true
+
+# Keep it from growing without end: the last ten are enough.
+ls -1d "$BASE"/*/ 2>/dev/null | sort -r | tail -n +11 | while read -r viejo; do
+	rm -rf "$viejo"
+done

@@ -1,0 +1,214 @@
+#!/bin/sh
+# Chooses where the audio comes out of the POCO X3 NFC (surya).
+#
+#   salida-audio todo        both speakers  <- the normal one
+#   salida-audio altavoz     only the bottom one
+#   salida-audio audifono    only the top one, the one you hold to your ear
+#   salida-audio cascos      3.5 mm jack
+#   salida-audio estado      only reports, changes nothing
+#
+# Accepted aliases: auricular=audifono, ambos=todo, arriba=audifono, abajo=altavoz.
+#
+# THE HARDWARE
+#
+#   bottom speaker   tas2562 on I2C 9-004c, ALSA prefix "Right"
+#   top speaker      tas2564 on I2C 9-004d, ALSA prefix "Left"
+#   headphones       wcd937x codec, over SoundWire RX (HPHL/HPHR)
+#
+# The two speakers hang off the same backend (TERTIARY_MI2S_RX) and are chosen
+# by raising or lowering the volume of each amplifier. The headphones go by another
+# path and share nothing with them.
+#
+# THE SOUND IS MONO OUT OF BOTH SPEAKERS, not stereo: the I2S bus only carries
+# the left channel, so 'ASI1 Sel' is left at LeftRightDiv2 and both chips
+# play the same thing. Separating them by channel mutes the bottom one. That stereo
+# is not possible is measured; the detail, in tasks/CONTRADICTIONS-RESOLVED.md.
+#
+# THE VOLUME IS WRITTEN OVER ALSA. There must be A SINGLE writer of the volume:
+# 'alsa-restore' writes over ALSA on every boot, so any other path
+# (for example direct I2C) ends up fighting it and the result depends on
+# who runs last. That is why this script uses amixer and ends with
+# 'alsactl store'. Do not change it to I2C.
+
+set -u
+
+QUE="${1:-estado}"
+BUS=9
+ALTAVOZ=0x4c
+AUDIFONO=0x4d
+
+case "$QUE" in
+	auricular|arriba)  QUE=audifono ;;
+	ambos|estereo)     QUE=todo ;;
+	abajo)             QUE=altavoz ;;
+esac
+
+# The top one is not a small earpiece: it is a real speaker, and at 85%
+# held to the ear it hurts. When only it plays it is assumed to be at the
+# ear, so its default volume is lower.
+case "$QUE" in
+	audifono) POR_DEFECTO=45 ;;
+	*)        POR_DEFECTO=85 ;;
+esac
+
+# The volume is resolved BEFORE the sudo below and passed as a positional
+# argument: sudo does not propagate the environment, so a VOL= variable will not
+# survive the user switch.
+VOL="${2:-${VOL:-$POR_DEFECTO}}"
+
+case "$VOL" in
+	''|*[!0-9]*) echo "invalid volume: '$VOL' (0-100 expected)"; exit 1 ;;
+esac
+[ "$VOL" -le 100 ] || { echo "invalid volume: $VOL (the maximum is 100)"; exit 1; }
+
+[ "$QUE" = estado ] || [ "$(id -u)" = 0 ] || exec sudo -p "Password for %u: " "$0" "$QUE" "$VOL"
+
+# The ALSA control goes from 0 to 109 on a logarithmic scale, ~1 dB per step, with
+# 108 = 0 dB (gain 1.0). MAPA translates percentage 0-100 -> index, picking
+# for each one the index whose real coefficient in the chip is closest to
+# 2^30*(p/100)^2. It comes from sweeping the 110 indices and reading the chip with the cache
+# bypassed; to redo it, see audio/measure-volume-table.
+MAPA="0 30 42 50 54 58 62 64 66 68 70 72 74 74 76 76 78 80 80 82 82 82 84 84 86 \
+86 86 88 88 88 88 88 88 90 90 90 90 90 92 92 92 92 92 94 94 94 94 94 96 96 96 96 \
+96 96 98 98 98 98 98 98 100 100 100 100 100 100 100 100 102 102 102 102 102 102 \
+102 102 104 104 104 104 104 104 104 104 104 106 106 106 106 106 106 106 106 106 \
+106 109 109 109 109 109 109"
+
+idx() {  # $1 = percentage 0-100 -> ALSA index
+	echo $MAPA | cut -d' ' -f$(( $1 + 1 ))
+}
+
+amp() {  # $1 = ALSA prefix (Left|Right), $2 = percentage
+	amixer -c0 cset name="$1 Digital Volume Control" "$(idx "$2")" >/dev/null 2>&1
+}
+
+# The driver caches its registers and reads none from the chip, so 'amixer cget'
+# and the regmap dump return what the DRIVER BELIEVES. This function reads the
+# chip over I2C, which is the only measure that does not lie. Diagnostics only: the
+# volume is NOT written here.
+leer_amp() {  # $1 = address
+	i2cset -y -f $BUS "$1" 0x00 0x02 2>/dev/null
+	V=""
+	for R in 0x0c 0x0d 0x0e 0x0f; do
+		V="$V$(i2cget -y -f $BUS "$1" $R 2>/dev/null | sed 's/0x//')"
+	done
+	i2cset -y -f $BUS "$1" 0x00 0x00 2>/dev/null
+	echo "$V"
+}
+
+# The headphone chain is THIRTEEN controls, not two. They come from the
+# canonical alsa-ucm-conf sequences for this codec and this macro:
+#   /usr/share/alsa/ucm2/codecs/wcd937x/HeadphoneEnableSeq.conf
+#   /usr/share/alsa/ucm2/codecs/qcom-lpass/rx-macro/HeadphoneEnableSeq.conf
+# plus the backend routing, which there is set by the SectionVerb.
+cascos() {  # $1 = on|off
+	c() { amixer -c0 cset name="$1" "$2" >/dev/null 2>&1; }
+	if [ "$1" = on ]; then
+		c 'RX_HPH PWR Mode' LOHIFI
+		c 'RX_MACRO RX0 MUX' AIF1_PB
+		c 'RX_MACRO RX1 MUX' AIF1_PB
+		c 'RX INT0_1 MIX1 INP0' RX0
+		c 'RX INT1_1 MIX1 INP0' RX1
+		c 'RX INT0 DEM MUX' CLSH_DSM_OUT
+		c 'RX INT1 DEM MUX' CLSH_DSM_OUT
+		c 'HPHL_RDAC Switch' 1
+		c 'HPHR_RDAC Switch' 1
+		c 'HPHL Switch' 1
+		c 'HPHR Switch' 1
+		c 'RX HPH Mode' CLS_H_LOHIFI
+		c 'HPHL Volume' 20
+		c 'HPHR Volume' 20
+	else
+		c 'HPHL Switch' 0
+		c 'HPHR Switch' 0
+		c 'HPHL_RDAC Switch' 0
+		c 'HPHR_RDAC Switch' 0
+	fi
+}
+
+estado() {
+	A=$(leer_amp $ALTAVOZ); B=$(leer_amp $AUDIFONO)
+	mudo() {
+		case "$1" in
+			"")         echo "cannot read without sudo" ;;
+			"00000000") echo "muted" ;;
+			*)          echo "0x$1" ;;
+		esac
+	}
+	echo "  speaker  (0x4c): $(mudo "$A")"
+	echo "  earpiece (0x4d): $(mudo "$B")"
+	printf "  headphones      : HPHL=%s HPHR=%s\n" \
+		"$(amixer -c0 cget name='HPHL Switch' 2>/dev/null | grep -oE 'values=(on|off)' | cut -d= -f2)" \
+		"$(amixer -c0 cget name='HPHR Switch' 2>/dev/null | grep -oE 'values=(on|off)' | cut -d= -f2)"
+	# Beware when reading an enum: the header says "values=1,items=4", where that 1 is
+	# HOW MANY values it has, not which. The good one is on the ": values=N" line.
+	sel() { amixer -c0 cget name="$1" 2>/dev/null | sed -n 's/^ *: values=\([0-9]*\).*/\1/p'; }
+	SA=$(sel 'Left ASI1 Sel'); SB=$(sel 'Right ASI1 Sel')
+	case "$SA:$SB" in
+		3:3)     MODO="correct" ;;
+		0:*|*:0) MODO="BAD: 'I2C offset' mutes the top one" ;;
+		1:2|2:1) MODO="BAD: separated by channel, mutes the bottom one" ;;
+		*)       MODO="odd mix" ;;
+	esac
+	echo "  amp selector    : top=$SA bottom=$SB  -> $MODO  (3 = LeftRightDiv2)"
+	echo "  MI2S route      : $(amixer -c0 cget name='TERT_MI2S_RX Audio Mixer MultiMedia1' 2>/dev/null | grep -oE 'values=(on|off)' | cut -d= -f2)"
+	echo "  codec route     : $(amixer -c0 cget name='RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia1' 2>/dev/null | grep -oE 'values=(on|off)' | cut -d= -f2)"
+	# Under sudo, pactl does not see the user's server: you have to ask it.
+	if [ -n "${SUDO_USER:-}" ]; then
+		SINK=$(sudo -u "$SUDO_USER" XDG_RUNTIME_DIR="/run/user/$(id -u "$SUDO_USER")" \
+			pactl list short sinks 2>/dev/null | cut -f2 | head -1)
+	else
+		SINK=$(pactl list short sinks 2>/dev/null | cut -f2 | head -1)
+	fi
+	echo "  sink            : ${SINK:-(audio server not visible)}"
+}
+
+# 'ASI1 Sel' chooses where each amplifier takes its audio from:
+#   0 = I2C offset   1 = Left   2 = Right   3 = LeftRightDiv2
+#
+# Always 3. With 0 the top one delivers nothing. With 1 and 2 the
+# channels are split, and since the bus only carries the left one, the bottom one is muted.
+prepara_amps() {
+	# By NUMBER, not by name: 'LeftRightDiv2' starts with 'Left' and amixer
+	# keeps the first match, leaving the selector at 1.
+	amixer -c0 cset name='Left ASI1 Sel' 3 >/dev/null 2>&1
+	amixer -c0 cset name='Right ASI1 Sel' 3 >/dev/null 2>&1
+	amixer -c0 cset name='Left Amp Gain Volume' 20 >/dev/null 2>&1
+	amixer -c0 cset name='Right Amp Gain Volume' 20 >/dev/null 2>&1
+}
+
+# The routing has to be switched TOO, not just the volumes: without this, after
+# choosing headphones once, the speakers stay muted because nobody reconnects
+# TERT_MI2S_RX with MultiMedia1.
+ruta() {  # $1 = mi2s|codec
+	if [ "$1" = mi2s ]; then
+		amixer -c0 cset name='TERT_MI2S_RX Audio Mixer MultiMedia1' 1 >/dev/null 2>&1
+		amixer -c0 cset name='RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia1' 0 >/dev/null 2>&1
+	else
+		amixer -c0 cset name='TERT_MI2S_RX Audio Mixer MultiMedia1' 0 >/dev/null 2>&1
+		amixer -c0 cset name='RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia1' 1 >/dev/null 2>&1
+	fi
+}
+
+case "$QUE" in
+	altavoz)  ruta mi2s; prepara_amps; amp Right $VOL; amp Left 0; cascos off
+	          echo "output: bottom SPEAKER, volume $VOL%" ;;
+	audifono) ruta mi2s; prepara_amps; amp Right 0; amp Left $VOL; cascos off
+	          echo "output: top EARPIECE, volume $VOL%" ;;
+	cascos)   ruta codec; amp Right 0; amp Left 0; cascos on
+	          echo "output: HEADPHONES on the 3.5 mm jack" ;;
+	todo)     ruta mi2s; prepara_amps; amp Right $VOL; amp Left $VOL; cascos off
+	          echo "output: both speakers, volume $VOL%" ;;
+	estado)   estado; exit 0 ;;
+	*) echo "usage: $(basename "$0") {todo|altavoz|audifono|cascos|estado} [volume 0-100]"
+	   echo "     aliases: auricular=audifono  ambos=todo  arriba=audifono  abajo=altavoz"
+	   exit 1 ;;
+esac
+
+# Save ALWAYS. It is what makes the setting survive the reboot: the
+# 'alsa-restore' of the next boot rewrites exactly this. It also saves
+# 'ASI1 Sel' and the routing, which go in the same file.
+alsactl store 0 >/dev/null 2>&1 || true
+
+echo
+estado

@@ -1,0 +1,17 @@
+#!/bin/sh
+# Volume of the surya's speakers. It is a wrapper around 'salida-audio'.
+#
+# It exists because 'restore-surya', 'restore.sh' and the 'surya-setup' setting
+# call it. All the work is done by 'salida-audio', which is the ONLY place
+# from which the volume is touched.
+#
+# Usage:  audio-volumen [0-100]     (0 = mute, 100 = maximum)
+
+PCT=${1:-85}
+
+case "$PCT" in
+	''|*[!0-9]*) echo "usage: $(basename "$0") [0-100]"; exit 1 ;;
+esac
+[ "$PCT" -le 100 ] || { echo "usage: $(basename "$0") [0-100]"; exit 1; }
+
+exec /usr/bin/salida-audio todo "$PCT"

@@ -1,0 +1,27 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# Everything this repository ships for the POCO X3 NFC: the hardware layer plus
+# the Plasma Mobile side.
+#
+# What is deliberately NOT here: which browser you want, ad-blocking DNS, the
+# Telegram scaling, web application launchers. Those are choices, not fixes, and
+# they stay in the interactive surya-setup tool.
+#
+# The six own applications (poconav, screenglaze, appsvivas, app-usage,
+# smart-unlock, lost-phone) join this list as each one gets its own repository
+# and package.
+pkgname=utsugi-surya-full
+pkgver=1
+pkgrel=0
+pkgdesc="Xiaomi POCO X3 NFC: the hardware layer plus the Plasma Mobile fixes"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="
+	utsugi-surya-base
+	utsugi-surya-plasma
+	"
+
+package() {
+	mkdir -p "$pkgdir"
+}

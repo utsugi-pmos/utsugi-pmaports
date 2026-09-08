@@ -1,0 +1,13 @@
+[Unit]
+Description=Seed the writable sensor firmware root the DSP writes into
+ConditionPathExists=/usr/share/qcom/sm7150/Xiaomi/surya/sensors/sns_reg.conf
+Before=hexagonrpcd-adsp-sensorspd.service
+After=local-fs.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/libexec/utsugi-surya/sensors-seed
+
+[Install]
+WantedBy=multi-user.target

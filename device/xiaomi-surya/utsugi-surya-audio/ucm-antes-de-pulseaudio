@@ -1,0 +1,54 @@
+#!/bin/sh
+# Applies the card's UCM BEFORE PulseAudio probes it.
+#
+# THE PROBLEM IT SOLVES
+# ---------------------
+# At boot, PulseAudio probes the card with UCM and builds two profiles,
+# "HiFi (Earpiece, Mic)" and "HiFi (Mic, Speaker)". Both carry the microphone,
+# because it is the only input. And during the probe this happens:
+#
+#     Trying _ucm0001.hw:X3,0 ...  Managed to open          <- the speaker, fine
+#     Trying _ucm0001.hw:X3,3 ...  Error: Invalid argument   <- the microphone, no
+#
+# Since both profiles fail, PulseAudio ends up with none:
+#
+#     module-alsa-card.c: Failed to find a working profile
+#
+# and module-udev-detect retries the load over and over. EACH retry goes
+# into the DSP, and the kernel fills up with:
+#
+#     q6afe_i2s_port_prepare:1550 num_sd_lines=0x1 cfg->sd_line_mask=0x1
+#
+# at about two per second, indefinitely. Measured: with PulseAudio
+# dead, 0 messages in 15 s; with it retrying, a continuous storm. And that
+# same storm is the last thing that appears in the trace of the boots that
+# hang (see docs/BOOT-01-not-a-hang.md).
+#
+# With the UCM verb and devices already applied, PulseAudio's probe
+# succeeds, the card loads, and the storm never even starts.
+#
+# It does NOT fix the microphone. The mic is still the unfinished work of
+# docs/AUDIO-01-microphone-unfinished.md. What it fixes is that a broken microphone
+# stops taking the speakers down with it and stops hammering the DSP.
+set -eu
+
+# Wait for the card: it is created by the deferred probe and takes a few seconds.
+for i in $(seq 1 60); do
+	[ -e /dev/snd/controlC0 ] && break
+	sleep 1
+done
+[ -e /dev/snd/controlC0 ] || { echo "no card after 60 s" >&2; exit 1; }
+
+# The name for the UCM is the LONG one, not the short one. /proc/asound/cards gives both:
+#
+#      0 [X3             ]: sm8250 - POCO X3
+#                           xiaomi-XiaomiPOCOX3NFCTianma      <- this one
+#
+# With the short one ("X3") alsaucm fails with "failed to import X3 use case
+# configuration -2". And it cannot be hardcoded because it changes with the panel
+# (Tianma or Huaxing).
+CARD=$(awk '/^ *0 \[/{getline; gsub(/^[ \t]+|[ \t]+$/,""); print; exit}' /proc/asound/cards)
+[ -n "$CARD" ] || { echo "could not determine the card name" >&2; exit 1; }
+
+alsaucm -c "$CARD" set _verb HiFi set _enadev Speaker set _enadev Mic
+echo "UCM applied on $CARD: verb HiFi, Speaker and Mic"

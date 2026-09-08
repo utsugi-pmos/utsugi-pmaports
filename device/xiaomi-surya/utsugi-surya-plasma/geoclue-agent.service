@@ -1,0 +1,22 @@
+[Unit]
+# GeoClue denies any app not hard-listed in geoclue.conf unless an agent
+# authorises it, and Plasma Mobile ships no agent of its own. Stock postmarketOS
+# papers over that with /etc/xdg/autostart/geoclue-demo-agent.desktop.
+#
+# That autostart is replaced by this unit for one reason: an XDG autostart entry
+# can be started but not STOPPED, so the location switch had no off. As a plain
+# background process the agent also died with whoever launched it -- setsid was
+# not enough, because logind kills the whole session cgroup. Measured: the agent
+# vanished as soon as the launching session ended.
+Description=GeoClue authorisation agent (Plasma Mobile ships none)
+PartOf=graphical-session.target
+
+[Service]
+Type=exec
+ExecStart=/usr/libexec/geoclue-2.0/demos/agent
+# Deliberately NOT Restart=always: stopping this unit is how the user turns
+# location off, and always-restart would fight the switch.
+Restart=on-failure
+
+[Install]
+WantedBy=graphical-session.target

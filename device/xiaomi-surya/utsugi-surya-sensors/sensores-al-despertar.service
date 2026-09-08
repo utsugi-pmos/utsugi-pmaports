@@ -1,0 +1,40 @@
+[Unit]
+# Brings the ADSP sensors back up after suspend.
+#
+# WHY IT IS NEEDED
+# ----------------
+# The hexagonrpcd units carry 'Conflicts=suspend.target', so systemd STOPS THEM
+# on suspend -- on purpose, because the fastrpc session with the ADSP does not
+# survive the cycle. What nobody brings is the other half: starting them back up
+# on wake.
+#
+# Result: the sensors work until the first time the phone sleeps, and from then
+# on they are dead until someone re-applies the setting or reboots. No compass,
+# no accelerometer -- meaning no screen rotation -- and no ambient light or
+# proximity.
+#
+# And the symptom is thoroughly misleading, because the service ends up 'inactive'
+# with Result=success: it looks turned off by hand, not crashed. Chasing this I
+# even ended up writing that this phone had no compass.
+#
+# Measured: on 2026-08-23 at 23:52 and on 2026-08-24 at 15:33, both times the
+# sensors turned up dead, the journal had a suspend in that very second.
+#
+# 'After' + 'WantedBy' on suspend.target is systemd's idiom for "run ON WAKE": the
+# unit is queued with the target and, by coming after, runs when the target is
+# torn down.
+Description=Bring the ADSP sensors back up on wake
+After=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target
+
+[Service]
+Type=oneshot
+# Both: 'rootpd' also gets stopped, and without it the sensor registry is not
+# served even if 'sensorspd' is alive.
+ExecStart=/usr/bin/systemctl restart hexagonrpcd-adsp-rootpd.service hexagonrpcd-adsp-sensorspd.service
+# And the proxy behind it, with margin for the DSP to publish its sensors again.
+# Without this it keeps running with the empty list from before sleep, and the
+# applications still see nothing even though the daemon is already up.
+ExecStart=/bin/sh -c 'sleep 8; /usr/bin/systemctl restart iio-sensor-proxy.service'
+
+[Install]
+WantedBy=suspend.target hibernate.target hybrid-sleep.target suspend-then-hibernate.target

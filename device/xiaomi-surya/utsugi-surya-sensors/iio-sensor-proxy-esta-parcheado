@@ -1,0 +1,61 @@
+#!/bin/sh
+# Does /usr/libexec/iio-sensor-proxy carry the surya's two rotation patches?
+#
+#   iio-sensor-proxy-esta-parcheado [RUTA]
+#
+# With no argument it looks at the installed binary. With one, it looks at that file, which is
+# how 'compilar-e-instalar' checks the freshly compiled .apk BEFORE touching
+# the phone.
+#
+# WHY THIS EXISTS
+# -------------------
+# The two patches are a local aport (surya/pmaports/temp/iio-sensor-proxy),
+# just like hexagonrpcd, so they have the same mine:
+#
+#     surya-setup --actualizar  ->  apk upgrade
+#
+# The day Alpine publishes an iio-sensor-proxy newer than our pkgrel,
+# the upgrade takes the patched one away WITHOUT SAYING ANYTHING.
+#
+# UNLIKE hexagonrpcd, losing this is NOT dangerous: it does not knock down the ADSP nor
+# leave the phone without audio. It only brings back the abrupt rotation of before. That is why it is NOT
+# hung off the unit as ExecCondition -- skipping the service would leave the
+# phone without rotation, which is worse than having it abrupt. Here it only warns.
+#
+# HOW IT IS DETECTED
+# ---------------
+# By behavior, not by version, for the same reason as in hexagonrpcd: 'apk
+# info -v' on this busybox returns the description instead of the number, and a
+# pkgrel can lie. Each patch leaves its own string in the binary, and
+# BOTH are checked: they fix different things and can be lost separately.
+#
+# Without 'strings', which is from binutils and may not be there: 'grep -a' is in busybox
+# and is enough. The '-a' is NOT superfluous -- without it, grep sees a binary file, answers
+# "Binary file matches" and the -q returns whatever it likes; tested and it gives false
+# negatives on a binary that IS patched.
+#
+# The two fingerprints are unique messages that only the patches introduce, so
+# they are searched as a substring and there is no need to anchor the whole line.
+set -eu
+
+BIN="${1:-/usr/libexec/iio-sensor-proxy}"
+
+[ -r "$BIN" ] || { echo "I cannot read $BIN" >&2; exit 1; }
+
+faltan=""
+
+# 0001: the settling timer. Without it, a single sample rotates the
+# screen, and a jolt passes through the OPPOSITE landscape for ~80 ms.
+grep -qa 'waiting for it to settle' "$BIN" \
+	|| faltan="$faltan 0001(settling)"
+
+# 0002: honor the Claims that arrive before finding the sensor. Without it, after
+# restarting the service NOT ONE sample arrives until something makes KWin
+# release and reclaim again -- turning the screen off and on, for example.
+grep -qa 'Honouring' "$BIN" \
+	|| faltan="$faltan 0002(Claim race)"
+
+[ -z "$faltan" ] || {
+	echo "$BIN does NOT carry the surya's rotation patches; missing:$faltan" >&2
+	exit 1
+}

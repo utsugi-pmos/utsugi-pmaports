@@ -1,0 +1,71 @@
+#!/bin/sh
+# Location on/off switch for Plasma Mobile, which ships no location quick
+# setting of its own (KDE issue teams/plasma-mobile#4, still open).
+#
+# Two levers, and BOTH work without root -- that is why this is a plain script
+# and not a polkit-blessed system service:
+#
+#   1. The GeoClue agent, as a USER systemd unit. GeoClue asks an agent to
+#      authorise any app not hard-listed in geoclue.conf, and DENIES when no
+#      agent answers. Measured: with no agent, a location request returns
+#      nothing at all -- not a stale fix, not an IP guess, nothing.
+#
+#   2. ModemManager location gathering. Drops the GPS radio immediately.
+#      Verified: --location-disable-gps-nmea needs no sudo, polkit already
+#      grants it to the active session.
+#
+# Lever 1 alone would leave a session that is already running still burning
+# power. Lever 2 alone is undone by the next app that asks. Off needs both.
+#
+# Why a systemd unit and not just launching the binary: a bare background
+# process died with whoever started it -- setsid was not enough, because logind
+# kills the whole session cgroup. And the stock XDG autostart entry can be
+# started but never STOPPED, so it could not implement "off" at all. The setting
+# hides that autostart and installs this unit in its place.
+set -u
+
+UNIT=geoclue-agent.service
+
+gathering() {
+	mmcli -m any --location-status 2>/dev/null \
+		| grep -A1 "enabled:" | grep -q "gps-nmea"
+}
+
+allowed() {
+	[ "$(systemctl --user is-active "$UNIT" 2>/dev/null)" = active ]
+}
+
+case "${1:-status}" in
+status)
+	# Machine-readable on purpose: the QML side turns these tokens into
+	# translated text. Keep them stable.
+	if allowed; then
+		gathering && echo "on gathering" || echo "on idle"
+	else
+		echo "off"
+	fi
+	;;
+
+on)
+	systemctl --user start "$UNIT"
+	# The radio is deliberately NOT switched on here. GeoClue starts it when
+	# an app actually asks and stops it when the app lets go. Forcing it on
+	# would leave the engine burning power with nobody listening, which is
+	# exactly the leak this switch exists to close.
+	;;
+
+off)
+	systemctl --user stop "$UNIT"
+	mmcli -m any --location-disable-gps-nmea --location-disable-gps-raw \
+		>/dev/null 2>&1
+	;;
+
+toggle)
+	if allowed; then "$0" off; else "$0" on; fi
+	;;
+
+*)
+	echo "usage: $(basename "$0") [status|on|off|toggle]" >&2
+	exit 1
+	;;
+esac

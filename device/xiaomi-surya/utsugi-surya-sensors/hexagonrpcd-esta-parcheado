@@ -1,0 +1,64 @@
+#!/bin/sh
+# Does /usr/bin/hexagonrpcd carry the four surya patches?
+#
+# WHY THIS EXISTS
+# ---------------
+# The patches do not come from any repository: they are a local aport built
+# by hand (surya/pmaports/temp/hexagonrpcd). That clashes with this
+# project's rule -- "everything is installed from repositories" -- and leaves a mine:
+#
+#     surya-setup --actualizar  ->  apk upgrade
+#
+# The day Alpine publishes a hexagonrpcd newer than ours, 'apk
+# upgrade' takes the patched one out WITHOUT SAYING ANYTHING. And since the service
+# is 'enabled', on the next boot the unpatched daemon would come up: the
+# sensor registry does not initialize, the sensors PD dies, DRAGS THE ADSP DOWN
+# and with the ADSP goes the sound card. You end up with no audio and no clue.
+#
+# That is why this hooks onto the unit as an ExecCondition: systemd runs it
+# BEFORE each start of the service and, if it returns non-zero, SKIPS the
+# unit cleanly -- it neither starts it nor marks it as failed. The phone is
+# left without sensors, which is annoying, instead of without audio, which is worse.
+#
+# HOW IT IS DETECTED
+# ------------------
+# By behavior, not by version: 'apk info -v' in this busybox returns the
+# description instead of the number, and a pkgrel can lie just the same. Each
+# patch leaves a recognizable string in the binary.
+#
+# And without 'strings', which is from binutils and may not be there on a bare boot:
+# 'tr' and 'grep' are from busybox and are always there. Turning the NULs into
+# newlines leaves the C strings one per line, which is exactly what 'strings' does.
+#
+# The 0001 must be searched as a WHOLE line: its mark is "/sensors/", which as
+# a substring is also inside "/sensors/config/" and "/sensors/registry/",
+# which exist unpatched. The other three are unique error messages and it is enough
+# to search for them as-is.
+set -eu
+
+BIN=${1:-/usr/bin/hexagonrpcd}
+
+[ -r "$BIN" ] || { echo "cannot read $BIN" >&2; exit 1; }
+
+faltan=""
+
+tr '\0' '\n' < "$BIN" | grep -qxa '/sensors/' \
+	|| faltan="$faltan 0001(the registry '..')"
+
+grep -qa 'Could not write file' "$BIN" \
+	|| faltan="$faltan 0002(write)"
+
+grep -qa 'does not fit in' "$BIN" \
+	|| faltan="$faltan 0003(input buffer)"
+
+grep -qa 'Could not rename' "$BIN" \
+	|| faltan="$faltan 0004(rename)"
+
+[ -z "$faltan" ] || {
+	echo "$BIN does NOT carry the surya patches; missing:$faltan" >&2
+	echo "NOT starting: without them the ADSP crashes in a loop and takes the audio with it." >&2
+	echo "Recompile surya/pmaports/temp/hexagonrpcd and reinstall ALL THREE apk." >&2
+	exit 1
+}
+
+exit 0

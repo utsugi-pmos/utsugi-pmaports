@@ -1,0 +1,66 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# The black box: what the phone was doing right before it died.
+#
+# This device hangs on shutdown at a different point every time, with no oops and
+# no panic, so the evidence has to survive the reboot. A heartbeat timer leaves a
+# trail, the archiver keeps the previous boot's journal, and journald is given
+# enough room not to rotate it away.
+pkgname=utsugi-surya-blackbox
+pkgver=1
+pkgrel=0
+pkgdesc="Keep evidence across the reboots this phone does not survive"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+subpackages="$pkgname-systemd"
+source="caja-negra
+	caja-negra-latido
+	caja-negra-archivar
+	sincronizar-journal
+	caja-negra-ajustes.service
+	caja-negra-archivar.service
+	caja-negra-latido.service
+	caja-negra-latido.timer
+	sincronizar-journal.service
+	50-utsugi-blackbox.conf
+	80-utsugi-surya-blackbox.preset
+	"
+
+package() {
+	# caja-negra is the command you type to read the box; the rest only run from
+	# their units.
+	install -Dm755 "$srcdir"/caja-negra -t "$pkgdir"/usr/bin/
+	local helper
+	for helper in caja-negra-latido caja-negra-archivar sincronizar-journal; do
+		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
+	done
+
+	local unit
+	for unit in caja-negra-ajustes.service caja-negra-archivar.service \
+	            caja-negra-latido.service caja-negra-latido.timer \
+	            sincronizar-journal.service; do
+		install -Dm644 "$srcdir/$unit" -t "$pkgdir"/usr/lib/systemd/system/
+	done
+	install -Dm644 "$srcdir"/50-utsugi-blackbox.conf \
+		-t "$pkgdir"/usr/lib/systemd/journald.conf.d/
+	install -Dm644 "$srcdir"/80-utsugi-surya-blackbox.preset \
+		-t "$pkgdir"/usr/lib/systemd/system-preset/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+fc37913c41c27f6aa3704008d2822a153628d51828435ecf5c6615b40ad64d2838ddb0d008c4f1178961a7e330f475cfeda7b6ce3b71b279f9bebe19b9a8fa21  caja-negra
+4db6fdf08b5d9c6be65907bab98927b84a7d66cbc2e81f1091e51385e8a5ccf705acf6628ca91e81ca29131cbc0d293b825d8e2b7b2171734618254a7ea86625  caja-negra-latido
+070cbe0c6f0303b7ccd527ca9cb3f5b992e34049cf5381bb01929f3cf7cf0999d571e10dd58fccab6ec5d764c902d3c89bf44cc20f07fe9a219fbb8f43f3bfc0  caja-negra-archivar
+601d4cc34ba6eae5bffc82eeeb39d657a2f3af527d9e65c832a3bd9c9403112e3dc460b74b286b4610454e23a0a5fd886be31a2936d22c03e65b0e44079b94e9  sincronizar-journal
+ed5bf64d69ff248d8f475b9a3bb444da01fcfea24793723b7cad2dd455e11ec977f9cdfed2744b95d8584ffc699296d2c28a5493fe913da16b4aaaa766db6526  caja-negra-ajustes.service
+1a5c9945509a83229e718bcf30d438acbd81425ea72aaeea3f2a0dbfe330962119ff8343c2a6c72bb19385ec38095c0a7f6e3a160e0e7de4fdea5f8145003c52  caja-negra-archivar.service
+12dfad11486bfb7c9111bcd564942c21fc9c9249c85e423d02bfc92c7e551ce2afa2ad4df7d820062e78207b1988adb3c902478cbad73ef32c8d62df3220888f  caja-negra-latido.service
+3a940b00e70117b8d8f73fb4c07263f39fa44dffa4b3711e9b0e675a087c4e23e5544a588ced2e439fe698b959b9aa155e46f534b88b97749b40adff03321a5d  caja-negra-latido.timer
+b56be94adab1f87959f9f6cc69fe8313a3cb59d550c62b3991367248f781b02184ba4df8182e04824264cfb0981d1f2cd03966c49c3748c14daec966c7a50038  sincronizar-journal.service
+07a90f91efe797a1a3611028e17aac781d7a4c83e05b50d9b70ad8018586667b3fb9d4a770f3cac7ec29760bb9b7995fdcddfe1d0c56827d42b85d1169ffcfc6  50-utsugi-blackbox.conf
+f59759c003f6d545cfcd671fc3f9f77ed431382fe7c742b0bcffa6816adecc1df18fbdcdf47fa6e25c72f71438386e2b20d028fcf59fbc5ac790fd0c73e06b20  80-utsugi-surya-blackbox.preset
+"

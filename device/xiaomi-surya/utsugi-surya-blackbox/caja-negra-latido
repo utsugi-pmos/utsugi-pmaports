@@ -1,0 +1,81 @@
+#!/bin/sh
+# A mark of life on disk, written with fsync so it survives the hang.
+#
+# WHY ON DISK AND NOT IN PERSISTENT RAM
+# -------------------------------------
+# This started writing ONLY to /dev/pmsg0, which is the ramoops area: RAM that
+# in theory survives the reboot. On this phone it does NOT survive. Measured on
+# 2026-09-04 in both possible ways:
+#
+#   - orderly reboot ('systemctl reboot'): everything is lost.
+#   - deliberate panic with automatic warm reboot (sysrq-c, with
+#     panic=120 and reboot=warm in the boot line): everything is lost too.
+#     /sys/fs/pstore was left EMPTY, even though the area is properly registered
+#     ("ramoops: using 0x400000@0x9d800000").
+#
+# So the mark goes to disk, with fsync, which is the only thing that really
+# survives here. It is still also written to pmsg0 because it costs nothing and because
+# the August and September dumps prove that SOME time ramoops did
+# save: the day the reason is found out, it will already be in place.
+#
+# What it is for: when the phone hangs, the systemd journal falls
+# short. journald does not write each line to disk at once -- it batches -- so
+# the last line of the journal is NOT the instant it died: it is the last
+# instant it had time to flush to disk. With the hang on 2026-09-03 the
+# journal ended at 21:28:42 and the phone was dead until 00:16. With
+# the journal alone there is no way to know if it died at 21:28 or at 23:50.
+#
+# This line does tell. /dev/pmsg0 writes straight to the ramoops area, without
+# going through the filesystem and with no cache to lose, and the kernel
+# recovers it on the next boot.
+#
+# WHAT NOT TO EXPECT FROM THIS
+# ----------------------------
+# While the phone sleeps, the processes are FROZEN ("Freezing user space
+# processes" in the journal), so this does not beat. It is on purpose and is half
+# of the diagnosis: if the last heartbeat coincides with entering suspend,
+# it died sleeping. If it keeps beating a good while after, it died awake.
+set -eu
+
+# bl_power: 0 = screen on, 4 = off (FB_BLANK_POWERDOWN).
+luz=?
+for b in /sys/class/backlight/*/bl_power; do
+	[ -r "$b" ] || continue
+	case "$(cat "$b")" in
+		0) luz=on ;;
+		*) luz=off ;;
+	esac
+	break
+done
+
+# How many suspends succeeded and how many failed. If the success counter
+# does not rise between heartbeats but the screen is off, the phone was
+# not asleep: it was with the screen off and awake.
+ok="$(cat /sys/power/suspend_stats/success 2>/dev/null || echo ?)"
+mal="$(cat /sys/power/suspend_stats/fail 2>/dev/null || echo ?)"
+
+# The time is written TWICE: readable for whoever reads it by eye, and in seconds
+# since 1970 so the reader can subtract without having to interpret formats --
+# busybox's 'date -d' does not swallow just anything.
+LINEA="$(printf 'caja-negra %s t=%s up=%s susp=%s/%s luz=%s carga=%s' \
+	"$(date -Iseconds)" \
+	"$(date +%s)" \
+	"$(cut -d. -f1 /proc/uptime)" \
+	"$ok" "$mal" "$luz" \
+	"$(cut -d' ' -f1 /proc/loadavg)")"
+
+# To disk, and with fsync: without it, the line stays in the page cache and a
+# hang takes it -- which is exactly the fault the systemd journal has and
+# the reason this all exists. It is a ONE-line file that is overwritten,
+# does not grow, and is 4 KB every 30 s: irrelevant for the eMMC.
+#
+# The archiver takes this file away at boot, BEFORE the first new
+# heartbeat. Otherwise, the next boot would overwrite the last mark of the hang.
+mkdir -p /var/log/caja-negra
+printf '%s\n' "$LINEA" | dd of=/var/log/caja-negra/latido conv=fsync 2>/dev/null
+
+# And also to persistent RAM, which costs nothing. Today it does not survive on this
+# phone (see the header), but if one day it is fixed, the whole history
+# will be there instead of only the last line.
+[ -e /dev/pmsg0 ] && printf '%s\n' "$LINEA" > /dev/pmsg0
+exit 0

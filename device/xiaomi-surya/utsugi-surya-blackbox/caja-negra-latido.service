@@ -1,0 +1,13 @@
+[Unit]
+Description=Black box liveness mark, to disk with fsync
+# The archiver has to move aside the previous boot's mark BEFORE the first
+# heartbeat of this one, or we overwrite it and lose exactly the data we are after.
+After=caja-negra-archivar.service
+# There is no ConditionPathExists=/dev/pmsg0 anymore: the heartbeat writes to
+# DISK, and pmsg0 is just an extra. With the condition in place, a kernel without
+# CONFIG_PSTORE_PMSG would be left with no liveness mark through a path that does
+# not even work here.
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utsugi-surya/caja-negra-latido

@@ -1,0 +1,48 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# Everything that makes the hardware of the POCO X3 NFC work. No applications and
+# no taste: what is here is the difference between a phone that boots and a phone
+# that has cameras, in-call voice, sound, sensors, GPS and a power-off that
+# actually powers off.
+#
+# The forks are named EXPLICITLY, not through the names they provide. That is
+# what keeps them installed: apk would otherwise be free to satisfy
+# "hexagonrpcd" with Alpine's, which has none of the patches.
+#
+# pd-mapper is deliberately absent. It moved into the kernel (qcom_pd_mapper)
+# and the package no longer exists; asking for a package that is gone makes apk
+# abort the WHOLE transaction and the rest ends up uninstalled without warning.
+pkgname=utsugi-surya-base
+pkgver=1
+pkgrel=0
+pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras and power (no apps)"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="
+	utsugi-keys
+	device-qcom-sm7150
+	linux-postmarketos-qcom-sm7150-utsugi
+	alsa-ucm-conf-qcom-sm7150-utsugi
+	hexagonrpcd-utsugi
+	iio-sensor-proxy-utsugi
+	libcamera-utsugi
+	firmware-xiaomi-surya
+	utsugi-surya-boot
+	utsugi-surya-audio
+	utsugi-surya-sensors
+	utsugi-surya-gps
+	utsugi-surya-power
+	utsugi-surya-camera
+	utsugi-surya-blackbox
+	tuned
+	tuned-ppd
+	qmi-utils
+	alsa-utils
+	i2c-tools
+	python3
+	"
+
+package() {
+	mkdir -p "$pkgdir"
+}

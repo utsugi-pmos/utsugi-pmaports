@@ -1,0 +1,21 @@
+[Unit]
+Description=Turn on both speakers at boot
+# Does not depend on adsp-audio-init: since kernel r51 the card is created on its
+# own. It is enough to wait for the card's control to exist.
+After=sound.target
+Wants=sound.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -e /dev/snd/controlC0 ] && exit 0; sleep 1; done; exit 1'
+
+# 'todo', not 'altavoz': that mode turns off the top speaker on purpose.
+# Without this service the chips boot at around -36 dB and the phone seems mute.
+#
+# 'salida-audio' saves the state with 'alsactl store' when it finishes, so what
+# 'alsa-restore' restores on the next boot will be exactly this.
+ExecStart=/usr/bin/salida-audio todo 85
+
+[Install]
+WantedBy=multi-user.target
