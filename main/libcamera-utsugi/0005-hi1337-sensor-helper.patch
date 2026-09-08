@@ -1,0 +1,94 @@
+libipa: sensor helper for the Hi-1337, the ultra-wide of the Xiaomi POCO X3 NFC
+
+THE PROBLEM
+-----------
+Without a helper, libcamera warns
+
+    IPASoft: Failed to create camera sensor helper for hi1337
+
+and its automatic control cannot reason about gain: it is left with exposure
+alone. Measured on the phone, in low light the AGC raises the exposure ALL THE
+WAY TO THE TOP and leaves the gain at its unity value:
+
+    before:   exposure: 720   analogue_gain: 512
+    after:    exposure: 1714  analogue_gain: 512
+
+With the exposure at its maximum the frame is stretched so that it fits, so the
+camera crawls instead of raising the gain. That is what shows up as "the
+ultra-wide is slow in low light".
+
+WHERE THE CONSTANTS COME FROM
+-----------------------------
+From measuring them on the sensor, not from a datasheet I do not have.
+
+The gain, with the exposure FIXED and the scene still, looking at the signal
+above the pedestal AND at the contrast -which is what tells a gain apart from a
+shift of the black level-:
+
+    code    signal  contrast
+       512   9.58        25.0
+      1024  19.57        49.0    (x2.04 and x1.96)
+      2048  39.49        96.0    (x4.12 and x3.84)
+
+Both quantities rise in proportion to the code, that is, the curve is a straight
+line through the origin with unity at 512: gain = code / 512.
+
+The black level, with the scene in the dark: every pixel lands at 16 of the
+eight high bits, with no spread. They are the usual 64 of ten bits, which on the
+helper's 16-bit scale is 4096.
+
+A WARNING FOR WHOEVER TOUCHES THIS SENSOR
+-----------------------------------------
+The gain is FOUR registers, one per Bayer channel -0x0214, 0x0216, 0x0218 and
+0x021a-, which have to be written together. The 0x0204 sitting next to them is
+NOT gain even though it looks like it: it is the black level. They can be told
+apart because raising it makes the mean grow but the contrast GO DOWN, whereas a
+gain raises both. Confusing them cost three wrong conclusions in a row.
+
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -520,6 +520,44 @@
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("gc08a3", CameraSensorHelperGc08a3)
+ 
++class CameraSensorHelperHi1337 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperHi1337()
++	{
++		/*
++		 * Pedestal de 64 en diez bits, MEDIDO en este sensor: con la
++		 * escena a oscuras todos los pixeles caen en 16 de los ocho bits
++		 * altos, sin dispersion, que son los 64 de diez bits.
++		 */
++		blackLevel_ = 4096;
++		/*
++		 * Ganancia LINEAL con la unidad en 512: ganancia = codigo / 512.
++		 *
++		 * MEDIDO, no de una hoja de datos. Con la exposicion fija y una
++		 * escena quieta, mirando la senal sobre el pedestal Y el
++		 * contraste, que es lo que separa una ganancia de un
++		 * desplazamiento del negro:
++		 *
++		 *     codigo  senal   contraste
++		 *        512   9,58        25,0
++		 *       1024  19,57        49,0    (x2,04 y x1,96)
++		 *       2048  39,49        96,0    (x4,12 y x3,84)
++		 *
++		 * Las dos magnitudes suben proporcionales al codigo, asi que la
++		 * curva es una recta por el origen y 512 es 1x.
++		 *
++		 * Ojo: la ganancia de este sensor son CUATRO registros, uno por
++		 * canal de Bayer -0x0214, 0x0216, 0x0218 y 0x021a-, que el driver
++		 * escribe juntos. El 0x0204 que hay al lado NO es ganancia: es el
++		 * nivel de negro, y se distingue porque sube la media mientras
++		 * BAJA el contraste.
++		 */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 512 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("hi1337", CameraSensorHelperHi1337)
++
+ class CameraSensorHelperHm1246 : public CameraSensorHelper
+ {
+ public:

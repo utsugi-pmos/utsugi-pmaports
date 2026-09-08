@@ -22,6 +22,7 @@ overlay
 for pkg in "$@"; do
 	d="$(aport_dir "$pkg")"
 	[ -n "$d" ] || die "unknown aport: $pkg"
+	was="$(apkbuild_version "$pkg")"
 	case "$MODE" in
 	pkgrel)
 		old="$(sed -n 's/^pkgrel=//p' "$d/APKBUILD" | head -1)"
@@ -39,7 +40,15 @@ for pkg in "$@"; do
 	if pmb checksum "$pkg" >/dev/null 2>&1; then
 		src="$(find "$APORTS/utsugi" -type d -name "$pkg" | head -1)"
 		[ -n "$src" ] && cp "$src/APKBUILD" "$d/APKBUILD"
-		green "  $pkg: checksums up to date ($(apkbuild_version "$pkg"))"
+		# Confirm the bump actually survived the round trip through the
+		# throwaway checkout. A version that silently stayed put is how a
+		# rebuild ends up shipping the previous contents.
+		now="$(apkbuild_version "$pkg")"
+		if [ "$MODE" = pkgrel ] && [ "$now" = "$was" ]; then
+			red "  $pkg: still $now after a bump -- the change did not stick"
+			exit 1
+		fi
+		green "  $pkg: checksums up to date ($now)"
 	else
 		red "  $pkg: could not recompute checksums"
 		exit 1

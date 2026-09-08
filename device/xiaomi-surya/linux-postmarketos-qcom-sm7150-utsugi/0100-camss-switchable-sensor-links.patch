@@ -1,0 +1,99 @@
+camss: switchable sensor links, for two cameras on one CSIPHY
+
+THE PROBLEM
+-----------
+This phone has FIVE cameras and the SoC has FOUR CSI inputs, so two pairs share
+an input through a MIPI switch: the front one with the wide angle, and the depth
+one with the macro. In real use one is used at a time and switched over, which is
+exactly what the switch exists for.
+
+The device tree already allows it: camss_parse_ports() walks ALL endpoints with
+fwnode_graph_for_each_endpoint(), and the CSIPHY is chosen by PORT number
+-csd->interface.csiphy_id = vep.base.port-, not by endpoint. So two sensors on
+the same port@1 both get registered and both go to CSIPHY1.
+
+But then NEITHER of them captures:
+
+    v4l2_subdev_link_validate_default: width does not match (source 2592, sink 4208)
+    link was "s5k3t2 13-0010":0 -> "msm_csiphy1":0
+    Failed to start media pipeline: -32
+
+Because camss_subdev_notifier_complete() creates EVERY sensor -> csiphy link with
+
+    MEDIA_LNK_FL_IMMUTABLE | MEDIA_LNK_FL_ENABLED
+
+With a single sensor per CSIPHY that makes no difference. With two, both links
+stay enabled FOREVER -immutable means not even media-ctl can turn them off- and
+when starting either one, validation also walks the other one's link, whose
+format does not match. Both fail.
+
+THE FIX
+-------
+Do not mark the link as immutable, and enable it only if it is the FIRST one on
+that CSIPHY. That way:
+
+  - with a single sensor, the link is still created enabled and nothing changes;
+  - with two, the first stays enabled and the second disabled, and they are
+    switched from user space:
+
+        media-ctl -l '"s5k3t2 13-0010":0->"msm_csiphy1":0[0]'
+        media-ctl -l '"hi1337 14-0021":0->"msm_csiphy1":0[1]'
+
+    The MIPI switch does not have to be touched by hand: each sensor's driver
+    puts it in its position when powering on and releases it when powering off.
+
+WHY THIS IS NOT A HACK FOR THIS PHONE
+-------------------------------------
+Sharing a CSIPHY between two sensors with a switch is common in phones with more
+cameras than inputs. Having the links be immutable makes it impossible by
+construction, and there is no reason for them to be: immutable is for what
+physically cannot be disconnected, and here it can.
+
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -5170,6 +5170,28 @@
+ 	return 0;
+ }
+
++/*
++ * camss_primer_sensor_del_csiphy - si este CSIPHY no tiene todavia ningun
++ * sensor enlazado
++ *
++ * En moviles con mas camaras que entradas CSI, dos sensores comparten CSIPHY a
++ * traves de un conmutador MIPI. Solo el primero se deja activo; el segundo se
++ * crea apagado y se conmuta desde el espacio de usuario. Si se dejaran los dos
++ * activos, la validacion de la tuberia recorreria los dos y no capturaria
++ * ninguno.
++ */
++static bool camss_primer_sensor_del_csiphy(struct media_entity *csiphy)
++{
++	struct media_pad *sink = &csiphy->pads[MSM_CSIPHY_PAD_SINK];
++	struct media_link *link;
++
++	list_for_each_entry(link, &csiphy->links, list)
++		if (link->sink == sink)
++			return false;
++
++	return true;
++}
++
+ static int camss_subdev_notifier_complete(struct v4l2_async_notifier *async)
+ {
+ 	struct camss *camss = container_of(async, struct camss, notifier);
+@@ -5203,9 +5226,15 @@
+ 			return -EINVAL;
+ 		}
+
++		/*
++		 * NI inmutable NI activo si ya hay otro sensor en este CSIPHY.
++		 * Un enlace inmutable no se puede apagar, y con dos sensores en
++		 * la misma entrada eso deja las dos camaras inservibles.
++		 */
+ 		ret = media_create_pad_link(sensor, i, input,
+ 					    MSM_CSIPHY_PAD_SINK,
+-					    MEDIA_LNK_FL_IMMUTABLE | MEDIA_LNK_FL_ENABLED);
++					    camss_primer_sensor_del_csiphy(input) ?
++					    MEDIA_LNK_FL_ENABLED : 0);
+ 		if (ret < 0) {
+ 			camss_link_err(camss, sensor->name, input->name, ret);
+ 			return ret;

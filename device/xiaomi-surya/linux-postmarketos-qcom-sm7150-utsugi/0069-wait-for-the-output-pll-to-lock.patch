@@ -1,0 +1,77 @@
+Wait for the sensor's output PLL to lock before transmitting
+
+WHAT IS MISSING
+---------------
+s5k3t2_enable_streams() wrote the mode table -the one that programs the OUTPUT
+PLL, the one that sets the MIPI link speed: 0x030e, 0x0310, 0x0312- and started
+the transmission in the same breath, without waiting at all.
+
+WHY IT MATTERS
+--------------
+A sensor that starts transmitting with its output PLL unlocked says it is
+transmitting -its 0x0100 register confirms it when read over I2C- and its frame
+counter advances at 30 per second, because that is driven by the VIDEO PLL,
+which is a DIFFERENT one. But what comes out of the lanes cannot be
+synchronised.
+
+Which is exactly what was measured throughout the investigation: the CSIPHY sees
+the five lanes come out of idle, the activity follows the frame rate -checked by
+halving and quartering the frame time- and not one start-of-transmission sync
+reaches the CSID.
+
+CONTEXT
+-------
+By this point it is verified that the rest is fine:
+
+  - the sensor init table, reading its internal RAM back: 244 out of 244,
+  - the mode table, compared against the factory one: 66 out of 66,
+  - the CSIPHY lane table against Qualcomm's: 115 out of 115,
+  - the CSIPHY common block, the clocks and the reset sequence, corrected
+    (0060, 0063, 0065, 0066),
+  - the sensor power-up sequence, with the vendor's 15 ms of clock before
+    releasing the reset (0068).
+
+The delay goes as a parameter in 0644 so it can be swept without recompiling.
+--- a/drivers/media/i2c/s5k3t2.c
++++ b/drivers/media/i2c/s5k3t2.c
+@@ -118,6 +118,11 @@
+ MODULE_PARM_DESC(i2c_addr,
+ 	"Direccion I2C de 7 bits del sensor. -1 (por defecto) = buscarla.");
+ 
++static int retardo_pll_us = 10000;
++module_param(retardo_pll_us, int, 0644);
++MODULE_PARM_DESC(retardo_pll_us,
++	"Microsegundos de espera tras programar el PLL de salida y antes de transmitir.");
++
+ static int retardo_reloj_us = 15000;
+ module_param(retardo_reloj_us, int, 0644);
+ MODULE_PARM_DESC(retardo_reloj_us,
+@@ -855,6 +860,28 @@
+ 	usleep_range(10000, 12000);
+ 
+ 	/*
++	 * DEJAR QUE EL PLL DE SALIDA ENGANCHE ANTES DE TRANSMITIR.
++	 *
++	 * La tabla del modo es la que programa el PLL de SALIDA, el que fija la
++	 * velocidad del enlace MIPI (0x030e, 0x0310, 0x0312). Aqui no habia
++	 * ninguna espera: se programaba y se arrancaba la transmision en el
++	 * mismo suspiro.
++	 *
++	 * Un sensor que empieza a transmitir con su PLL de salida sin enganchar
++	 * dice que transmite -su 0x0100 lo confirma- y su contador de fotogramas
++	 * avanza, porque eso lo mueve el PLL de VIDEO, que es otro. Pero lo que
++	 * sale por los carriles no hay quien lo sincronice.
++	 *
++	 * Que es exactamente lo medido: el CSIPHY ve los cinco carriles salir de
++	 * reposo al ritmo de los fotogramas y no captura ni un sincronismo de
++	 * inicio.
++	 *
++	 * Ajustable en caliente para poder barrerlo.
++	 */
++	if (retardo_pll_us > 0)
++		usleep_range(retardo_pll_us, retardo_pll_us + 1000);
++
++	/*
+ 	 * Los dos volteos van puestos, como hace el Android de fabrica: el
+ 	 * modulo esta montado del reves.
+ 	 */

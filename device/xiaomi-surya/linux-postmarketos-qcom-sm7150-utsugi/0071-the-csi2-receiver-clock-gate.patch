@@ -1,0 +1,108 @@
+The CSI-2 receiver clock gate that mainline does not touch
+
+WHAT IS MISSING
+---------------
+cam_ife_csid_global_reset(), from the surya's own Android kernel, writes two
+things right BEFORE pulsing the CSID reset strobe:
+
+    CSI2_RX_CFG1 = 0x80      bit 7 = CGC_MODE
+    RDI_CFG0(i)  = 0x02      for each RDI
+
+Mainline writes neither of the two: it goes straight to the 0x1e strobe.
+
+CGC_MODE is the CSI-2 receiver's clock gating control. A block with its clock
+gated off behaves EXACTLY like ours: its registers answer -the register bus is
+separate, which is why the CSIPHY's 110 registers read back without a single
+failure- and the data path never processes anything.
+
+WHY IT FITS
+-----------
+Because of the round-9 bisection, which is the strongest datum there is:
+
+    front    Samsung S5K3T2, CSIPHY1, 4 lanes, 19.2 MHz, 845 MHz  -> rx=0
+    rear     Sony IMX682,    CSIPHY0, 2 lanes, 24 MHz,  1020 MHz  -> rx=0
+
+Two sensors from two manufacturers, two drivers, two PHYs, two clocks and two
+speeds, and neither hands the CSID a single symbol. If it were the sensor's or
+the PHY's fault the two would not fail the same way; what they share is the
+CSID's receiver.
+
+And the CSID's own pattern generator DOES mark SOT and EOT on all four lanes
+(rx = 0x000000ff), that is, the receiver knows how to report when traffic is
+injected into it from the inside. What does not work is its outside input.
+
+WHAT IT DOES
+------------
+It adds the vendor's two writes before the reset strobe, and leaves a second
+parameter to also try keeping CGC_MODE set during the transmission.
+
+    cgc_en_reset    default 1, as the vendor does
+    cgc_en_marcha   default 0, for sweeping
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:10:06.918495661 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:10:28.842650797 +0200
+@@ -49,6 +49,16 @@
+  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
+  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  */
++static int cgc_en_reset = 1;
++module_param(cgc_en_reset, int, 0644);
++MODULE_PARM_DESC(cgc_en_reset,
++	"Escribir CGC_MODE y RDI_CFG0=2 antes del estrobo de reset, como el fabricante.");
++
++static int cgc_en_marcha;
++module_param(cgc_en_marcha, int, 0644);
++MODULE_PARM_DESC(cgc_en_marcha,
++	"Ademas, dejar CGC_MODE puesto en CSI2_RX_CFG1 durante la transmision.");
++
+ static int diag_phy_sel = -1;
+ module_param(diag_phy_sel, int, 0644);
+ MODULE_PARM_DESC(diag_phy_sel,
+@@ -239,6 +249,8 @@
+ 	if (vc > 3)
+ 		val |= 1 << CSI2_RX_CFG1_VC_MODE;
+ 	val |= 1 << CSI2_RX_CFG1_MISR_EN;
++	if (cgc_en_marcha)
++		val |= 1 << CSI2_RX_CFG1_CGC_MODE;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG1);
+ 
+ 	/* DIAGNOSTICO: desenmascarar el receptor si nos lo piden. */
+@@ -493,6 +505,7 @@
+ 	printk(KERN_INFO "csid_reset called\n");
+ 	unsigned long time;
+ 	u32 val;
++	int i;
+ 
+ 	reinit_completion(&csid->reset_complete);
+ 
+@@ -501,6 +514,31 @@
+ 	writel_relaxed(1, csid->base + CSID_TOP_IRQ_MASK);
+ 	writel_relaxed(1, csid->base + CSID_IRQ_CMD);
+ 
++	/*
++	 * LO QUE EL FABRICANTE HACE ANTES DEL ESTROBO Y MAINLINE NO.
++	 *
++	 * cam_ife_csid_global_reset(), del kernel Android del propio surya,
++	 * escribe dos cosas justo antes de pulsar el reset:
++	 *
++	 *     CSI2_RX_CFG1 = 0x80          bit 7 = CGC_MODE
++	 *     RDI_CFG0(i)  = 0x02          por cada RDI
++	 *
++	 * CGC_MODE es el control de puerta de reloj del receptor CSI-2. Un
++	 * bloque con el reloj cerrado se comporta EXACTAMENTE como el nuestro:
++	 * sus registros contestan -el bus de registros va aparte- y la ruta de
++	 * datos no procesa nada nunca.
++	 *
++	 * Y encaja con la biseccion: dos sensores distintos, en dos CSIPHY
++	 * distintos, con dos drivers distintos, ninguno entrega un solo
++	 * simbolo al CSID. Si fuera del sensor o del PHY no serian los dos.
++	 */
++	if (cgc_en_reset) {
++		writel_relaxed(1 << CSI2_RX_CFG1_CGC_MODE,
++			       csid->base + CSID_CSI2_RX_CFG1);
++		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
++			writel_relaxed(0x02, csid->base + CSID_RDI_CFG0(i));
++	}
++
+ 	/* preserve registers */
+ 	val = 0x1e << RST_STROBES;
+ 	writel_relaxed(val, csid->base + CSID_RST_STROBES);

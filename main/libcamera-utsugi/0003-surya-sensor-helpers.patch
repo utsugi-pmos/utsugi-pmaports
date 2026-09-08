@@ -1,0 +1,111 @@
+libipa: sensor helpers for the IMX682 and the S5K3T2 of the Xiaomi POCO X3 NFC
+
+Without a helper, libcamera warns
+
+    IPASoft: Failed to create camera sensor helper for imx682
+    IPASoft: Failed to create camera sensor helper for s5k3t2
+
+and automatic exposure control is left with the fallback branch in
+soft_simple.cpp, which uses the register CODE as if it were the gain:
+
+    context_.configuration.agc.againMax     = againMax;    /* 978 */
+    context_.configuration.agc.again10      = againDef;    /* 0   */
+    context_.configuration.agc.againMin     = againMin;    /* 0   */
+    context_.configuration.agc.againMinStep = 1.0;
+
+ON THE IMX682 THAT IS VERY WRONG, because its gain is not linear:
+
+    gain = 1024 / (1024 - code)
+
+that is, code 512 is 2x and 978 is 22.3x. Treating the axis as linear from 0 to
+978 makes the automatic control believe it is moving by 0.1% at the top end,
+where one step of code is worth almost 2% of gain. With the helper the AGC gets
+the real range, 1x to 22.3x, and a proportionate step.
+
+ON THE S5K3T2 THE FALLBACK BRANCH ALMOST GETS IT RIGHT, and that is worth
+saying: its gain really is linear and passes through zero -code / 32-, and its
+default value is exactly 32, so the AGC's relative arithmetic works out even
+though the numbers are scaled. It is added anyway because it is correct and
+because the helper is the place where that piece of data lives.
+
+WHERE THE CONSTANTS COME FROM
+
+Not from a datasheet I do not have, but from what the drivers themselves
+declare, which is verifiable:
+
+    imx682   min 0    max 978   default 0     -> 0 is 1x  ->  Sony 1024/(1024-x)
+    s5k3t2   min 32   max 512   default 32    -> 32 is 1x ->  linear x/32
+
+The black level of the imx682 is MEASURED on the sensor: with the scene in the
+dark the image floor lands at 62..68 of ten bits, that is, the pedestal of 64,
+which on the helper's 16-bit scale is 4096. It is the same value and the same
+family as the imx708, which is already in this file.
+
+The black level of the s5k3t2 is measured too, and by the same method: with the
+exposure at its minimum -eight lines- the floor lands at 62..65 of ten bits, and
+the long-exposure capture rises to a median of 253, which proves that the
+control was being applied. They are the same 64 as the Sony.
+
+The method does not require covering the camera: with the exposure at its
+minimum the signal is negligible even if the scene is lit, and what is left is
+the pedestal.
+--- a/src/ipa/libipa/camera_sensor_helper.cpp
++++ b/src/ipa/libipa/camera_sensor_helper.cpp
+@@ -654,6 +654,27 @@
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("imx678", CameraSensorHelperImx678)
+ 
++class CameraSensorHelperImx682 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperImx682()
++	{
++		/*
++		 * Sony de diez bits, la misma familia que el imx708: el nivel de
++		 * negro es el pedestal de 64, y medido en el sensor del surya con
++		 * la escena a oscuras el suelo cae en 62..68 de diez bits.
++		 */
++		blackLevel_ = 4096;
++		/*
++		 * ganancia = 1024 / (1024 - codigo), la curva clasica de Sony.
++		 * El driver declara el rango 0..978, y el 0 como valor por
++		 * defecto: 1024/1024 = 1x abajo y 1024/46 = 22,3x arriba.
++		 */
++		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("imx682", CameraSensorHelperImx682)
++
+ class CameraSensorHelperImx708 : public CameraSensorHelper
+ {
+ public:
+@@ -827,6 +848,29 @@
+ };
+ REGISTER_CAMERA_SENSOR_HELPER("ov13858", CameraSensorHelperOv13858)
+ 
++class CameraSensorHelperS5k3t2 : public CameraSensorHelper
++{
++public:
++	CameraSensorHelperS5k3t2()
++	{
++		/*
++		 * Pedestal de 64 en diez bits, MEDIDO en este sensor: con la
++		 * exposicion en su minimo el suelo cae en 62..65, y la captura de
++		 * exposicion larga sube a 253 de mediana, o sea que el mando hace
++		 * algo y la medida vale.
++		 */
++		blackLevel_ = 4096;
++		/*
++		 * Samsung con ganancia LINEAL: ganancia = codigo / 32. El propio
++		 * driver lo dice sin ambiguedad, porque declara el minimo Y el
++		 * valor por defecto en 32, que es donde un sensor esta a 1x, y el
++		 * maximo en 512, o sea 16x.
++		 */
++		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };
++	}
++};
++REGISTER_CAMERA_SENSOR_HELPER("s5k3t2", CameraSensorHelperS5k3t2)
++
+ class CameraSensorHelperVd55g1 : public CameraSensorHelper
+ {
+ public:

@@ -1,0 +1,226 @@
+Turn on the vocproc modules, which come switched off
+
+WHAT HAPPENS
+------------
+With surya's topology (0x10010F8B) already registered and genuinely reaching
+the call, the voice goes out to the other side, but:
+
+  - the other person hears themselves;
+  - and hears us with walkie-talkie quality.
+
+Measured by lowering the earpiece volume during a real call: the echo GOES DOWN
+with the volume and almost disappears. So it is ACOUSTIC echo -the speaker
+leaking into the microphone-, not internal. And if it is acoustic, the echo
+canceller ought to be able to remove it.
+
+WHY IT DOES NOT REMOVE IT
+-------------------------
+The session is created with profile_id = VSS_ICOMMON_CAL_NETWORK_ID_NONE, that
+is, without calibration. And counting the parameters of the factory calibration
+(QRD_Handset_cal.acdb, VSTICDFT section):
+
+    0x00010E00   x117   <- it appears with 26 of the 27 modules
+    0x00010E09   x47
+    0x00010E13   x19
+
+A parameter that accompanies ALMOST ALL the modules is not a fine adjustment:
+it is the enable switch. The conclusion is that the vocproc modules are not
+"loaded and untuned": they are SWITCHED OFF, because the enable that lives
+inside the calibration is never sent to them.
+
+That explains everything observed in one go, including what did not add up:
+sweeping ec_ref_port and vocproc_mode changed NOTHING in any of the four
+combinations. Of course: it makes no difference what reference you give to a
+module that is switched off.
+
+WHAT THIS PATCH DOES
+--------------------
+VSS_ICOMMON_CMD_SET_PARAM_V2 was already implemented and working -it is used
+for channel info and media format-, so there is no need to implement the whole
+calibration nor to parse the ACDB's CDOT/OFST tables: sending the enable is
+enough.
+
+A module list adjustable ON THE FLY is added:
+
+    /sys/module/q6cvp/parameters/encender_modulos
+
+Empty by default, so without touching it the behaviour is the same as before.
+It is filled in with a comma-separated list, in hexadecimal or decimal:
+
+    echo 0x10ee1,0x10ee7,0x10ee9 > /sys/module/q6cvp/parameters/encender_modulos
+
+The enables are sent at the end of TOPOLOGY_COMMIT, which is exactly where the
+calibration would go: after setting the topology and before enabling the
+vocproc.
+
+HOW TO SWEEP IT WITHOUT RECOMPILING
+-----------------------------------
+The modules are read when the session is SET UP, so the voice path has to be
+rebuilt for them to take effect -just as with vocproc_mode and ec_ref_port-:
+
+    echo <list> > /sys/module/q6cvp/parameters/encender_modulos
+    systemctl restart voz-en-llamada
+
+With that the 26 modules can be tried in one or two calls instead of one per
+call, which is what was holding progress back.
+
+AN HONEST WARNING
+-----------------
+That 0x00010E00 is the enable is a DEDUCTION from the fact that it accompanies
+26 of 27 modules in the factory calibration. We do not have Qualcomm's header
+to confirm it. That is why every send is traced with its result: if the
+parameter is not what we think, the DSP will answer with an error and it will
+show up straight away, instead of leaving us wondering whether it was sent
+correctly.
+
+--- a/sound/soc/qcom/qdsp6/q6cvp.c
++++ b/sound/soc/qcom/qdsp6/q6cvp.c
+@@ -29,6 +29,35 @@
+ #define VSS_ICOMMON_CAL_NETWORK_ID_NONE			0x0001135E
+ 
+ /*
++ * Interruptor de habilitacion de un modulo del vocproc.
++ *
++ * Deducido de la calibracion de fabrica (QRD_Handset_cal.acdb, seccion
++ * VSTICDFT): este parametro acompaña a 26 de los 27 modulos, y uno que sale con
++ * casi todos no es un ajuste fino, es el enable. Sin calibracion nunca se
++ * manda, y por eso los modulos -el cancelador de eco entre ellos- estan
++ * apagados.
++ */
++#define VOICE_PARAM_MOD_ENABLE				0x00010E00
++
++/*
++ * Modulos del vocproc a encender al montar la sesion, ajustable en caliente:
++ *
++ *     echo 0x10ee1,0x10ee7 > /sys/module/q6cvp/parameters/encender_modulos
++ *
++ * Vacio por defecto: sin tocarlo el comportamiento es exactamente el de antes.
++ * Se leen al MONTAR la sesion, asi que para que un cambio surta efecto hay que
++ * rehacer el camino de voz.
++ *
++ * La lista que trae la calibracion de fabrica de surya se saca con
++ * surya/audio/acdb-calibracion-vocproc.py.
++ */
++static char encender_modulos[512];
++module_param_string(encender_modulos, encender_modulos,
++		    sizeof(encender_modulos), 0644);
++MODULE_PARM_DESC(encender_modulos,
++		 "modulos del vocproc a encender, separados por comas");
++
++/*
+  * AJUSTABLES EN CALIENTE, para poder barrer configuraciones sin recompilar:
+  *
+  *   /sys/module/q6cvp/parameters/vocproc_mode
+@@ -199,6 +228,7 @@
+ 	u16 reserved;
+ 
+ 	union {
++		u32 valor;
+ 		struct vss_param_endpoint_media_format_info media_format_info;
+ 		struct vss_param_vocproc_dev_channel_info channel_info;
+ 	};
+@@ -401,14 +431,103 @@
+ }
+ EXPORT_SYMBOL_GPL(q6cvp_set_mute);
+ 
++/*
++ * Manda un parametro de un solo u32 a un modulo del vocproc, por el mismo
++ * SET_PARAM_V2 que ya se usa para channel info y media format.
++ */
++static int q6cvp_set_param_u32(struct q6voice_session *cvp, u32 module_id,
++			       u32 param_id, u32 valor)
++{
++	struct vss_icommon_cmd_set_param_v2_cmd cmd;
++
++	cmd.hdr.pkt_size = offsetof(struct vss_icommon_cmd_set_param_v2_cmd,
++				    param_data.valor)
++			 + sizeof(cmd.param_data.valor);
++	cmd.hdr.opcode = VSS_ICOMMON_CMD_SET_PARAM_V2;
++
++	/* En banda: el dato va en el propio paquete, sin memoria compartida. */
++	cmd.mem_handle = 0;
++	cmd.mem_address = 0;
++	cmd.mem_size = offsetof(struct vss_icommon_param_data, valor)
++		     + sizeof(cmd.param_data.valor);
++
++	cmd.param_data.module_id = module_id;
++	cmd.param_data.param_id = param_id;
++	cmd.param_data.param_size = sizeof(cmd.param_data.valor);
++	cmd.param_data.reserved = 0;
++	cmd.param_data.valor = valor;
++
++	return q6voice_common_send(cvp, &cmd.hdr);
++}
++
++/*
++ * Enciende los modulos de la lista, uno a uno.
++ *
++ * Se traza cada uno con su resultado a proposito: si VOICE_PARAM_MOD_ENABLE no
++ * fuera lo que creemos, el DSP contestara error y se vera aqui, en vez de
++ * quedarnos con la duda de si se mando bien.
++ */
++static void q6cvp_encender_modulos(struct q6voice_session *cvp)
++{
++	char lista[sizeof(encender_modulos)];
++	char *p, *tok;
++	int encendidos = 0, fallos = 0;
++
++	if (!encender_modulos[0])
++		return;
++
++	/* strsep() escribe sobre el buffer, y el del parametro no es nuestro. */
++	strscpy(lista, encender_modulos, sizeof(lista));
++	p = lista;
++
++	while ((tok = strsep(&p, ",")) != NULL) {
++		u32 module_id;
++		int ret;
++
++		tok = strim(tok);
++		if (!*tok)
++			continue;
++		if (kstrtou32(tok, 0, &module_id)) {
++			pr_warn("q6cvp: modulo ilegible en la lista: '%s'\n",
++				tok);
++			continue;
++		}
++
++		ret = q6cvp_set_param_u32(cvp, module_id,
++					  VOICE_PARAM_MOD_ENABLE, 1);
++		if (ret < 0) {
++			pr_err("q6cvp: modulo %#x: el DSP lo rechaza (%d)\n",
++			       module_id, ret);
++			fallos++;
++		} else {
++			pr_info("q6cvp: modulo %#x encendido\n", module_id);
++			encendidos++;
++		}
++	}
++
++	pr_info("q6cvp: %d modulos encendidos, %d rechazados\n",
++		encendidos, fallos);
++}
++
+ int q6cvp_topology_commit(struct q6voice_session *cvp)
+ {
+ 	struct apr_pkt cmd;
++	int ret;
+ 
+ 	cmd.hdr.pkt_size = APR_HDR_SIZE;
+ 	cmd.hdr.opcode = VSS_IVOCPROC_CMD_TOPOLOGY_COMMIT;
+ 
+-	return q6voice_common_send(cvp, &cmd.hdr);
++	ret = q6voice_common_send(cvp, &cmd.hdr);
++	if (ret < 0)
++		return ret;
++
++	/*
++	 * Aqui es donde iria la calibracion del vocproc, que nunca se manda.
++	 * De ella mandamos, de momento, solo el enable de los modulos.
++	 */
++	q6cvp_encender_modulos(cvp);
++
++	return 0;
+ }
+ EXPORT_SYMBOL_GPL(q6cvp_topology_commit);
+ 

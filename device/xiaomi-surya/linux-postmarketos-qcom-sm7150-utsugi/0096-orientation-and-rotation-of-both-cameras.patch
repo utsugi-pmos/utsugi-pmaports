@@ -1,0 +1,149 @@
+Both cameras come out sideways because nobody declares how they are mounted
+
+libcamera was warning about it and I had ignored it:
+
+    's5k3t2 13-0010': Failed to retrieve the camera location
+    's5k3t2 13-0010': Rotation control not available, default to 0 degrees
+
+The device tree declares neither rotation nor orientation for either of them, and
+the imx682 driver did not even read those properties -the s5k3t2 one does-.
+Without that information libcamera assumes zero degrees and the application draws
+the image sideways, which is exactly what is seen in the KDE camera app.
+
+THE ANGLES ARE MEASURED, NOT DEDUCED
+
+The phone was stood upright pointing at the room and a raw capture was taken with
+both cameras on the same scene. Then each image was rotated in both directions
+and the one that came out upright was checked:
+
+    rear      90 degrees clockwise        -> upright. The text on a bag reads
+                                            correctly, the mug stands up and the
+                                            corner of the wall comes out vertical.
+    front     90 degrees COUNTERCLOCKWISE -> upright. With the clockwise one the
+                                            monitor appeared to hang from the
+                                            ceiling.
+
+That they come out opposite is what you would expect: they look in opposite
+directions and are mounted mirrored.
+
+THE SIGN COMES FROM THE IMPLEMENTATION, which is the only thing that rules here.
+The binding description defines rotation as the COUNTERCLOCKWISE angle between
+two frames of reference, and with those diagrams it is easy to get the sign
+wrong. But libcamera converts it like this:
+
+    orientationFromRotation(int angle)   /* "rotation of the given angle
+                                            clockwise" */
+        case 90:  return Orientation::Rotate90;
+
+and Orientation::Rotate90 is EXIF tag 8, that is, "it must be rotated 90 degrees
+clockwise to be seen correctly". Which is exactly what was measured on the rear
+camera.
+
+Moreover, since these drivers expose neither horizontal nor vertical flip,
+computeTransform() returns the identity and limits itself to REPORTING the
+orientation: it rotates nothing on its own, it is the application that
+straightens the image. That is why declaring it correctly is enough.
+
+THE SIGN, CORRECTED BY THE TEST IN THE APPLICATION
+
+The first attempt put 90 on the rear and 270 on the front, and in the KDE camera
+app both came out rotated by 180 degrees. Which is exactly the difference between
+90 and 270, that is, the sign flipped.
+
+The raw image measurement does not change and is still the one above. What was
+wrong was translating it into the device tree number: the binding defines rotation
+as the COUNTERCLOCKWISE angle between two frames of reference, whereas
+libcamera's orientationFromRotation() documents its argument as clockwise. I went
+with the function's convention and it was the other one.
+
+Rear 270 and front 90 it is.
+
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -1059,6 +1059,7 @@
+ {
+ 	const struct imx682_mode *m = s->mode;
+ 	struct v4l2_ctrl_handler *h = &s->ctrls;
++	struct v4l2_fwnode_device_properties props;
+ 	int ret;
+ 
+ 	ret = v4l2_ctrl_handler_init(h, 8);
+@@ -1118,6 +1119,29 @@
+ 			  IMX682_ANA_GAIN_MIN, IMX682_ANA_GAIN_MAX,
+ 			  IMX682_ANA_GAIN_STEP, IMX682_ANA_GAIN_MIN);
+ 
++	/*
++	 * ORIENTACION Y ROTACION.
++	 *
++	 * Sin esto libcamera avisa "Failed to retrieve the camera location" y
++	 * "Rotation control not available, default to 0 degrees", y la imagen
++	 * sale tumbada en el visor: el sensor esta montado girado respecto al
++	 * movil y nadie se lo dice a nadie.
++	 *
++	 * Los dos valores vienen del device tree, que es donde estan porque
++	 * dependen de la placa y no del chip.
++	 */
++	ret = v4l2_fwnode_device_parse(&s->client->dev, &props);
++	if (ret) {
++		v4l2_ctrl_handler_free(h);
++		return ret;
++	}
++
++	ret = v4l2_ctrl_new_fwnode_properties(h, &imx682_ctrl_ops, &props);
++	if (ret) {
++		v4l2_ctrl_handler_free(h);
++		return ret;
++	}
++
+ 	if (h->error) {
+ 		ret = h->error;
+ 		dev_err(&s->client->dev, "fallo al crear los controles: %d\n", ret);
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -274,6 +274,28 @@
+ 		compatible = "sony,imx682";
+ 		reg = <0x1a>;
+ 
++		/*
++		 * MEDIDO, no deducido: se puso el movil de pie apuntando a la
++		 * habitacion y se miro la captura en crudo. La imagen del sensor
++		 * hay que girarla 90 grados EN SENTIDO HORARIO para que quede
++		 * derecha -el texto de una bolsa se lee, la taza esta de pie y
++		 * la esquina de la pared sale vertical-.
++		 *
++		 * EL SIGNO, CORREGIDO CON LA PRUEBA EN LA APLICACION.
++		 *
++		 * La medida de la imagen cruda es la de arriba y no cambia. Lo
++		 * que estaba mal era traducirla al numero del device tree: el
++		 * binding define la rotacion como angulo ANTIHORARIO entre dos
++		 * sistemas de referencia, mientras que orientationFromRotation()
++		 * de libcamera documenta su argumento como horario. Elegi el
++		 * criterio de la funcion y salio al reves.
++		 *
++		 * Con 90 la imagen aparecia girada 180 grados en la camara de
++		 * KDE, que es exactamente la diferencia entre 90 y 270.
++		 */
++		rotation = <270>;
++		orientation = <1>;	/* trasera */
++
+ 		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
+ 		pinctrl-names = "default";
+ 		pinctrl-0 = <&cam_mclk1_active>;
+@@ -325,6 +347,17 @@
+ 		compatible = "samsung,s5k3t2";
+ 		reg = <0x10>;
+ 
++		/*
++		 * Medida igual que la trasera y con la misma escena. Esta va al
++		 * reves que la trasera: hay que girarla 90 grados en sentido
++		 * ANTIHORARIO. Es lo esperable, porque las dos camaras miran a
++		 * lados opuestos y van montadas en espejo.
++		 *
++		 * Mismo cambio de signo que en la trasera, por el mismo motivo.
++		 */
++		rotation = <90>;
++		orientation = <0>;	/* frontal */
++
+ 		/* CAM3_RST_N */
+ 		reset-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
+ 		pinctrl-names = "default";

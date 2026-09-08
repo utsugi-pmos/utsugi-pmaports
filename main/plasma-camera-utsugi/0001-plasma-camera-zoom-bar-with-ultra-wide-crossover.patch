@@ -1,0 +1,447 @@
+plasma-camera: zoom bar, with an automatic crossover to the ultra-wide
+
+WHAT IT DOES
+------------
+A RULER that slides under a fixed mark in the centre, like a degree gauge: the
+value is always read in the centre and what moves is the scale. It is driven
+ONLY by pinch. Zooming in crops on whichever camera is in use. Going below 1x
+switches to the ultra-wide. It is what any ordinary phone does.
+
+The front camera is chosen with the rotate button, and there the bar starts at
+1x because there is no wider camera underneath.
+
+WHAT IT REPLACES, AND WHY
+-------------------------
+A pinch gesture that SWITCHED cameras, and a first attempt at a bar with a bead
+that was dragged. It was worse than having nothing: there was no indicator, so
+there was no way to know which camera you had ended up on; from the front camera
+it jumped to the rear one by accident; and "switch camera" is not what a pinch
+means to anybody.
+
+1x is ALWAYS the main camera, not "whichever one is in use": if zoom meant a
+different thing depending on where you were, it would mean nothing.
+
+DIGITAL ZOOM
+------------
+The crop goes in the container and the magnification in the VideoOutput.
+libcamera does not expose ScalerCrop on this pipeline handler -cam
+--list-controls only gives Contrast and Gamma-, so the crop has to be done by
+the application.
+
+THE BAR IS ON A LOGARITHMIC SCALE
+---------------------------------
+On a linear one the whole useful travel piles up at the start: there is as much
+visual difference between 1x and 2x as between 4x and 8x, and on a linear scale
+the first would take up a seventh of the width of the second.
+
+WHAT IS SPECIFIC TO THIS PHONE
+------------------------------
+That the ultra-wide is "camera@21". libcamera DOES NOT PUBLISH focal length or
+field of view: only Model and Location are known, and there are TWO rear
+cameras, so there is no way to deduce which one covers more. The order of the
+list is no good either, because it changes between boots.
+
+A NUMBER THAT IS NOT MEASURED
+-----------------------------
+factorGranAngular = 0.6. It is an ESTIMATE: it is obtained by photographing the
+same scene with both rear cameras and comparing how much it shrinks, and on
+trying it both came out black because the phone was face up. See
+camara/medir-el-factor-del-gran-angular. Until it is measured, the "0.6x" that
+the bar shows is not to be trusted; the camera CROSSOVER does work with any
+value.
+
+TWO BUGS FROM THE FIRST ATTEMPT, BOTH OF THEM MINE
+--------------------------------------------------
+"At 1x the ultra-wide shows up". Two chained causes:
+
+  - The zoom comes out of an exponential, so at the 1x position it is worth
+    0.99999998 and the "< 1.0" went into the ultra-wide branch. Now there is a
+    margin, and a magnet that pins 1x exactly.
+  - If the camera was BUSY the switch was skipped and WAS NEVER RETRIED.
+    Starting up with the ultra-wide in use from a previous session, zoomPedido
+    stayed at 1.0, there was no switch event, and nobody went back to the main
+    camera. Now it is retried and it is also applied at startup.
+
+"If I drag the bead it does not move properly, it stops halfway". The drag has
+been removed: zoom is by pinch only, which is what was asked for. And the
+animation on the scale has been removed too, since it made the image chase the
+finger with a lag and gave the feeling of being stuck.
+
+  - And a third one, which only turned up on looking at the app's log after
+    "fixing it": plasma-camera RESTORES the camera from the previous session
+    AFTER Component.onCompleted runs, so the startup correction arrived and was
+    immediately overwritten. Now it is also corrected on a camera switch,
+    wherever the switch comes from.
+
+THE MAGNET, AND WHY IT IS RELATIVE
+----------------------------------
+The zoom sticks to the ultra-wide end stop and to the integers: 1x, 2x, 3x...
+Those are the values people look for and the ones the ruler labels, so the
+number and the mark always coincide.
+
+The margin is RELATIVE -5%-, not absolute. A fixed one of 0.05 is clearly
+noticeable at 1x, where it is 5%, and imperceptible at 8x, where it is worth
+0.6%. In relative terms, snapping costs the same over the whole travel.
+
+And with a DEAD ZONE: while inside the magnet the value stays pinned to the end
+stop. Without that the number wobbles around 2.0 and does not give the feeling
+of having snapped to anything, which was the complaint.
+
+THE ROTATE BUTTON, WHICH THIS PATCH ALSO FIXES
+----------------------------------------------
+It called switchToNextCamera(), which walks through ALL the cameras: from the
+main one it went to the ultra-wide and from there to the front one. Now that the
+ultra-wide is reached with the zoom, that walk breaks the button: the
+viewfinder's correction returns the ultra-wide to the main camera as soon as the
+zoom is worth 1x, so the button bounced and NEVER got to the front camera. It
+looked like an error when rotating.
+
+Now it alternates rear <-> front directly, which is what the icon means now that
+the ultra-wide has its own path.
+
+--- a/src/contents/ui/camera/Viewfinder.qml
++++ b/src/contents/ui/camera/Viewfinder.qml
+@@ -22,17 +22,302 @@
+ 
+     color: "black"
+ 
++    // ------------------------------------------------------------------
++    // ZOOM POR PELLIZCO, CON CRUCE AL GRAN ANGULAR POR DEBAJO DEL 1x
++    // ------------------------------------------------------------------
++    // El valor se lee SIEMPRE en el centro y lo que se mueve es la regla, como
++    // en un medidor de grados. Se maneja SOLO con pellizco: arrastrar el
++    // indicador no hace nada, a proposito.
++    //
++    // El 1x es SIEMPRE la camara principal, no "la que este puesta": si el zoom
++    // significara una cosa distinta segun donde estes, no significaria nada.
++
++    // La camara mas ancha, identificada por su nodo del device tree.
++    //
++    // Esto es LO UNICO especifico de este telefono, y es inevitable: libcamera
++    // no publica distancia focal ni campo de vision. De las camaras de este
++    // movil solo se sabe Model y Location, y hay DOS traseras. El orden de la
++    // lista tampoco vale: cambia entre arranques.
++    readonly property string nodoGranAngular: "camera@21"
++    readonly property string nodoPrincipal: "camera@1a"
++
++    // Cuanto mas ancho ve el gran angular. PROVISIONAL Y SIN MEDIR: es la
++    // relacion de campo de vision entre las dos traseras y libcamera no la
++    // publica. Ver camara/medir-el-factor-del-gran-angular.
++    readonly property real factorGranAngular: 0.6
++    readonly property real zoomMaximo: 8.0
++
++    // Margen para comparar con el 1x.
++    //
++    // HACE FALTA. El zoom sale de una exponencial, asi que en el 1x vale
++    // 0,99999998 y un "< 1.0" a secas se metia en la rama del gran angular:
++    // la camara aparecia en gran angular marcando 1,0x.
++    readonly property real epsilon: 0.005
++
++    // Los valores a los que el zoom se pega: el tope del gran angular y los
++    // enteros. Son los que la gente busca -"ponme 2x"- y los que la regla
++    // rotula, asi que el numero y la marca coinciden siempre.
++    readonly property var topes: [factorGranAngular, 1, 2, 3, 4, 5, 6, 7, 8]
++
++    // El iman es RELATIVO, no absoluto.
++    //
++    // Un margen fijo de, digamos, 0,05 se nota bien en el 1x -es un 5%- y es
++    // imperceptible en el 8x, donde vale un 0,6%. En relativo, pegarse cuesta
++    // lo mismo en todo el recorrido, que es lo que hace que se sienta parejo.
++    readonly property real iman: 0.05
++
++    // Zona muerta: mientras se esta dentro del iman el valor se queda CLAVADO
++    // en el tope. Sin eso el numero tiembla alrededor del 2,0 y no da la
++    // sensacion de haberse enganchado a nada.
++    function pegar(z) {
++        for (const tope of topes) {
++            if (tope < zoomMinimo - epsilon || tope > zoomMaximo + epsilon) {
++                continue;
++            }
++            if (Math.abs(z - tope) / tope < iman) {
++                return tope;
++            }
++        }
++        return z;
++    }
++
++    property real zoomPedido: 1.0
++
++    function idDeNodo(nodo) {
++        for (const id of root.camera.cameraDeviceIds) {
++            if (id.indexOf(nodo) !== -1) {
++                return id;
++            }
++        }
++        return "";
++    }
++
++    readonly property bool hayGranAngular: idDeNodo(nodoGranAngular) !== ""
++    readonly property bool enTrasera: root.camera.cameraDevice.indexOf(nodoPrincipal) !== -1
++                                      || root.camera.cameraDevice.indexOf(nodoGranAngular) !== -1
++    readonly property real zoomMinimo: (enTrasera && hayGranAngular) ? factorGranAngular : 1.0
++
++    function aplicarZoom() {
++        if (!enTrasera) {
++            viewfinder.scale = Math.max(1.0, zoomPedido);
++            return;
++        }
++        const quiereAngular = hayGranAngular && zoomPedido < 1.0 - epsilon;
++        const destino = idDeNodo(quiereAngular ? nodoGranAngular : nodoPrincipal);
++        if (destino !== "" && root.camera.cameraDevice !== destino) {
++            if (root.camera.busy) {
++                // Se reintenta cuando deje de estarlo. Sin esto, un cambio
++                // pedido mientras la camara arranca se perdia PARA SIEMPRE, y
++                // la app se quedaba en gran angular marcando 1,0x.
++                reintento.running = true;
++            } else {
++                root.camera.cameraDevice = destino;
++            }
++        }
++        const base = quiereAngular ? factorGranAngular : 1.0;
++        viewfinder.scale = Math.max(1.0, zoomPedido / base);
++    }
++
++    Timer {
++        id: reintento
++        interval: 200
++        repeat: true
++        onTriggered: {
++            if (!root.camera.busy) {
++                running = false;
++                root.aplicarZoom();
++            }
++        }
++    }
++
++    onZoomPedidoChanged: aplicarZoom()
++
++    // Y tambien al arrancar: la camara puede venir puesta en el gran angular de
++    // una sesion anterior, y entonces no hay ningun cambio de zoom que dispare
++    // la correccion.
++    Component.onCompleted: aplicarZoom()
++
++    Connections {
++        target: root.camera
++
++        function onCameraDeviceChanged() {
++            // Al pasar a la frontal con el boton de rotar, el zoom vuelve al 1x:
++            // heredar un 4x sin saber por que es desconcertante.
++            if (!root.enTrasera) {
++                if (root.zoomPedido !== 1.0) {
++                    root.zoomPedido = 1.0;
++                }
++                return;
++            }
++            // Y si alguien nos deja en una trasera que no corresponde al zoom
++            // actual, se corrige. Hace falta: la aplicacion RESTAURA la camara
++            // de la sesion anterior DESPUES de que corra Component.onCompleted,
++            // asi que arrancaba en gran angular marcando 1,0x y la correccion
++            // del arranque llegaba demasiado pronto para servir de algo.
++            //
++            // No hay bucle: aplicarZoom solo asigna cuando la camara no es ya
++            // la que toca, asi que a la segunda vuelta no hace nada.
++            root.aplicarZoom();
++        }
++    }
++
+     Kirigami.Heading {
+         anchors.centerIn: parent
+         wrapMode: Text.WordWrap
+         text: root.camera.available ? "" : i18n("Camera not available")
+     }
+ 
+-    VideoOutput {
+-        id: viewfinder
++    // El recorte va en el CONTENEDOR y el aumento en el VideoOutput: la imagen
++    // crece hacia fuera y lo que sobra se corta, que es lo que hace un zoom
++    // digital. Sin el clip, la imagen ampliada se saldria del visor.
++    Item {
++        anchors.fill: parent
++        clip: true
++
++        VideoOutput {
++            id: viewfinder
++
++            visible: root.camera.available
++            width: parent.width
++            height: parent.height
++            transformOrigin: Item.Center
++        }
++    }
++
++    // EL PELLIZCO, que es la unica forma de mover el zoom.
++    //
++    // Sin animacion de por medio: una animacion sobre la escala hace que la
++    // imagen persiga al dedo con retraso y da la sensacion de que se atasca.
++    PinchHandler {
++        id: pellizco
++
++        target: null
++        enabled: root.camera.available
++
++        property real zoomAlEmpezar: 1.0
++
++        onActiveChanged: {
++            if (active) {
++                zoomAlEmpezar = root.zoomPedido;
++            }
++        }
++        onActiveScaleChanged: {
++            if (!active) {
++                return;
++            }
++            const z = zoomAlEmpezar * activeScale;
++            const acotado = Math.max(root.zoomMinimo, Math.min(root.zoomMaximo, z));
++            root.zoomPedido = root.pegar(acotado);
++        }
++    }
++
++    // ------------------------------------------------------------------
++    // LA REGLA
++    // ------------------------------------------------------------------
++    // Marca fija y pequena en el centro; lo que se desliza es la regla. Solo se
++    // ve mientras se pellizca y un momento despues, para no tapar el encuadre.
++    Item {
++        id: regla
++
++        anchors {
++            left: parent.left
++            right: parent.right
++            bottom: parent.bottom
++            bottomMargin: root.bottomMargin + Kirigami.Units.gridUnit * 2
++        }
++        height: Kirigami.Units.gridUnit * 2.5
++        clip: true
++
++        opacity: (pellizco.active || visibleUnRato.running) ? 1 : 0
++        Behavior on opacity { NumberAnimation { duration: 200 } }
++
++        Timer {
++            id: visibleUnRato
++            interval: 1400
++        }
++        Connections {
++            target: root
++            function onZoomPedidoChanged() { visibleUnRato.restart(); }
++        }
++
++        // Cuantos pixeles ocupa duplicar el zoom. Con esto, una pantalla cubre
++        // algo mas de tres duplicaciones, que se recorre comodo con dos dedos.
++        readonly property real pixelesPorDoble: width / 3.2
++
++        function posicion(z) {
++            return width / 2
++                 + (Math.log(z) - Math.log(root.zoomPedido)) / Math.LN2 * pixelesPorDoble;
++        }
++
++        Repeater {
++            model: [0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 6.0, 8.0]
++
++            delegate: Item {
++                required property real modelData
++
++                visible: modelData >= root.zoomMinimo - 0.001
++                         && modelData <= root.zoomMaximo + 0.001
++                x: regla.posicion(modelData)
++                y: 0
++                width: 1
++                height: regla.height
++
++                // Un tope es donde el zoom se engancha; se pinta mas marcado
++                // para que se vea a que se va a pegar antes de soltarlo.
++                readonly property bool esEntero: root.topes.some(function (tp) {
++                    return Math.abs(modelData - tp) < 0.001;
++                })
++
++                Rectangle {
++                    anchors.horizontalCenter: parent.horizontalCenter
++                    y: parent.height * 0.45
++                    width: 2
++                    height: parent.esEntero ? Kirigami.Units.gridUnit * 0.7
++                                            : Kirigami.Units.gridUnit * 0.4
++                    radius: 1
++                    color: Qt.rgba(1, 1, 1, parent.esEntero ? 0.85 : 0.45)
++                }
++
++                QQC2.Label {
++                    visible: parent.esEntero || Math.abs(parent.modelData - 0.6) < 0.001
++                    anchors.horizontalCenter: parent.horizontalCenter
++                    y: 0
++                    color: Qt.rgba(1, 1, 1, 0.75)
++                    font.pointSize: Kirigami.Theme.smallFont.pointSize
++                    text: parent.modelData < 1
++                          ? parent.modelData.toFixed(1)
++                          : parent.modelData.toFixed(0)
++                }
++            }
++        }
++
++        // La marca del centro: pequena, fija, y es la que manda.
++        Rectangle {
++            anchors.horizontalCenter: parent.horizontalCenter
++            y: parent.height * 0.42
++            width: 3
++            height: Kirigami.Units.gridUnit
++            radius: 1.5
++            color: Kirigami.Theme.highlightColor
++        }
++    }
+ 
++    // El valor, encima de la marca. Este si se ve siempre: es el estado de la
++    // camara, y no saber en que zoom estas fue una de las quejas del pellizco
++    // anterior.
++    QQC2.Label {
++        anchors {
++            horizontalCenter: parent.horizontalCenter
++            bottom: regla.top
++            bottomMargin: Kirigami.Units.smallSpacing
++        }
+         visible: root.camera.available
+-        width: parent.width
+-        height: parent.height
++        color: "white"
++        font.bold: true
++        style: Text.Outline
++        styleColor: Qt.rgba(0, 0, 0, 0.7)
++        text: (root.zoomPedido < 1
++               ? root.zoomPedido.toFixed(1)
++               : (root.zoomPedido < 10 ? root.zoomPedido.toFixed(1) : root.zoomPedido.toFixed(0))) + "x"
+     }
+-}
+\ No newline at end of file
++}
+--- a/src/contents/ui/camera/CameraPage.qml
++++ b/src/contents/ui/camera/CameraPage.qml
+@@ -100,7 +100,31 @@
+             icon.name: "camera-photo-symbolic"
+             enabled: !root.camera.busy && root.camera.cameraDeviceIds.length > 1
+ 
+-            onTriggered: root.camera.switchToNextCamera();
++            // ALTERNA TRASERA <-> FRONTAL, sin pasar por el gran angular.
++            //
++            // Antes llamaba a switchToNextCamera(), que recorre TODAS: de la
++            // principal iba al gran angular y de ahi a la frontal. Desde que el
++            // gran angular se alcanza con el zoom, ese recorrido rompe el boton:
++            // la correccion del visor devuelve el gran angular a la principal en
++            // cuanto el zoom vale 1x, asi que el boton rebotaba y no llegaba a la
++            // frontal nunca. El usuario lo veia como un error al rotar.
++            //
++            // Los nodos son los mismos que usa Viewfinder.qml, y por el mismo
++            // motivo: libcamera no publica que camara es cual.
++            onTriggered: {
++                const frontal = "camera@10";
++                const principal = "camera@1a";
++                const enFrontal = root.camera.cameraDevice.indexOf(frontal) !== -1;
++                const buscado = enFrontal ? principal : frontal;
++                for (const id of root.camera.cameraDeviceIds) {
++                    if (id.indexOf(buscado) !== -1) {
++                        root.camera.cameraDevice = id;
++                        return;
++                    }
++                }
++                // Si este telefono no es el esperado, al menos que rote algo.
++                root.camera.switchToNextCamera();
++            }
+         }
+     ]
+ 

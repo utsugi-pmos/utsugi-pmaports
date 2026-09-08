@@ -1,0 +1,99 @@
+Sweep the rear camera's link at runtime, without recompiling
+
+The rear camera's 435,2 MHz link_freq is DEDUCED from the PLLs in the vendor
+file (19,2/3 x 272 / 2 / 2 = 435,2 MHz DDR), not measured. If the sensor emits
+at a rate different from the one declared to the CSIPHY there can be no sync and
+the CSID sees nothing, which is exactly what happens:
+
+    the sensor emits           0x0100 = 0x01, twelve registers out of twelve
+                               matching the vendor
+    the CSID receives nothing  packets=0, crc=0, bytes_rdi0=0
+
+And these are already ruled out, with validated instruments:
+
+    the clocks                 csiphy0_clk 400 MHz, cphy_rx 400,
+                               csi0phytimer 300, ife_0_csid 300; the four that
+                               the vendor node asks for and at their rates
+    the settle count           swept from 20 to 48, which covers the window of
+                               the standard (27 to 47), without moving a bit
+    the MediaTek table         compared with the vendor one: zero registers in
+                               common, it steps on nothing
+
+This adds four module parameters -op_pll_mult, op_pre_div, op_sys_div and
+carriles- that are written AFTER the mode table, which is what programs the
+PLLs, and before starting the stream. With the front camera the same mechanism
+made it possible to sweep eight rates in one afternoon instead of one per build.
+
+The lane count is added as well because it is the other thing the CSIPHY and the
+sensor have to agree on, and trying 2 against 3 without recompiling separates
+"the sensor does not emit properly" from "the PHY listens wrong".
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -403,6 +403,40 @@
+ 	},
+ };
+ 
++/*
++ * BARRER EL ENLACE EN CALIENTE
++ * ---------------------------
++ * El link_freq de 435,2 MHz esta DEDUCIDO de los PLL del fichero de fabrica
++ * (19,2/3 x 272 / 2 / 2), no medido. Si el sensor emite a otro ritmo del que
++ * se le dice al CSIPHY, no hay sincronismo posible y el CSID no ve nada, que
++ * es exactamente lo que pasa.
++ *
++ * Con la frontal esto mismo permitio barrer ocho velocidades en una tarde en
++ * vez de una por compilacion. Se escribe justo despues de la tabla del modo y
++ * antes de arrancar la transmision, que es el unico punto donde vale.
++ *
++ * 0 = dejar el valor de la tabla de fabrica.
++ */
++static int op_pll_mult;
++module_param(op_pll_mult, int, 0644);
++MODULE_PARM_DESC(op_pll_mult,
++	"Multiplicador del PLL de salida (0x030e/0x030f). 0 = tabla (272).");
++
++static int op_pre_div;
++module_param(op_pre_div, int, 0644);
++MODULE_PARM_DESC(op_pre_div,
++	"Predivisor del PLL de salida (0x030d). 0 = tabla (3).");
++
++static int op_sys_div;
++module_param(op_sys_div, int, 0644);
++MODULE_PARM_DESC(op_sys_div,
++	"Divisor de sistema de salida (0x030b). 0 = tabla (2).");
++
++static int carriles;
++module_param(carriles, int, 0644);
++MODULE_PARM_DESC(carriles,
++	"Carriles que se le declaran al sensor en 0x0114. 0 = tabla (3).");
++
+ static const s64 imx682_link_freqs[] = {
+ 	IMX682_LINK_FREQ,
+ };
+@@ -641,6 +675,26 @@
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * Los ajustes de barrido van DESPUES de la tabla del modo, que es
++	 * quien programa los PLL, y antes de arrancar la transmision.
++	 */
++	if (op_pre_div)
++		imx682_write(s, 0x030D, op_pre_div);
++	if (op_pll_mult) {
++		imx682_write(s, 0x030E, (op_pll_mult >> 8) & 0xff);
++		imx682_write(s, 0x030F, op_pll_mult & 0xff);
++	}
++	if (op_sys_div)
++		imx682_write(s, 0x030B, op_sys_div);
++	if (carriles)
++		imx682_write(s, 0x0114, carriles - 1);
++
++	if (op_pre_div || op_pll_mult || op_sys_div || carriles)
++		dev_info(&s->client->dev,
++			 "barrido: pre=%d mult=%d div=%d carriles=%d\n",
++			 op_pre_div, op_pll_mult, op_sys_div, carriles);
++
+ 	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
+ 	if (ret)
+ 		return ret;

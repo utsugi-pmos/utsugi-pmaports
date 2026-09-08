@@ -1,0 +1,50 @@
+See what the DSP answers when the topologies are registered
+
+The upstream patch sends AVCS_CMD_REGISTER_TOPOLOGIES with apr_send_pkt() and
+walks away without looking at the reply. If the DSP rejects it, the symptom
+shows up much later and somewhere else: when committing the topology
+(VSS_IVOCPROC_CMD_TOPOLOGY_COMMIT, 0x13198) with error 1, and when enabling
+the vocproc (0x100c6) with error 8. Which is exactly what we have.
+
+Two traces are added:
+
+  - The DSP's reply to the registration, which nobody was looking at.
+  - What is sent and whether the ADSP was ready when it was sent. The
+    registration is done in q6core's probe, so the reasonable suspicion is
+    that it arrives too early.
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -104,6 +104,22 @@
+ 				core->fwk_version_supported = false;
+ 			core->resp_received = true;
+ 			break;
++		case AVCS_CMD_REGISTER_TOPOLOGIES:
++			/*
++			 * Nadie miraba esta respuesta: q6core_register_topologies
++			 * hace apr_send_pkt() y se va. Si el DSP rechaza el
++			 * registro, la topologia no queda disponible y el fallo
++			 * aparece mucho despues y muy lejos, al confirmarla
++			 * (VSS_IVOCPROC_CMD_TOPOLOGY_COMMIT falla con error 1).
++			 */
++			if (result->status)
++				dev_err(&adev->dev,
++					"el DSP rechaza registrar las topologias: %d\n",
++					result->status);
++			else
++				dev_info(&adev->dev, "topologias registradas\n");
++			core->resp_received = true;
++			break;
+ 		case AVCS_CMD_ADSP_EVENT_GET_STATE:
+ 			if (result->status == ADSP_EUNSUPPORTED)
+ 				core->get_state_supported = false;
+@@ -461,6 +477,9 @@
+ 	}
+ 
+ 	size = *(const u32 *) (fw->data + topo_off);
++	dev_info(dev, "registrando topologias: %u bytes desde %s (adsp %s)\n",
++		 size, fw_name,
++		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
+ 	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);
+ 	if (ret < 0)
+ 		goto release_fw;

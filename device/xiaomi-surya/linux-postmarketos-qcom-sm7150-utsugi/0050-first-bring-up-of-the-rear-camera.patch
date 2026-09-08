@@ -1,0 +1,1486 @@
+First bring-up of the rear camera: power up the IMX682 and see who answers
+
+WHAT HAPPENS
+------------
+The surya has no driver for any of its five sensors, so libcamera literally
+says "No sensor found for /dev/media0" and KDE's camera application answers
+that there is no camera. And it is true: there is none.
+
+The capture engine, on the other hand, DOES work. It is proven by moving real
+pixels with the CSID's internal pattern generator, without any sensor:
+csid0 -> vfe0_rdi0 -> /dev/video0, 1920x1080 in 10-bit Bayer, full range. So
+the only thing missing between the device and a photo is the sensor.
+
+WHAT WAS ALREADY TRIED WITHOUT TOUCHING THE KERNEL, AND WHY IT IS NOT ENOUGH
+---------------------------------------------------------------------------
+The five sensors hang off the WL2866D, a four-LDO chip on i2c-9 @0x28 with no
+driver in Linux. Reading it revealed why no I2C scan ever found a sensor: when
+Linux boots, its power-on register reads 0x00, meaning the four rails are OFF.
+
+From user space it got this far:
+
+  1. turn the four rails on over I2C          -> works
+  2. release the reset with gpioset on the TLMM -> works
+  3. scan the bus                             -> nobody shows up
+
+The MCLK is missing. Sony sensors do not wake their I2C block until they have
+an input clock, and that clock comes out of the camcc, which cannot be turned
+on from user space. That is exactly the gap this patch fills, and that is why
+the module is so short.
+
+WHERE THE WIRING COMES FROM
+---------------------------
+It is not guessed. It comes from the surya's own Android kernel
+(sdmmagpie-camera-sensor-idp.dtsi), and it is confirmed a second time by the
+pin names this very file already declares:
+
+    CAM_MCLK1  = GPIO_14      MCLK1 at 19.2 MHz
+    CAM1_RST_N = GPIO_25      rear camera reset
+    HAPTIC_INT_N = GPIO_26    <- the anchor: already used in this file
+
+That pin 26 matches the haptic already written here is what proves the list's
+numbering is not off by one.
+
+Careful with the neighbouring file in the factory tree (-qrd.dtsi): it
+describes Qualcomm's reference board and powers things from a pm8009 PMIC that
+this phone does not carry. The right one is recognised because it uses
+wide_ldo_avdd2 and camera_vdig, which are the regulators this device tree
+already declares.
+
+And the address: the comment that was here said "@ 50". Measured, the 0x50 on
+that bus is the module's calibration EEPROM -it answers even with the camera
+unpowered-, not the sensor. The sensor is at 0x10, which is where the GPL
+drivers for the same chip for MediaTek put it.
+
+SECOND ROUND: the regulator, so that it need not be turned on by hand
+---------------------------------------------------------------------
+With the sensor confirmed to answer, one loose end remained: its rails had to
+be turned on by hand over I2C before binding the driver, so at boot the camera
+was still dead.
+
+The WL2866D driver is added (drivers/regulator/wl2866d.c), the four-LDO chip
+that powers the five sensors. There is no public datasheet: the register map
+comes from the surya's own factory driver and it is verified BY READING THE
+CHIP -its power-on values, 0x64 0x64 0x80 0x80, match the formulas to the bit-.
+That makes it a reading, not an assumption.
+
+The four rails are declared always-on, and it is a conscious shortcut: it is
+not yet known which one powers each of the five sensors. When the split is
+known, each sensor will request its own and this comes out.
+
+The chip's enable pin is deliberately NOT declared in the device tree. The
+WL2866D already answers today at 0x28 without anyone touching it, so that pin
+is already high; and the mainline device tree names that same PMIC pin as
+something else. When in doubt, do not drive a pin whose function is not clear.
+
+THIRD ROUND: a real driver, with an image as the goal
+------------------------------------------------------
+It is no longer a detector: the module registers a v4l2_subdev, is wired to
+csiphy0 and carries the sensor's register tables. A single mode, 8000x6000 in
+RAW10 at about 5 fps, without autofocus or HDR.
+
+Where the tables come from: from MediaTek's GPL driver for THE SAME sensor and
+THE SAME module vendor (imx682sunny), which is one of the two this phone
+carries. The surya's factory file is NO GOOD for this, and not for lack of
+looking at it: it has 387 register writes in total, and an IMX682
+initialisation is over 600.
+
+And the decision that removes the most risk: **the MCLK goes up to 24 MHz**.
+The source tables are calculated for 24, the factory Android uses 19.2, and
+adapting them would force recalculating the sensor's PLL multipliers -which is
+precisely where the error creeps in that gives you a sensor which starts up and
+emits nothing-. The SM7150's camera clock supports both frequencies
+(camcc-sm7150.c), so there is no need to touch a single table. It goes in two
+places that have to agree: the device tree and the driver.
+
+The link figures come from the PLL of the tables themselves, not from a
+catalogue: INCK 24 MHz / IOP_PREPLLCK_DIV 4 * IOP_PLL_MPY 416 = 2496 MHz, and
+in D-PHY the signal is double edge, so that is 1248 MHz of link frequency and
+2.5 Gbps per lane. That is the maximum of D-PHY 1.2: the manufacturer uses all
+of it.
+
+FIRST ATTEMPT AT TRANSMITTING, AND WHAT IT TAUGHT
+-------------------------------------------------
+With the manufacturer's tables as they are, CAMSS answered:
+
+    qcom-camss ace0000.camss: Pixel clock is too high for CSIPHY
+    qcom-camss ace0000.camss: Failed to power up pipeline: -22
+
+It is not a sensor fault nor a wiring fault: the whole pipeline validated and
+the only problem was the speed. The manufacturer configures the link at
+1248 MHz, that is 2.5 Gbps per lane -the maximum of D-PHY 1.2, used in full-,
+and the SM7150's CSIPHY does not reach it: its timer clock stops at 300 MHz
+(csiphy_res_7150 in camss.c) and the driver demands link_freq/4 plus margin
+below that.
+
+The two sensor PLL multipliers are lowered, from 360/416 to 294/340, which
+leaves the link at 1020 MHz. BOTH of them and in the same proportion: lowering
+only the output one would leave the sensor generating pixels faster than it can
+get them out, and that does not give an error, it gives a corrupt image.
+
+The price is about 4.2 frames per second at 48 megapixels. For a first image
+that is plenty.
+
+And a piece of good news hidden in that error: to get as far as complaining
+about the clock, CAMSS had already read the sensor's link frequency, so the
+controls are correctly set and so is the device tree's link.
+
+THE RISK THAT REMAINS, SAID PLAINLY
+-----------------------------------
+D-PHY with 2 lanes is configured because CAMSS only supports D-PHY, and because
+2 lanes works whether the board carries 2 or 4. What cannot be known by reading
+is whether this phone's camera is physically on C-PHY: if it is, there will be
+no image and the rear camera will be a dead end with CAMSS.
+
+It will show up as VFE sof timeout and no frames. Warning: CSIPHY lane errors
+are SILENT in mainline, there is no message to look for.
+
+From here on the sensor declares its endpoint towards csiphy0. That has a price
+worth knowing: if the driver failed to register its subdev, CAMSS's async
+notifier would not complete and /dev/media0 would be lost. That is why it had
+not been declared until now.
+
+WHAT THE MODULE DOES
+--------------------
+Deliberately little: it powers up in the order Sony asks for (voltages, then
+clock, and the reset last), scans the bus, reads the identification and powers
+back down. It does NOT register any V4L2 subdevice yet.
+
+That it does not register a subdevice is on purpose and is not laziness: if an
+endpoint towards csiphy0 were declared and the sensor failed to register,
+camss's async notifier would never complete and we would lose /dev/media0 -and
+with it the pattern capture, which today is the only good reference there is-.
+First it is confirmed that the sensor wakes up; the wiring to camss comes
+afterwards.
+
+It scans the whole bus instead of reading only its address because the 0x10
+comes from another tree, not from a measurement on this device. If only 0x10
+were read, a "does not answer" would not distinguish between a wrong address,
+the clock, the power or the reset. By scanning, any new address relative to the
+powered-down bus already proves that the power-up works.
+
+WHAT WAS MEASURED ON THE FIRST ROUND
+------------------------------------
+With the WL2866D's rails turned on by hand, the module loaded and the clock
+running, a NEW address appeared on the bus that was not there with the camera
+powered down:
+
+    imx682: powered up: clock at 19200000 Hz, reset released
+    imx682:   answers 0x1a          <-- new
+    imx682:   answers 0x50          <-- the EEPROM, always shows up
+
+So the power-up sequence WORKS and the 0x10 that the MediaTek drivers give is
+not valid on this phone. That is why the device tree now points at 0x1a, which
+is the measured address.
+
+And that is why the scan asks EVERY address that answers for its
+identification, instead of assuming: on this bus the module's EEPROM, the focus
+motor and the sensor live together, and all three answer. Only one will say
+0x0682.
+
+WHAT WAS MEASURED ON THE FIRST ROUND
+------------------------------------
+With the WL2866D's rails turned on by hand, the module loaded and the clock
+running, a NEW address appeared on the bus that was not there with the camera
+powered down:
+
+    imx682: powered up: clock at 19200000 Hz, reset released
+    imx682:   answers 0x1a          <-- new
+    imx682:   answers 0x50          <-- the EEPROM, always shows up
+
+So the power-up sequence WORKS, and the 0x10 that the MediaTek drivers give for
+this same chip is not valid on this phone. The device tree now points at 0x1a,
+which is the measured address and not the inherited one.
+
+And that is why the scan now asks EVERY address that answers for its
+identification, instead of assuming which one is the sensor: on this bus the
+module's EEPROM, the focus motor and the sensor live together, and all three
+answer the scan. Only one will say 0x0682.
+
+WHAT TO EXPECT IN THE LOG
+-------------------------
+    imx682 12-001a: powered up: clock at 19200000 Hz, reset released
+    imx682 12-001a: scanning Qualcomm-CCI...
+    imx682 12-001a:   answers 0x1a, identification 0x0682   <== IT IS THE IMX682
+    imx682 12-001a:   answers 0x50, no readable identification
+    imx682 12-001a: IT IS AN IMX682: identification 0x0682
+
+If 0x1a turned out to be the focus motor and not the sensor, it will show up
+right here: it will say a different identification, and the right one will be
+at another of the addresses the scan enumerates.
+
+If only 0x50 shows up, the sensor is still asleep and the next suspect is the
+rail that goes through the WL2866D, which this patch does not yet control (it
+has to be turned on by hand first with surya/camara/encender-camaras).
+
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 19:16:35.207304922 +0200
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 20:38:40.865370419 +0200
+@@ -6,6 +6,7 @@
+ 
+ /dts-v1/;
+ 
++#include <dt-bindings/media/video-interfaces.h>
+ #include <dt-bindings/sound/qcom,q6voice.h>
+ #include "sm7150-xiaomi-common.dtsi"
+ 
+@@ -1039,8 +1040,65 @@
+ 	charge-full-design-microamp-hours = <5160000>;
+ };
+ 
++&camss {
++	ports {
++		port@0 {
++			csiphy0_ep: endpoint {
++				clock-lanes = <7>;
++				data-lanes = <0 1>;
++				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
++				remote-endpoint = <&imx682_ep>;
++			};
++		};
++	};
++};
++
+ &cci0_i2c0 {
+-	/* Sony IMX682 Main @ 50 */
++	/*
++	 * El 0x50 que decia el comentario de antes es la EEPROM de
++	 * calibracion del modulo, no el sensor: contesta incluso con la
++	 * camara sin alimentar. El 0x10 que dicen los drivers del mismo chip
++	 * para MediaTek tampoco vale aqui: medido con el sensor alimentado y
++	 * con reloj, en este movil aparece en 0x1a.
++	 */
++	camera@1a {
++		compatible = "sony,imx682";
++		reg = <0x1a>;
++
++		/* CAM1_RST_N, segun los nombres de pin de este mismo fichero */
++		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_mclk1_active>;
++
++		/*
++		 * 24 MHz, NO los 19,2 del Android de fabrica: las tablas de
++		 * registros del driver estan calculadas para 24 y adaptarlas
++		 * obligaria a recalcular el PLL del sensor. El camcc del
++		 * SM7150 admite las dos. Si se cambia aqui, hay que cambiarlo
++		 * tambien en el driver.
++		 */
++		clocks = <&camcc CAMCC_MCLK1_CLK>;
++		clock-names = "xvclk";
++		assigned-clocks = <&camcc CAMCC_MCLK1_CLK>;
++		assigned-clock-rates = <24000000>;
++
++		dovdd-supply = <&vreg_l13a_1p8>;
++		avdd-supply = <&vreg_wide_ldo_avdd2>;
++		dvdd-supply = <&wl_dvdd1>;
++
++		port {
++			imx682_ep: endpoint {
++				/*
++				 * Ojo, no es una errata: el lado del sensor
++				 * numera los carriles desde 1 y el de CAMSS
++				 * desde 0. Son los mismos dos cables.
++				 */
++				data-lanes = <1 2>;
++				link-frequencies = /bits/ 64 <1020000000>;
++				remote-endpoint = <&csiphy0_ep>;
++			};
++		};
++	};
+ };
+ 
+ &cci0_i2c1 {
+@@ -1092,7 +1150,50 @@
+ 	clock-frequency = <100000>;
+ 	status = "okay";
+ 
+-	/* ovti,wl2866d (cam regulator) @ 28 */
++	/*
++	 * Los cuatro carriles de las camaras. Al arrancar Linux este chip los
++	 * deja APAGADOS, y por eso ningun sensor contestaba en los buses CCI.
++	 *
++	 * Van marcados como siempre encendidos a proposito, y es un atajo de
++	 * puesta en marcha, no el estado final: todavia no se sabe cual de los
++	 * cuatro alimenta a cada uno de los cinco sensores. Encenderlos todos
++	 * cuesta unos miliamperios y evita depurar a ciegas; cuando se sepa el
++	 * reparto, cada sensor pedira el suyo y esto se quita.
++	 */
++	wl2866d: regulator@28 {
++		compatible = "willsemi,wl2866d";
++		reg = <0x28>;
++
++		regulators {
++			wl_dvdd1: dvdd1 {
++				regulator-name = "cam_dvdd1";
++				regulator-min-microvolt = <1104000>;
++				regulator-max-microvolt = <1104000>;
++				regulator-always-on;
++			};
++
++			wl_dvdd2: dvdd2 {
++				regulator-name = "cam_dvdd2";
++				regulator-min-microvolt = <1104000>;
++				regulator-max-microvolt = <1104000>;
++				regulator-always-on;
++			};
++
++			wl_avdd1: avdd1 {
++				regulator-name = "cam_avdd1";
++				regulator-min-microvolt = <2800000>;
++				regulator-max-microvolt = <2800000>;
++				regulator-always-on;
++			};
++
++			wl_avdd2: avdd2 {
++				regulator-name = "cam_avdd2";
++				regulator-min-microvolt = <2900000>;
++				regulator-max-microvolt = <2900000>;
++				regulator-always-on;
++			};
++		};
++	};
+ 
+ 	tas2562: codec@4c { /* SPK */
+ 		compatible = "ti,tas2562";
+@@ -1442,6 +1543,13 @@
+ 			  "RFFE2_CLK",
+ 			  "RFFE1_DATA",
+ 			  "RFFE1_CLK";
++
++	cam_mclk1_active: cam-mclk1-active-state {
++		pins = "gpio14";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
++	};
+ };
+ 
+ &venus {
+diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
+--- a/drivers/media/i2c/imx682.c	1970-01-01 01:00:00.000000000 +0100
++++ b/drivers/media/i2c/imx682.c	2026-08-14 20:38:09.856075941 +0200
+@@ -0,0 +1,894 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Sony IMX682 - camara trasera del Xiaomi POCO X3 NFC (surya).
++ *
++ * DE DONDE SALE ESTE DRIVER
++ * -------------------------
++ * No existe ningun imx682.c en Linux, ni parche enviado a linux-media. Las
++ * tablas de registros salen del driver GPL de MediaTek para EL MISMO sensor y
++ * EL MISMO proveedor de modulo (imx682sunny), que es uno de los dos que monta
++ * este movil.
++ *
++ * DOS DECISIONES QUE HAY QUE ENTENDER ANTES DE TOCAR NADA
++ * ------------------------------------------------------
++ * 1. MCLK a 24 MHz, no a los 19,2 que usa el Android de fabrica. Las tablas de
++ *    origen estan calculadas para 24 MHz, y adaptarlas obligaria a recalcular
++ *    los multiplicadores del PLL del sensor, que es justo donde se cuela un
++ *    error que da un sensor que arranca y no emite nada. El reloj de camara
++ *    del SM7150 admite 24 MHz (camcc-sm7150.c), asi que no hace falta.
++ *    Si se cambia el reloj, hay que cambiarlo TAMBIEN en el device tree
++ *    (assigned-clock-rates) o el PLL quedara mal y no habra imagen.
++ *
++ * 2. D-PHY de 2 carriles. CAMSS solo admite D-PHY, y 2 carriles funciona tanto
++ *    si la placa tiene 2 como si tiene 4, porque los carriles 0 y 1 siempre
++ *    estan cableados. El sensor se configura para eso con 0x0111=0x02 y
++ *    0x0114=0x01, que ya vienen en las tablas.
++ *
++ * LO QUE ESTE DRIVER NO HACE
++ * --------------------------
++ * Un solo modo, 8000x6000 a unos 5 fps, sin autofoco, sin HDR y sin PDAF. Es
++ * el unico modo que la rama D-PHY del driver de origen define. Primero que
++ * salga una imagen; afinar viene despues.
++ */
++
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/gpio/consumer.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/pm_runtime.h>
++#include <linux/regulator/consumer.h>
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-fwnode.h>
++#include <media/v4l2-subdev.h>
++
++#define IMX682_REG_CHIP_ID		0x0016
++#define IMX682_CHIP_ID			0x0682
++
++#define IMX682_REG_MODE_SELECT		0x0100
++#define IMX682_MODE_STANDBY		0x00
++#define IMX682_MODE_STREAMING		0x01
++
++#define IMX682_REG_FRAME_LENGTH		0x0340	/* 16 bits */
++#define IMX682_REG_EXPOSURE		0x0202	/* 16 bits */
++#define IMX682_REG_ANALOG_GAIN		0x0204	/* 16 bits */
++
++/* Margen que Sony exige entre la exposicion y el alto del fotograma. */
++#define IMX682_EXPOSURE_MARGIN		48
++#define IMX682_EXPOSURE_MIN		4
++#define IMX682_EXPOSURE_STEP		1
++
++#define IMX682_ANA_GAIN_MIN		0
++#define IMX682_ANA_GAIN_MAX		978
++#define IMX682_ANA_GAIN_STEP		1
++
++/*
++ * Del PLL de la tabla de modo: INCK 24 MHz / IOP_PREPLLCK_DIV 4 *
++ * IOP_PLL_MPY 340 = 2040 MHz, y en D-PHY la senal es de doble flanco, asi que
++ * la frecuencia de enlace es la mitad.
++ *
++ * El multiplicador original era 416, que dan 1248 MHz y 2,5 Gbps por carril
++ * -el maximo de D-PHY 1.2, que el fabricante aprovecha entero-. El CSIPHY del
++ * SM7150 no llega ahi: su reloj temporizador se queda en 300 MHz y CAMSS
++ * aborta con "Pixel clock is too high for CSIPHY". Ver el comentario de la
++ * tabla del modo.
++ */
++#define IMX682_LINK_FREQ		1020000000LL
++#define IMX682_DATA_LANES		2
++#define IMX682_BITS_PER_PIXEL		10
++
++/* pixeles por segundo que salen por el enlace, que es lo que espera V4L2 */
++#define IMX682_PIXEL_RATE \
++	(IMX682_LINK_FREQ * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL)
++
++#define IMX682_XVCLK_HZ			24000000
++
++struct imx682_reg {
++	u16 addr;
++	u8 val;
++};
++
++/* Ajuste global del sensor, rama D-PHY de 2 carriles.
++ * Copiado literal del driver GPL de MediaTek para el mismo sensor y el mismo
++ * proveedor de modulo (imx682sunny). Vale tal cual porque aqui el MCLK se
++ * pone a 24 MHz, que es para lo que estan calculados sus multiplicadores. */
++static const struct imx682_reg imx682_global[] = {
++	{ 0x0136, 0x18 },
++	{ 0x0137, 0x00 },
++	{ 0x3C7E, 0x02 },
++	{ 0x3C7F, 0x0A },
++	{ 0x0111, 0x02 },
++	{ 0x380C, 0x00 },
++	{ 0x3C00, 0x10 },
++	{ 0x3C01, 0x10 },
++	{ 0x3C02, 0x10 },
++	{ 0x3C03, 0x10 },
++	{ 0x3C04, 0x10 },
++	{ 0x3C05, 0x01 },
++	{ 0x3C06, 0x00 },
++	{ 0x3C07, 0x00 },
++	{ 0x3C08, 0x03 },
++	{ 0x3C09, 0xFF },
++	{ 0x3C0A, 0x01 },
++	{ 0x3C0B, 0x00 },
++	{ 0x3C0C, 0x00 },
++	{ 0x3C0D, 0x03 },
++	{ 0x3C0E, 0xFF },
++	{ 0x3C0F, 0x20 },
++	{ 0x3F88, 0x00 },
++	{ 0x3F8E, 0x00 },
++	{ 0x5282, 0x01 },
++	{ 0x9004, 0x14 },
++	{ 0x9200, 0xF4 },
++	{ 0x9201, 0xA7 },
++	{ 0x9202, 0xF4 },
++	{ 0x9203, 0xAA },
++	{ 0x9204, 0xF4 },
++	{ 0x9205, 0xAD },
++	{ 0x9206, 0xF4 },
++	{ 0x9207, 0xB0 },
++	{ 0x9208, 0xF4 },
++	{ 0x9209, 0xB3 },
++	{ 0x920A, 0xB7 },
++	{ 0x920B, 0x34 },
++	{ 0x920C, 0xB7 },
++	{ 0x920D, 0x36 },
++	{ 0x920E, 0xB7 },
++	{ 0x920F, 0x37 },
++	{ 0x9210, 0xB7 },
++	{ 0x9211, 0x38 },
++	{ 0x9212, 0xB7 },
++	{ 0x9213, 0x39 },
++	{ 0x9214, 0xB7 },
++	{ 0x9215, 0x3A },
++	{ 0x9216, 0xB7 },
++	{ 0x9217, 0x3C },
++	{ 0x9218, 0xB7 },
++	{ 0x9219, 0x3D },
++	{ 0x921A, 0xB7 },
++	{ 0x921B, 0x3E },
++	{ 0x921C, 0xB7 },
++	{ 0x921D, 0x3F },
++	{ 0x921E, 0x77 },
++	{ 0x921F, 0x77 },
++	{ 0x9222, 0xC4 },
++	{ 0x9223, 0x4B },
++	{ 0x9224, 0xC4 },
++	{ 0x9225, 0x4C },
++	{ 0x9226, 0xC4 },
++	{ 0x9227, 0x4D },
++	{ 0x9810, 0x14 },
++	{ 0x9814, 0x14 },
++	{ 0x99B2, 0x20 },
++	{ 0x99B3, 0x0F },
++	{ 0x99B4, 0x0F },
++	{ 0x99B5, 0x0F },
++	{ 0x99B6, 0x0F },
++	{ 0x99E4, 0x0F },
++	{ 0x99E5, 0x0F },
++	{ 0x99E6, 0x0F },
++	{ 0x99E7, 0x0F },
++	{ 0x99E8, 0x0F },
++	{ 0x99E9, 0x0F },
++	{ 0x99EA, 0x0F },
++	{ 0x99EB, 0x0F },
++	{ 0x99EC, 0x0F },
++	{ 0x99ED, 0x0F },
++	{ 0xA569, 0x06 },
++	{ 0xA56A, 0x13 },
++	{ 0xA56B, 0x13 },
++	{ 0xA679, 0x20 },
++	{ 0xA830, 0x68 },
++	{ 0xA831, 0x56 },
++	{ 0xA832, 0x2B },
++	{ 0xA833, 0x55 },
++	{ 0xA834, 0x55 },
++	{ 0xA835, 0x16 },
++	{ 0xA837, 0x51 },
++	{ 0xA838, 0x34 },
++	{ 0xA854, 0x4F },
++	{ 0xA855, 0x48 },
++	{ 0xA856, 0x45 },
++	{ 0xA857, 0x02 },
++	{ 0xA85A, 0x23 },
++	{ 0xA85B, 0x16 },
++	{ 0xA85C, 0x12 },
++	{ 0xA85D, 0x02 },
++	{ 0xAC72, 0x01 },
++	{ 0xAC73, 0x26 },
++	{ 0xAC74, 0x01 },
++	{ 0xAC75, 0x26 },
++	{ 0xAC76, 0x00 },
++	{ 0xAC77, 0xC4 },
++	{ 0xB051, 0x02 },
++	{ 0xC020, 0x01 },
++	{ 0xC61D, 0x00 },
++	{ 0xC625, 0x00 },
++	{ 0xC638, 0x03 },
++	{ 0xC63B, 0x01 },
++	{ 0xE286, 0x31 },
++	{ 0xE2A6, 0x32 },
++	{ 0xE2C6, 0x33 },
++	{ 0xEA4B, 0x00 },
++	{ 0xEA4C, 0x00 },
++	{ 0xEA4D, 0x00 },
++	{ 0xEA4E, 0x00 },
++	{ 0xF000, 0x00 },
++	{ 0xF001, 0x10 },
++	{ 0xF00C, 0x00 },
++	{ 0xF00D, 0x40 },
++	{ 0xF030, 0x00 },
++	{ 0xF031, 0x10 },
++	{ 0xF03C, 0x00 },
++	{ 0xF03D, 0x40 },
++	{ 0xF44B, 0x80 },
++	{ 0xF44C, 0x10 },
++	{ 0xF44D, 0x06 },
++	{ 0xF44E, 0x80 },
++	{ 0xF44F, 0x10 },
++	{ 0xF450, 0x06 },
++	{ 0xF451, 0x80 },
++	{ 0xF452, 0x10 },
++	{ 0xF453, 0x06 },
++	{ 0xF454, 0x80 },
++	{ 0xF455, 0x10 },
++	{ 0xF456, 0x06 },
++	{ 0xF457, 0x80 },
++	{ 0xF458, 0x10 },
++	{ 0xF459, 0x06 },
++	{ 0xF478, 0x20 },
++	{ 0xF479, 0x80 },
++	{ 0xF47A, 0x80 },
++	{ 0xF47B, 0x20 },
++	{ 0xF47C, 0x80 },
++	{ 0xF47D, 0x80 },
++	{ 0xF47E, 0x20 },
++	{ 0xF47F, 0x80 },
++	{ 0xF480, 0x80 },
++	{ 0xF481, 0x20 },
++	{ 0xF482, 0x60 },
++	{ 0xF483, 0x80 },
++	{ 0xF484, 0x20 },
++	{ 0xF485, 0x60 },
++	{ 0xF486, 0x80 },
++	{ 0x9852, 0x00 },
++	{ 0x9954, 0x0F },
++	{ 0xA7AD, 0x01 },
++	{ 0xA7CB, 0x01 },
++	{ 0xAE09, 0xFF },
++	{ 0xAE0A, 0xFF },
++	{ 0xAE12, 0x58 },
++	{ 0xAE13, 0x58 },
++	{ 0xAE15, 0x10 },
++	{ 0xAE16, 0x10 },
++	{ 0xAF05, 0x48 },
++	{ 0xB07C, 0x02 },
++};
++
++/* Modo 8000x6000, RAW10, 2 carriles D-PHY.
++ *
++ * UNICO CAMBIO respecto a la tabla de origen: los dos multiplicadores del
++ * PLL bajan de 360/416 a 294/340. El de origen deja el enlace en 1248 MHz,
++ * o sea 2,5 Gbps por carril, y el CSIPHY del SM7150 no llega: su reloj
++ * temporizador se queda en 300 MHz y CAMSS aborta con
++ * "Pixel clock is too high for CSIPHY". Con 340 el enlace queda en 1020 MHz
++ * y pasa con margen.
++ *
++ * Se bajan LOS DOS y en la misma proporcion a proposito. Bajar solo el de
++ * salida dejaria al sensor generando pixeles mas deprisa de lo que puede
++ * sacarlos, y eso no da un error: da imagen corrupta, que es mucho peor de
++ * diagnosticar.
++ *
++ * El precio son unos 4,2 fotogramas por segundo a 48 megapixeles. */
++static const struct imx682_reg imx682_8000x6000[] = {
++	{ 0x0112, 0x0A },
++	{ 0x0113, 0x0A },
++	{ 0x0114, 0x01 },
++	{ 0x0342, 0x39 },
++	{ 0x0343, 0x70 },
++	{ 0x0340, 0x19 },
++	{ 0x0341, 0x80 },
++	{ 0x0344, 0x00 },
++	{ 0x0345, 0x00 },
++	{ 0x0346, 0x00 },
++	{ 0x0347, 0x00 },
++	{ 0x0348, 0x1F },
++	{ 0x0349, 0x3F },
++	{ 0x034A, 0x17 },
++	{ 0x034B, 0x6F },
++	{ 0x0220, 0x62 },
++	{ 0x0222, 0x01 },
++	{ 0x0900, 0x00 },
++	{ 0x0901, 0x11 },
++	{ 0x0902, 0x0A },
++	{ 0x3140, 0x00 },
++	{ 0x3246, 0x01 },
++	{ 0x3247, 0x01 },
++	{ 0x3F15, 0x00 },
++	{ 0x0401, 0x00 },
++	{ 0x0404, 0x00 },
++	{ 0x0405, 0x10 },
++	{ 0x0408, 0x00 },
++	{ 0x0409, 0x00 },
++	{ 0x040A, 0x00 },
++	{ 0x040B, 0x00 },
++	{ 0x040C, 0x1F },
++	{ 0x040D, 0x40 },
++	{ 0x040E, 0x17 },
++	{ 0x040F, 0x70 },
++	{ 0x034C, 0x1F },
++	{ 0x034D, 0x40 },
++	{ 0x034E, 0x17 },
++	{ 0x034F, 0x70 },
++	{ 0x0301, 0x05 },
++	{ 0x0303, 0x04 },
++	{ 0x0305, 0x04 },
++	{ 0x0306, 0x01 },
++	{ 0x0307, 0x26 },
++	{ 0x030B, 0x01 },
++	{ 0x030D, 0x04 },
++	{ 0x030E, 0x01 },
++	{ 0x030F, 0x54 },
++	{ 0x0310, 0x01 },
++	{ 0x3620, 0x01 },
++	{ 0x3621, 0x01 },
++	{ 0x3C11, 0x08 },
++	{ 0x3C12, 0x08 },
++	{ 0x3C13, 0x2A },
++	{ 0x3F0C, 0x00 },
++	{ 0x3F14, 0x01 },
++	{ 0x3F80, 0x00 },
++	{ 0x3F81, 0x14 },
++	{ 0x3F8C, 0x00 },
++	{ 0x3F8D, 0x14 },
++	{ 0x3FF8, 0x00 },
++	{ 0x3FF9, 0x00 },
++	{ 0x3FFE, 0x03 },
++	{ 0x3FFF, 0x52 },
++	{ 0x0202, 0x19 },
++	{ 0x0203, 0x50 },
++	{ 0x0224, 0x01 },
++	{ 0x0225, 0xF4 },
++	{ 0x3FE0, 0x01 },
++	{ 0x3FE1, 0xF4 },
++	{ 0x0204, 0x00 },
++	{ 0x0205, 0x70 },
++	{ 0x0216, 0x00 },
++	{ 0x0217, 0x70 },
++	{ 0x0218, 0x01 },
++	{ 0x0219, 0x00 },
++	{ 0x020E, 0x01 },
++	{ 0x020F, 0x00 },
++	{ 0x0210, 0x01 },
++	{ 0x0211, 0x00 },
++	{ 0x0212, 0x01 },
++	{ 0x0213, 0x00 },
++	{ 0x0214, 0x01 },
++	{ 0x0215, 0x00 },
++	{ 0x3FE2, 0x00 },
++	{ 0x3FE3, 0x70 },
++	{ 0x3FE4, 0x01 },
++	{ 0x3FE5, 0x00 },
++	{ 0x3E20, 0x01 },
++	{ 0x3E37, 0x00 },
++};
++struct imx682_mode {
++	u32 width;
++	u32 height;
++	u32 hts;		/* line_length_pck, registro 0x0342 */
++	u32 vts_def;		/* frame_length_lines, registro 0x0340 */
++	u32 vts_min;
++	const struct imx682_reg *regs;
++	unsigned int num_regs;
++};
++
++static const struct imx682_mode imx682_modes[] = {
++	{
++		.width = 8000,
++		.height = 6000,
++		.hts = 14704,
++		.vts_def = 6528,
++		.vts_min = 6528,
++		.regs = imx682_8000x6000,
++		.num_regs = ARRAY_SIZE(imx682_8000x6000),
++	},
++};
++
++static const s64 imx682_link_freqs[] = {
++	IMX682_LINK_FREQ,
++};
++
++struct imx682 {
++	struct v4l2_subdev sd;
++	struct media_pad pad;
++	struct i2c_client *client;
++
++	struct clk *xvclk;
++	struct gpio_desc *reset;
++	struct regulator *dovdd;
++	struct regulator *avdd;
++	struct regulator *dvdd;
++
++	struct v4l2_ctrl_handler ctrls;
++	struct v4l2_ctrl *link_freq;
++	struct v4l2_ctrl *pixel_rate;
++	struct v4l2_ctrl *vblank;
++	struct v4l2_ctrl *hblank;
++	struct v4l2_ctrl *exposure;
++
++	const struct imx682_mode *mode;
++};
++
++static inline struct imx682 *to_imx682(struct v4l2_subdev *sd)
++{
++	return container_of(sd, struct imx682, sd);
++}
++
++/* Registro de 16 bits de direccion y 8 de dato. */
++static int imx682_read(struct imx682 *s, u16 reg, u8 *val)
++{
++	u8 dir[2] = { reg >> 8, reg & 0xff };
++	struct i2c_msg msgs[2] = {
++		{ .addr = s->client->addr, .flags = 0, .len = 2, .buf = dir },
++		{ .addr = s->client->addr, .flags = I2C_M_RD, .len = 1, .buf = val },
++	};
++	int ret = i2c_transfer(s->client->adapter, msgs, 2);
++
++	return ret == 2 ? 0 : (ret < 0 ? ret : -EIO);
++}
++
++static int imx682_write(struct imx682 *s, u16 reg, u8 val)
++{
++	u8 buf[3] = { reg >> 8, reg & 0xff, val };
++	int ret = i2c_master_send(s->client, buf, 3);
++
++	return ret == 3 ? 0 : (ret < 0 ? ret : -EIO);
++}
++
++static int imx682_write16(struct imx682 *s, u16 reg, u16 val)
++{
++	int ret = imx682_write(s, reg, val >> 8);
++
++	return ret ? ret : imx682_write(s, reg + 1, val & 0xff);
++}
++
++static int imx682_write_regs(struct imx682 *s, const struct imx682_reg *r,
++			     unsigned int n)
++{
++	unsigned int i;
++	int ret;
++
++	for (i = 0; i < n; i++) {
++		ret = imx682_write(s, r[i].addr, r[i].val);
++		if (ret) {
++			dev_err(&s->client->dev,
++				"fallo al escribir 0x%04x (registro %u de %u): %d\n",
++				r[i].addr, i, n, ret);
++			return ret;
++		}
++	}
++	return 0;
++}
++
++static int imx682_power_on(struct device *dev)
++{
++	struct imx682 *s = to_imx682(dev_get_drvdata(dev));
++	int ret;
++
++	/*
++	 * Orden que pide Sony: tensiones, luego reloj, y el reset el ultimo.
++	 * Al reves el sensor arranca sin reloj estable y se queda mudo sin dar
++	 * ningun error.
++	 */
++	ret = regulator_enable(s->dovdd);
++	if (ret)
++		return ret;
++	ret = regulator_enable(s->avdd);
++	if (ret)
++		goto err_dovdd;
++	ret = regulator_enable(s->dvdd);
++	if (ret)
++		goto err_avdd;
++
++	usleep_range(1000, 2000);
++
++	ret = clk_prepare_enable(s->xvclk);
++	if (ret)
++		goto err_dvdd;
++
++	usleep_range(1000, 2000);
++	gpiod_set_value_cansleep(s->reset, 0);
++	usleep_range(10000, 11000);
++
++	return 0;
++
++err_dvdd:
++	regulator_disable(s->dvdd);
++err_avdd:
++	regulator_disable(s->avdd);
++err_dovdd:
++	regulator_disable(s->dovdd);
++	return ret;
++}
++
++static int imx682_power_off(struct device *dev)
++{
++	struct imx682 *s = to_imx682(dev_get_drvdata(dev));
++
++	gpiod_set_value_cansleep(s->reset, 1);
++	clk_disable_unprepare(s->xvclk);
++	regulator_disable(s->dvdd);
++	regulator_disable(s->avdd);
++	regulator_disable(s->dovdd);
++	return 0;
++}
++
++static int imx682_set_ctrl(struct v4l2_ctrl *ctrl)
++{
++	struct imx682 *s = container_of(ctrl->handler, struct imx682, ctrls);
++	int ret;
++
++	/* Sin alimentacion no hay a quien escribirle; no es un error. */
++	if (!pm_runtime_get_if_in_use(&s->client->dev))
++		return 0;
++
++	switch (ctrl->id) {
++	case V4L2_CID_EXPOSURE:
++		ret = imx682_write16(s, IMX682_REG_EXPOSURE, ctrl->val);
++		break;
++	case V4L2_CID_ANALOGUE_GAIN:
++		ret = imx682_write16(s, IMX682_REG_ANALOG_GAIN, ctrl->val);
++		break;
++	case V4L2_CID_VBLANK:
++		ret = imx682_write16(s, IMX682_REG_FRAME_LENGTH,
++				     s->mode->height + ctrl->val);
++		break;
++	default:
++		ret = -EINVAL;
++		break;
++	}
++
++	pm_runtime_put(&s->client->dev);
++	return ret;
++}
++
++static const struct v4l2_ctrl_ops imx682_ctrl_ops = {
++	.s_ctrl = imx682_set_ctrl,
++};
++
++static int imx682_init_ctrls(struct imx682 *s)
++{
++	const struct imx682_mode *m = s->mode;
++	struct v4l2_ctrl_handler *h = &s->ctrls;
++	int ret;
++
++	ret = v4l2_ctrl_handler_init(h, 8);
++	if (ret)
++		return ret;
++
++	/*
++	 * LINK_FREQ y PIXEL_RATE no son opcionales: sin ellos el CSIPHY de
++	 * CAMSS aborta con "Cannot get CSI2 transmitter's link frequency" y
++	 * no llega a configurarse nada.
++	 */
++	s->link_freq = v4l2_ctrl_new_int_menu(h, NULL, V4L2_CID_LINK_FREQ,
++					      ARRAY_SIZE(imx682_link_freqs) - 1,
++					      0, imx682_link_freqs);
++	if (s->link_freq)
++		s->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	s->pixel_rate = v4l2_ctrl_new_std(h, NULL, V4L2_CID_PIXEL_RATE,
++					  IMX682_PIXEL_RATE, IMX682_PIXEL_RATE,
++					  1, IMX682_PIXEL_RATE);
++	if (s->pixel_rate)
++		s->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	s->hblank = v4l2_ctrl_new_std(h, NULL, V4L2_CID_HBLANK,
++				      m->hts - m->width, m->hts - m->width,
++				      1, m->hts - m->width);
++	if (s->hblank)
++		s->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	s->vblank = v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_VBLANK,
++				      m->vts_min - m->height,
++				      0xffff - m->height,
++				      1, m->vts_def - m->height);
++
++	/*
++	 * EXPOSURE y ANALOGUE_GAIN son los que usa el revelado por software de
++	 * libcamera para su control automatico. Sin ellos llega imagen, pero
++	 * negra o quemada, y parece un fallo de captura cuando no lo es.
++	 */
++	s->exposure = v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_EXPOSURE,
++					IMX682_EXPOSURE_MIN,
++					m->vts_def - IMX682_EXPOSURE_MARGIN,
++					IMX682_EXPOSURE_STEP,
++					m->vts_def - IMX682_EXPOSURE_MARGIN);
++
++	v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
++			  IMX682_ANA_GAIN_MIN, IMX682_ANA_GAIN_MAX,
++			  IMX682_ANA_GAIN_STEP, IMX682_ANA_GAIN_MIN);
++
++	if (h->error) {
++		ret = h->error;
++		dev_err(&s->client->dev, "fallo al crear los controles: %d\n", ret);
++		v4l2_ctrl_handler_free(h);
++		return ret;
++	}
++
++	s->sd.ctrl_handler = h;
++	return 0;
++}
++
++static int imx682_start_streaming(struct imx682 *s)
++{
++	int ret;
++
++	ret = imx682_write_regs(s, imx682_global, ARRAY_SIZE(imx682_global));
++	if (ret)
++		return ret;
++
++	ret = imx682_write_regs(s, s->mode->regs, s->mode->num_regs);
++	if (ret)
++		return ret;
++
++	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
++	if (ret)
++		return ret;
++
++	return imx682_write(s, IMX682_REG_MODE_SELECT, IMX682_MODE_STREAMING);
++}
++
++static int imx682_s_stream(struct v4l2_subdev *sd, int enable)
++{
++	struct imx682 *s = to_imx682(sd);
++	struct device *dev = &s->client->dev;
++	int ret;
++
++	if (!enable) {
++		imx682_write(s, IMX682_REG_MODE_SELECT, IMX682_MODE_STANDBY);
++		pm_runtime_put(dev);
++		return 0;
++	}
++
++	ret = pm_runtime_resume_and_get(dev);
++	if (ret)
++		return ret;
++
++	ret = imx682_start_streaming(s);
++	if (ret) {
++		dev_err(dev, "no arranca la transmision: %d\n", ret);
++		pm_runtime_put(dev);
++	}
++	return ret;
++}
++
++static void imx682_fill_fmt(const struct imx682_mode *m,
++			    struct v4l2_mbus_framefmt *fmt)
++{
++	fmt->width = m->width;
++	fmt->height = m->height;
++	fmt->code = MEDIA_BUS_FMT_SRGGB10_1X10;
++	fmt->field = V4L2_FIELD_NONE;
++	fmt->colorspace = V4L2_COLORSPACE_RAW;
++}
++
++static int imx682_init_state(struct v4l2_subdev *sd,
++			     struct v4l2_subdev_state *state)
++{
++	imx682_fill_fmt(&imx682_modes[0],
++			v4l2_subdev_state_get_format(state, 0));
++	return 0;
++}
++
++static int imx682_enum_mbus_code(struct v4l2_subdev *sd,
++				 struct v4l2_subdev_state *state,
++				 struct v4l2_subdev_mbus_code_enum *code)
++{
++	if (code->index > 0)
++		return -EINVAL;
++
++	code->code = MEDIA_BUS_FMT_SRGGB10_1X10;
++	return 0;
++}
++
++static int imx682_enum_frame_size(struct v4l2_subdev *sd,
++				  struct v4l2_subdev_state *state,
++				  struct v4l2_subdev_frame_size_enum *fse)
++{
++	if (fse->index >= ARRAY_SIZE(imx682_modes) ||
++	    fse->code != MEDIA_BUS_FMT_SRGGB10_1X10)
++		return -EINVAL;
++
++	fse->min_width = fse->max_width = imx682_modes[fse->index].width;
++	fse->min_height = fse->max_height = imx682_modes[fse->index].height;
++	return 0;
++}
++
++static int imx682_set_fmt(struct v4l2_subdev *sd,
++			  struct v4l2_subdev_state *state,
++			  struct v4l2_subdev_format *fmt)
++{
++	struct imx682 *s = to_imx682(sd);
++
++	/* Un solo modo: se acepta lo que pidan y se devuelve el que hay. */
++	imx682_fill_fmt(s->mode, &fmt->format);
++	*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
++	return 0;
++}
++
++static const struct v4l2_subdev_video_ops imx682_video_ops = {
++	.s_stream = imx682_s_stream,
++};
++
++static const struct v4l2_subdev_pad_ops imx682_pad_ops = {
++	.enum_mbus_code = imx682_enum_mbus_code,
++	.enum_frame_size = imx682_enum_frame_size,
++	.get_fmt = v4l2_subdev_get_fmt,
++	.set_fmt = imx682_set_fmt,
++};
++
++static const struct v4l2_subdev_ops imx682_subdev_ops = {
++	.video = &imx682_video_ops,
++	.pad = &imx682_pad_ops,
++};
++
++static const struct v4l2_subdev_internal_ops imx682_internal_ops = {
++	.init_state = imx682_init_state,
++};
++
++static const struct media_entity_operations imx682_entity_ops = {
++	.link_validate = v4l2_subdev_link_validate,
++};
++
++static int imx682_identify(struct imx682 *s)
++{
++	u8 hi, lo;
++	int ret;
++
++	ret = imx682_read(s, IMX682_REG_CHIP_ID, &hi);
++	if (!ret)
++		ret = imx682_read(s, IMX682_REG_CHIP_ID + 1, &lo);
++	if (ret)
++		return dev_err_probe(&s->client->dev, ret,
++				     "no contesta en 0x%02x\n", s->client->addr);
++
++	if (((hi << 8) | lo) != IMX682_CHIP_ID)
++		return dev_err_probe(&s->client->dev, -ENODEV,
++				     "contesta, pero dice 0x%04x y no 0x%04x\n",
++				     (hi << 8) | lo, IMX682_CHIP_ID);
++
++	dev_info(&s->client->dev, "IMX682 detectado (0x%04x)\n", IMX682_CHIP_ID);
++	return 0;
++}
++
++static int imx682_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct imx682 *s;
++	int ret;
++
++	s = devm_kzalloc(dev, sizeof(*s), GFP_KERNEL);
++	if (!s)
++		return -ENOMEM;
++
++	s->client = client;
++	s->mode = &imx682_modes[0];
++
++	s->xvclk = devm_clk_get(dev, "xvclk");
++	if (IS_ERR(s->xvclk))
++		return dev_err_probe(dev, PTR_ERR(s->xvclk), "falta el reloj\n");
++
++	ret = clk_set_rate(s->xvclk, IMX682_XVCLK_HZ);
++	if (ret)
++		return dev_err_probe(dev, ret, "el reloj no acepta %d Hz\n",
++				     IMX682_XVCLK_HZ);
++
++	s->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
++	if (IS_ERR(s->reset))
++		return dev_err_probe(dev, PTR_ERR(s->reset), "falta el reset\n");
++
++	s->dovdd = devm_regulator_get(dev, "dovdd");
++	if (IS_ERR(s->dovdd))
++		return dev_err_probe(dev, PTR_ERR(s->dovdd), "falta dovdd\n");
++	s->avdd = devm_regulator_get(dev, "avdd");
++	if (IS_ERR(s->avdd))
++		return dev_err_probe(dev, PTR_ERR(s->avdd), "falta avdd\n");
++	s->dvdd = devm_regulator_get(dev, "dvdd");
++	if (IS_ERR(s->dvdd))
++		return dev_err_probe(dev, PTR_ERR(s->dvdd), "falta dvdd\n");
++
++	v4l2_i2c_subdev_init(&s->sd, client, &imx682_subdev_ops);
++	s->sd.internal_ops = &imx682_internal_ops;
++	dev_set_drvdata(dev, &s->sd);
++
++	ret = imx682_power_on(dev);
++	if (ret)
++		return dev_err_probe(dev, ret, "no enciende\n");
++
++	ret = imx682_identify(s);
++	if (ret)
++		goto err_power;
++
++	ret = imx682_init_ctrls(s);
++	if (ret)
++		goto err_power;
++
++	s->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
++	s->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
++	s->sd.entity.ops = &imx682_entity_ops;
++	s->pad.flags = MEDIA_PAD_FL_SOURCE;
++
++	ret = media_entity_pads_init(&s->sd.entity, 1, &s->pad);
++	if (ret)
++		goto err_ctrls;
++
++	ret = v4l2_subdev_init_finalize(&s->sd);
++	if (ret)
++		goto err_entity;
++
++	pm_runtime_set_active(dev);
++	pm_runtime_enable(dev);
++	pm_runtime_idle(dev);
++
++	ret = v4l2_async_register_subdev_sensor(&s->sd);
++	if (ret) {
++		dev_err_probe(dev, ret, "no se registra el subdispositivo\n");
++		goto err_pm;
++	}
++
++	return 0;
++
++err_pm:
++	pm_runtime_disable(dev);
++	pm_runtime_set_suspended(dev);
++	v4l2_subdev_cleanup(&s->sd);
++err_entity:
++	media_entity_cleanup(&s->sd.entity);
++err_ctrls:
++	v4l2_ctrl_handler_free(&s->ctrls);
++err_power:
++	imx682_power_off(dev);
++	return ret;
++}
++
++static void imx682_remove(struct i2c_client *client)
++{
++	struct v4l2_subdev *sd = dev_get_drvdata(&client->dev);
++	struct imx682 *s = to_imx682(sd);
++
++	v4l2_async_unregister_subdev(sd);
++	v4l2_subdev_cleanup(sd);
++	media_entity_cleanup(&sd->entity);
++	v4l2_ctrl_handler_free(&s->ctrls);
++
++	pm_runtime_disable(&client->dev);
++	if (!pm_runtime_status_suspended(&client->dev))
++		imx682_power_off(&client->dev);
++	pm_runtime_set_suspended(&client->dev);
++}
++
++static const struct dev_pm_ops imx682_pm_ops = {
++	SET_RUNTIME_PM_OPS(imx682_power_off, imx682_power_on, NULL)
++};
++
++static const struct of_device_id imx682_of_match[] = {
++	{ .compatible = "sony,imx682" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, imx682_of_match);
++
++static struct i2c_driver imx682_i2c_driver = {
++	.driver = {
++		.name = "imx682",
++		.of_match_table = imx682_of_match,
++		.pm = &imx682_pm_ops,
++	},
++	.probe = imx682_probe,
++	.remove = imx682_remove,
++};
++module_i2c_driver(imx682_i2c_driver);
++
++MODULE_DESCRIPTION("Sony IMX682 sensor driver");
++MODULE_LICENSE("GPL");
+diff -ruN a/drivers/media/i2c/Kconfig b/drivers/media/i2c/Kconfig
+--- a/drivers/media/i2c/Kconfig	2026-08-14 19:16:35.214923501 +0200
++++ b/drivers/media/i2c/Kconfig	2026-08-14 19:16:57.689041859 +0200
+@@ -276,6 +276,15 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called imx412.
+ 
++config VIDEO_IMX682
++	tristate "Sony IMX682 sensor support"
++	help
++	  This is a Video4Linux2 sensor-level driver for the Sony
++	  IMX682 camera.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called imx682.
++
+ config VIDEO_IMX415
+ 	tristate "Sony IMX415 sensor support"
+ 	depends on OF_GPIO
+diff -ruN a/drivers/media/i2c/Makefile b/drivers/media/i2c/Makefile
+--- a/drivers/media/i2c/Makefile	2026-08-14 19:16:35.223333340 +0200
++++ b/drivers/media/i2c/Makefile	2026-08-14 19:16:57.689081594 +0200
+@@ -61,6 +61,7 @@
+ obj-$(CONFIG_VIDEO_IMX355) += imx355.o
+ obj-$(CONFIG_VIDEO_IMX412) += imx412.o
+ obj-$(CONFIG_VIDEO_IMX415) += imx415.o
++obj-$(CONFIG_VIDEO_IMX682) += imx682.o
+ obj-$(CONFIG_VIDEO_IR_I2C) += ir-kbd-i2c.o
+ obj-$(CONFIG_VIDEO_ISL7998X) += isl7998x.o
+ obj-$(CONFIG_VIDEO_KS0127) += ks0127.o
+diff -ruN a/drivers/regulator/Kconfig b/drivers/regulator/Kconfig
+--- a/drivers/regulator/Kconfig	2026-08-14 20:00:55.668936534 +0200
++++ b/drivers/regulator/Kconfig	2026-08-14 20:01:17.690905269 +0200
+@@ -1849,6 +1849,15 @@
+ 	  This driver provides support for the VQMMC LDO I/0
+ 	  voltage regulator of the IPQ4019 SD/EMMC controller.
+ 
++config REGULATOR_WL2866D
++	tristate "Will Semiconductor WL2866D camera regulator"
++	depends on I2C
++	select REGMAP_I2C
++	help
++	  This driver supports the Will Semiconductor WL2866D, a four
++	  channel LDO used to power camera sensors on some Qualcomm based
++	  phones.
++
+ config REGULATOR_WM831X
+ 	tristate "Wolfson Microelectronics WM831x PMIC regulators"
+ 	depends on MFD_WM831X
+diff -ruN a/drivers/regulator/Makefile b/drivers/regulator/Makefile
+--- a/drivers/regulator/Makefile	2026-08-14 20:00:55.669927799 +0200
++++ b/drivers/regulator/Makefile	2026-08-14 20:01:17.690963920 +0200
+@@ -211,6 +211,7 @@
+ obj-$(CONFIG_REGULATOR_VCTRL) += vctrl-regulator.o
+ obj-$(CONFIG_REGULATOR_VEXPRESS) += vexpress-regulator.o
+ obj-$(CONFIG_REGULATOR_VQMMC_IPQ4019) += vqmmc-ipq4019-regulator.o
++obj-$(CONFIG_REGULATOR_WL2866D) += wl2866d.o
+ obj-$(CONFIG_REGULATOR_WM831X) += wm831x-dcdc.o
+ obj-$(CONFIG_REGULATOR_WM831X) += wm831x-isink.o
+ obj-$(CONFIG_REGULATOR_WM831X) += wm831x-ldo.o
+diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
+--- a/drivers/regulator/wl2866d.c	1970-01-01 01:00:00.000000000 +0100
++++ b/drivers/regulator/wl2866d.c	2026-08-14 20:00:55.672824532 +0200
+@@ -0,0 +1,166 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Will Semiconductor WL2866D: cuatro LDOs para las camaras.
++ *
++ * POR QUE HACE FALTA
++ * ------------------
++ * Los cinco sensores del Xiaomi POCO X3 NFC (surya) cuelgan de este chip.
++ * Linux no lo soporta, asi que sus cuatro carriles se quedan APAGADOS al
++ * arrancar y ningun sensor contesta en los buses CCI. Esa es la razon, medida,
++ * de que la camara "no exista" en este movil.
++ *
++ * EL MAPA DE REGISTROS, Y COMO SE COMPROBO
++ * ----------------------------------------
++ * No hay hoja de datos publica. El mapa se reconstruyo del driver de fabrica
++ * del propio surya (drivers/misc/wl2866d.c de su kernel Android) y se
++ * comprobo LEYENDO EL CHIP: al arrancar tiene 0x64 0x64 0x80 0x80 en los
++ * cuatro registros de tension, que es exactamente lo que predicen las
++ * formulas de abajo (1,2 V los digitales y 2,8 V los analogicos). Que los
++ * valores de fabrica cuadren con la formula al bit es lo que convierte esto
++ * en una lectura y no en una suposicion.
++ *
++ *   0x03  DVDD1     microvoltios = 600000 + valor * 6000
++ *   0x04  DVDD2     idem
++ *   0x05  AVDD1     microvoltios = 1200000 + valor * 12500
++ *   0x06  AVDD2     idem
++ *   0x0E  encendido, un bit por LDO
++ *
++ * El Android de fabrica escribe 0x55 0x55 0x80 0x88, o sea 1,11 V digital y
++ * 2,80 / 2,90 V analogico.
++ */
++
++#include <linux/gpio/consumer.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/regmap.h>
++#include <linux/regulator/driver.h>
++#include <linux/regulator/of_regulator.h>
++
++#define WL2866D_REG_DVDD1	0x03
++#define WL2866D_REG_ENABLE	0x0e
++
++#define WL2866D_DVDD_MIN_UV	600000
++#define WL2866D_DVDD_STEP_UV	6000
++#define WL2866D_AVDD_MIN_UV	1200000
++#define WL2866D_AVDD_STEP_UV	12500
++#define WL2866D_N_VOLTAGES	256
++
++enum { WL2866D_DVDD1, WL2866D_DVDD2, WL2866D_AVDD1, WL2866D_AVDD2 };
++
++/*
++ * Los cuatro registros de tension son consecutivos desde 0x03, y el bit de
++ * encendido de cada LDO es su propio indice dentro de 0x0E. Se generan con una
++ * macro para que esa correspondencia quede escrita una sola vez: separarla en
++ * cuatro estructuras a mano es justo donde se cuela una errata que enciende el
++ * carril equivocado.
++ */
++#define WL2866D_LDO(_id, _nombre, _min, _paso)				\
++	[_id] = {							\
++		.name		= _nombre,				\
++		.of_match	= of_match_ptr(_nombre),		\
++		.regulators_node = of_match_ptr("regulators"),		\
++		.id		= _id,					\
++		.type		= REGULATOR_VOLTAGE,			\
++		.owner		= THIS_MODULE,				\
++		.ops		= &wl2866d_ops,				\
++		.n_voltages	= WL2866D_N_VOLTAGES,			\
++		.min_uV		= _min,					\
++		.uV_step	= _paso,				\
++		.vsel_reg	= WL2866D_REG_DVDD1 + (_id),		\
++		.vsel_mask	= 0xff,					\
++		.enable_reg	= WL2866D_REG_ENABLE,			\
++		.enable_mask	= BIT(_id),				\
++	}
++
++static const struct regulator_ops wl2866d_ops = {
++	.enable			= regulator_enable_regmap,
++	.disable		= regulator_disable_regmap,
++	.is_enabled		= regulator_is_enabled_regmap,
++	.list_voltage		= regulator_list_voltage_linear,
++	.map_voltage		= regulator_map_voltage_linear,
++	.set_voltage_sel	= regulator_set_voltage_sel_regmap,
++	.get_voltage_sel	= regulator_get_voltage_sel_regmap,
++};
++
++static const struct regulator_desc wl2866d_regs[] = {
++	WL2866D_LDO(WL2866D_DVDD1, "dvdd1", WL2866D_DVDD_MIN_UV, WL2866D_DVDD_STEP_UV),
++	WL2866D_LDO(WL2866D_DVDD2, "dvdd2", WL2866D_DVDD_MIN_UV, WL2866D_DVDD_STEP_UV),
++	WL2866D_LDO(WL2866D_AVDD1, "avdd1", WL2866D_AVDD_MIN_UV, WL2866D_AVDD_STEP_UV),
++	WL2866D_LDO(WL2866D_AVDD2, "avdd2", WL2866D_AVDD_MIN_UV, WL2866D_AVDD_STEP_UV),
++};
++
++static const struct regmap_config wl2866d_regmap = {
++	.reg_bits = 8,
++	.val_bits = 8,
++	.max_register = 0x0f,
++};
++
++static int wl2866d_probe(struct i2c_client *client)
++{
++	struct device *dev = &client->dev;
++	struct regulator_config config = { };
++	struct gpio_desc *enable;
++	struct regmap *regmap;
++	unsigned int val;
++	int i, ret;
++
++	regmap = devm_regmap_init_i2c(client, &wl2866d_regmap);
++	if (IS_ERR(regmap))
++		return dev_err_probe(dev, PTR_ERR(regmap), "sin regmap\n");
++
++	/*
++	 * El chip no responde por I2C hasta que su pin de habilitacion esta
++	 * alto. En surya ese pin lo lleva el PMIC (pm6150l gpio1).
++	 */
++	enable = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
++	if (IS_ERR(enable))
++		return dev_err_probe(dev, PTR_ERR(enable), "sin gpio de habilitacion\n");
++
++	/*
++	 * Comprobacion de que hay alguien ahi, y de que es lo que creemos.
++	 * No existe registro de identificacion, asi que se usa lo unico
++	 * fiable: el registro de tension de DVDD1 vale 0x64 de fabrica.
++	 * Es debil como identificacion, pero distingue "el chip no esta" de
++	 * "el chip esta y ya lo toco alguien", que es lo que importa al
++	 * depurar.
++	 */
++	ret = regmap_read(regmap, WL2866D_REG_DVDD1, &val);
++	if (ret)
++		return dev_err_probe(dev, ret, "no contesta en 0x%02x\n", client->addr);
++
++	dev_info(dev, "presente, DVDD1 arranca en 0x%02x (%u uV)\n", val,
++		 WL2866D_DVDD_MIN_UV + val * WL2866D_DVDD_STEP_UV);
++
++	config.dev = dev;
++	config.regmap = regmap;
++
++	for (i = 0; i < ARRAY_SIZE(wl2866d_regs); i++) {
++		struct regulator_dev *rdev;
++
++		rdev = devm_regulator_register(dev, &wl2866d_regs[i], &config);
++		if (IS_ERR(rdev))
++			return dev_err_probe(dev, PTR_ERR(rdev),
++					     "no se registra %s\n",
++					     wl2866d_regs[i].name);
++	}
++
++	return 0;
++}
++
++static const struct of_device_id wl2866d_of_match[] = {
++	{ .compatible = "willsemi,wl2866d" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, wl2866d_of_match);
++
++static struct i2c_driver wl2866d_driver = {
++	.driver = {
++		.name = "wl2866d",
++		.of_match_table = wl2866d_of_match,
++	},
++	.probe = wl2866d_probe,
++};
++module_i2c_driver(wl2866d_driver);
++
++MODULE_DESCRIPTION("Will Semiconductor WL2866D camera regulator");
++MODULE_LICENSE("GPL");

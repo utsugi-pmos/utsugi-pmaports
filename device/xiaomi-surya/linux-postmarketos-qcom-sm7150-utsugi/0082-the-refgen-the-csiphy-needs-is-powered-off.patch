@@ -1,0 +1,81 @@
+The reference generator that the CSIPHY needs is powered off
+
+The SM7150 vendor device tree (sdmmagpie-camera.dtsi) feeds each CSIPHY with TWO
+regulators:
+
+    regulator-names = "gdscr", "refgen";
+    gdscr-supply = <&titan_top_gdsc>;
+    refgen-supply = <&refgen>;
+
+Mainline only has the first one. The camss node declares NO supply at all, and
+the ones the driver asks for by name -"vdda-phy" and "vdda-pll"- do not exist in
+the device tree, so regulator_bulk_get() returns dummy regulators and enabling
+them does absolutely nothing.
+
+refgen IS in mainline, but only the two DSI controllers reference it. Read on
+the phone:
+
+    refgen                    0    1      0 unknown     0mV
+        ae94000.dsi-refgen    0
+
+Use count 0 and 0 mV: off.
+
+WHY THIS IS EXACTLY THE SYMPTOM
+-------------------------------
+refgen provides the reference voltage to the analogue receivers. In D-PHY the
+two signalling modes do not need it in the same way:
+
+    low power (LP)  -  rail to rail, ~1,2 V. Detected WITHOUT a reference.
+    high speed (HS) -  ~200 mV differential over a ~200 mV common mode.
+                       WITHOUT a reference it is never resolved.
+
+And that is point by point what was measured throughout the investigation:
+
+    the five lanes leave rest on emit           <- that is LP, it works
+    the PHY interrupts at the frame rate        <- that is LP, it works
+    the CSID does not receive a single sync     <- that is HS, it does not work
+    no packets, no bad CRCs, no MISR, no errors <- there is nothing to forward
+
+And it explains the dismissals that fitted nothing:
+
+    - sweeping the settle count from 12 to 44 gave the IDENTICAL PHY state byte
+      for byte. Of course: the count decides WHEN to sample something that is
+      never resolved.
+    - sweeping the link rate, the lane count (2, 3 and 4), the PHY selector and
+      the polarity did not move a bit either.
+    - the REAR camera, on a different CSIPHY, with a different sensor, a
+      different driver, a different lane count and a different rate, also gives
+      zero.
+
+And it explains why the sdm845 DOES capture in mainline with this same code: its
+CSIPHY is v1.0/v1.1, and the SM7150 one is v1.2. The sdm845 vendor device tree
+does not ask for refgen for the CSIPHY; the SM7150 one does.
+
+WHAT THIS PATCH DOES
+--------------------
+The minimum needed to decide the hypothesis with ONE single variable: leave
+refgen always on. If an image appears with this, the right thing afterwards is
+to declare it as a CSIPHY supply -refgen-supply in the camss node and
+{ .supply = "refgen" } in csiphy_res_7150- so that it is only turned on when the
+camera uses it.
+--- a/arch/arm64/boot/dts/qcom/sm7150.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150.dtsi
+@@ -1892,6 +1892,17 @@
+ 		refgen: regulator@ff1000 {
+ 			compatible = "qcom,sm7150-refgen-regulator",
+ 				     "qcom,sdm845-refgen-regulator";
+ 			reg = <0x0 0x00ff1000 0x0 0x60>;
++
++			/*
++			 * El CSIPHY v1.2 necesita esta referencia para resolver
++			 * la senalizacion diferencial de alta velocidad. En
++			 * mainline solo lo referencian los DSI, y se quedaba
++			 * apagado: cuenta de uso 0, 0 mV. Sin el, el PHY ve las
++			 * transiciones de baja potencia -que son de rail a
++			 * rail- pero no engancha un solo sincronismo, y al CSID
++			 * no le llega absolutamente nada.
++			 */
++			regulator-always-on;
+ 		};
+
+ 		mc_virt: interconnect@1380000 {

@@ -1,0 +1,98 @@
+The microphone port, mono like the factory does it
+
+Indispensable companion to 0044. Without this one, 0044 cannot test what it
+sets out to test.
+
+## What this phone's factory Android says
+
+Taken from its `mixer_paths_wcd9375qrd.xml` (see `docs/REFERENCIA-STOCK.md`),
+counting every microphone path:
+
+    TX_CDC_DMA_TX_3 Channels = "One"     9 paths   <- one microphone
+    TX_CDC_DMA_TX_3 Channels = "Two"     3 paths   <- dual microphone (endfire)
+    TX_CDC_DMA_TX_3 Channels = "Three"   2 paths
+    TX_CDC_DMA_TX_3 Channels = "Four"    1 path
+
+So that control is, literally, **how many microphones the port carries**, and
+the factory call path (`handset-mic` -> `dmic3`) sets it to **one**.
+
+## What we do
+
+`sm8250_be_hw_params_fixup()` forces **every** backend to 2 channels, without
+distinguishing input from output. So the microphone port runs at 2 channels
+always. Measured by recording 3 seconds:
+
+    channel 0:  max=32768  rms=1457    <- the microphone
+    channel 1:  max=0      rms=0       <- exact digital silence
+
+The second channel does not exist in the device: our own fixup invents it.
+
+## Why without this 0044 is worthless
+
+0044 makes it possible to declare a single microphone to the DSP. But if the
+port keeps delivering two interleaved channels and we tell it there is one, the
+vocproc will read the frame with the wrong layout. The factory configuration is
+**mono in both places**, and to be able to test it the port has to be settable
+to mono.
+
+## What it does
+
+A module parameter, adjustable on the fly:
+
+    /sys/module/snd_soc_sm8250/parameters/tx_be_channels
+
+It only affects `TX_CODEC_DMA_TX_3`. **The default stays at 2**, so as not to
+touch normal recording, which works today and is the one thing I do not want to
+break. The `prueba-canales-tx` sweep lowers it to 1 in the phases that need it.
+
+--- a/sound/soc/qcom/sm8250.c
++++ b/sound/soc/qcom/sm8250.c
+@@ -18,6 +18,31 @@
+ 
+ #define MI2S_BCLK_RATE		1536000
+ 
++/*
++ * Canales del puerto de captura del codec, ajustable en caliente:
++ *
++ *   /sys/module/snd_soc_sm8250/parameters/tx_be_channels
++ *
++ * sm8250_be_hw_params_fixup() fuerza TODOS los backends a 2 canales. Para la
++ * reproduccion esta bien, pero para el microfono no: este aparato tiene UN
++ * microfono en el camino de voz, y el segundo canal del puerto es silencio
++ * digital exacto (medido: max=0 en 3 segundos de grabacion).
++ *
++ * El Android de fabrica de este mismo movil lo pone a uno. En su
++ * mixer_paths_wcd9375qrd.xml, TODOS los caminos de un microfono llevan:
++ *
++ *     <ctl name="TX_CDC_DMA_TX_3 Channels" value="One" />
++ *
++ * y solo los de doble microfono (endfire) lo suben a "Two". O sea que ese
++ * control es el numero de microfonos del puerto, y de fabrica la voz va mono.
++ *
++ * Se deja por defecto en 2 para no tocar la grabacion normal, que hoy
++ * funciona. El barrido lo baja a 1 para probar la configuracion de fabrica.
++ */
++static unsigned int tx_be_channels = 2;
++module_param(tx_be_channels, uint, 0644);
++MODULE_PARM_DESC(tx_be_channels, "canales del puerto TX_CODEC_DMA_TX_3 (1-8)");
++
+ struct sm8250_snd_data {
+ 	bool stream_prepared[AFE_PORT_MAX];
+ 	struct snd_soc_card *card;
+@@ -63,9 +88,16 @@
+ 	struct snd_interval *channels = hw_param_interval(params,
+ 					SNDRV_PCM_HW_PARAM_CHANNELS);
+ 	struct snd_mask *fmt = hw_param_mask(params, SNDRV_PCM_HW_PARAM_FORMAT);
++	struct snd_soc_dai *cpu_dai = snd_soc_rtd_to_cpu(rtd, 0);
+ 
+ 	rate->min = rate->max = 48000;
+ 	channels->min = channels->max = 2;
++
++	/* El puerto del microfono, mono como de fabrica. Ver tx_be_channels. */
++	if (cpu_dai->id == TX_CODEC_DMA_TX_3 && tx_be_channels >= 1 &&
++	    tx_be_channels <= 8)
++		channels->min = channels->max = tx_be_channels;
++
+ 	snd_mask_set_format(fmt, SNDRV_PCM_FORMAT_S16_LE);
+ 
+ 	return 0;

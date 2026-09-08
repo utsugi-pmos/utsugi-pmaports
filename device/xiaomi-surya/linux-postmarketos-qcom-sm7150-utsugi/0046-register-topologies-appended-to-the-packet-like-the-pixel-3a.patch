@@ -1,0 +1,187 @@
+Register the topologies appended to the packet, like the Pixel 3a
+
+This undoes a two-day dead end, and it undoes it because the code of the only
+place where this really works has finally been looked at.
+
+## What was believed
+
+That `AVCS_CMD_REGISTER_TOPOLOGIES` needs shared memory. The deduction came
+from the fact that the first attempt -sending the block appended to the
+packet- got `ADSP_EBADPARAM`. From there everything was rewritten to map a
+region with `dma_alloc_coherent`, and that path ends up **rebooting the whole
+phone**.
+
+## What the Pixel 3a actually does
+
+`sdm670-mainline/linux-patches`, file
+`ASoC-qdsp6-q6core-add-support-for-registering-topologies.patch`. It is the
+only place in mainline where topology registration works, on the sibling SoC of
+ours. And it **sends the block appended to the packet. It never maps memory at
+any point.**
+
+Its structure has the address fields, but leaves them at zero on purpose:
+
+    p = kzalloc(pkt_size, GFP_KERNEL);      /* leaves everything at zero */
+    ...
+    cmd->payload_size = size;               /* the ONLY field it fills in */
+    memcpy(dest, data, size);
+
+`payload_addr_lsw`, `payload_addr_msw` and `mem_map_handle` at zero **is** the
+"the data comes inside the packet" mechanism. It is not an oversight.
+
+It was also checked that in its whole patch tree
+`AVCS_CMD_SHARED_MEM_MAP_REGIONS` does not appear even once, nor `dma_alloc`,
+nor any device tree property for memory. Only `qcom,acdb-name`, which we
+already have.
+
+## So why the EBADPARAM
+
+For a much simpler reason, found the same day:
+
+    what the kernel was reading   485b0439...   <- Global_cal.acdb of the PIXEL 4a
+    what is really this phone's   72b7f3fd...   <- it was only in the factory partition
+
+The DSP was being asked to register **another phone's topologies**. And not
+because of a one-off slip: the file the project packaged *as if it were*
+surya's is also a byte-for-byte copy of the Pixel 4a's. There was no way to get
+it right until the genuine one was pulled out of the factory partition (see
+`docs/REFERENCIA-STOCK.md`).
+
+"Invalid parameter" is exactly the right answer to that.
+
+## What this patch does
+
+  - It goes back to sending the block appended to the packet, copying the Pixel
+    3a literally, and makes it **the default**.
+  - It leaves the shared memory path behind a parameter, documented as
+    dangerous, so as not to lose the work:
+
+        /sys/module/q6core/parameters/registro_por_memoria    0 = appended [default]
+                                                              1 = memory (REBOOTS THE PHONE)
+
+  - It traces the size of the block and of the packet, so as to see at a glance
+    whether the file being read is the right one: with the Pixel 4a's, the
+    block was 1316 bytes.
+
+The ACDB parsing and the offset (`+4`, skipping the length prefix) already
+matched the Pixel 3a's field by field; that is not touched.
+
+## How to test it, without spending a call
+
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
+    dmesg | tail
+
+The DSP accepts or rejects. If it accepts, then -and only then- does it make
+sense to put in the topology identifiers from surya's calibration and try it in
+a call.
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -414,7 +414,90 @@
+ 	core->mem_map_handle = 0;
+ }
+ 
+-static int q6core_register_topologies(struct device *dev, u32 size, const void *data)
++/*
++ * Metodo de entrega del bloque de topologias:
++ *
++ *   0 = PEGADO AL PAQUETE APR (in-band).  [por defecto]
++ *   1 = por memoria compartida.           PELIGRO: tumba el movil.
++ *
++ *   /sys/module/q6core/parameters/registro_por_memoria
++ *
++ * POR QUE EL DEFECTO CAMBIA A IN-BAND
++ * -----------------------------------
++ * El parche del Pixel 3a (sdm670-mainline/linux-patches,
++ * ASoC-qdsp6-q6core-add-support-for-registering-topologies.patch), que es el
++ * unico sitio donde esto funciona de verdad en mainline, **manda el bloque
++ * pegado al paquete y no mapea memoria en ningun momento**. Su estructura
++ * lleva payload_addr_lsw/msw y mem_map_handle, pero los deja a CERO a
++ * proposito: reserva el paquete con kzalloc y solo rellena payload_size.
++ *
++ * Aqui se hizo al reves. El primer intento fue in-band, el DSP contesto
++ * ADSP_EBADPARAM, y se dedujo que hacia falta memoria compartida. Esa
++ * deduccion llevo a un callejon sin salida: mapear la region **reinicia el
++ * movil entero**.
++ *
++ * El EBADPARAM tenia otra explicacion mucho mas simple. Al DSP se le estaba
++ * dando el fichero de calibracion del **Pixel 4a**: el que el kernel leia
++ * (md5 485b0439...) es el Global_cal.acdb de sunfish, y el que el proyecto
++ * empaquetaba "de surya" tambien es una copia byte a byte del mismo. El de
++ * verdad de este movil (md5 72b7f3fd...) solo existia dentro de la particion
++ * de fabrica, y se saco el 2026-08-11 (ver docs/REFERENCIA-STOCK.md).
++ *
++ * O sea: se le pedia al DSP que registrase las topologias de otro telefono.
++ * "Parametro incorrecto" es exactamente lo que toca contestar a eso.
++ */
++static unsigned int registro_por_memoria;
++module_param(registro_por_memoria, uint, 0644);
++MODULE_PARM_DESC(registro_por_memoria,
++		 "0 = pegado al paquete (como el Pixel 3a), 1 = memoria compartida (PELIGRO: reinicia el movil)");
++
++/* Como lo hace el parche del Pixel 3a: el bloque va dentro del paquete. */
++static int q6core_register_topologies_inband(struct device *dev, u32 size,
++					     const void *data)
++{
++	struct q6core *core = dev_get_drvdata(dev);
++	struct avcs_cmd_register_topologies *cmd;
++	struct apr_pkt *pkt;
++	void *p, *dest;
++	int pkt_size, rc;
++
++	pkt_size = APR_HDR_SIZE + sizeof(*cmd) + size;
++
++	p = kzalloc(pkt_size, GFP_KERNEL);
++	if (!p)
++		return -ENOMEM;
++
++	pkt = p;
++	cmd = p + APR_HDR_SIZE;
++	dest = p + APR_HDR_SIZE + sizeof(*cmd);
++
++	pkt->hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
++					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
++	pkt->hdr.pkt_size = pkt_size;
++	pkt->hdr.opcode = AVCS_CMD_REGISTER_TOPOLOGIES;
++
++	/*
++	 * kzalloc deja payload_addr_lsw, payload_addr_msw y mem_map_handle a
++	 * cero, y ESO es lo que le dice al DSP que los datos vienen dentro del
++	 * paquete. No es un olvido, es el mecanismo.
++	 */
++	cmd->payload_size = size;
++	memcpy(dest, data, size);
++
++	dev_info(dev, "registro in-band: %u bytes de topologias, paquete de %d\n",
++		 size, pkt_size);
++
++	core->resp_received = false;
++	rc = apr_send_pkt(core->adev, pkt);
++	kfree(pkt);
++	if (rc >= 0)
++		q6core_wait_resp(core);
++
++	return rc < 0 ? rc : 0;
++}
++
++static int q6core_register_topologies_shmem(struct device *dev, u32 size,
++					    const void *data)
+ {
+ 	struct q6core *core = dev_get_drvdata(dev);
+ 	struct avcs_cmd_register_topologies *cmd;
+@@ -487,6 +570,15 @@
+ 	return rc < 0 ? rc : 0;
+ }
+ 
++static int q6core_register_topologies(struct device *dev, u32 size,
++				      const void *data)
++{
++	if (registro_por_memoria)
++		return q6core_register_topologies_shmem(dev, size, data);
++
++	return q6core_register_topologies_inband(dev, size, data);
++}
++
+ /**
+  * q6core_get_svc_api_info() - Get version number of a service.
+  *

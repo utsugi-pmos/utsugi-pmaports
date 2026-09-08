@@ -1,0 +1,91 @@
+DIAGNOSTIC: which CSIPHY the CSID listens to, and PHY state read on stop
+
+TWO THINGS, BOTH FOR MEASURING
+------------------------------
+1. The CSIPHY state, read ONCE on the stop path.
+
+   Until now the only way to see the PHY's eleven status registers was from the
+   ISR, and for that the interrupts have to be unmasked. With the link not
+   locking that is 8700 firings per second with 35 register accesses each:
+   300,000 reads and writes per second on the very block being measured. The
+   instrument was ruining the measurement.
+
+   Reading them in csiphy_lanes_disable() bothers nobody: the transmission is
+   already over and the state is still latched.
+
+2. Which CSIPHY the CSID listens to (PHY_NUM_SEL of CSI2_RX_CFG0), adjustable.
+
+   It is the last routing assumption left untested ON THE DEVICE. Qualcomm's
+   driver computes phy_sel = (res_type & 0xFF) - 1, that is, counting from zero
+   just like mainline, and the two writes match in address and shift. But that
+   has been read, not measured, and at this point it is worth measuring:
+   absolutely nothing reaches the CSI-2 receiver -not one start-of-transmission
+   sync on any of the four lanes- while the PHY does hear the sensor.
+
+This does NOT fix anything: it is for looking.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 23:16:19.673794672 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 23:16:48.479746200 +0200
+@@ -1332,6 +1332,33 @@
+ 				 struct csiphy_config *cfg)
+ {
+ 	struct csiphy_device_regs *regs = csiphy->regs;
++	int i;
++
++	/*
++	 * DIAGNOSTICO: leer los once registros de estado del PHY UNA sola vez,
++	 * aqui, al parar.
++	 *
++	 * Leerlos desde el ISR obliga a desenmascarar las interrupciones, y con
++	 * el enlace sin enganchar eso son 8700 disparos por segundo con 35
++	 * accesos a registro cada uno: 300.000 lecturas y escrituras por
++	 * segundo sobre el bloque que se esta midiendo. El instrumento
++	 * estropeaba la medida.
++	 *
++	 * Aqui no molesta a nadie: la transmision ya ha terminado y el estado
++	 * sigue enclavado.
++	 */
++	for (i = 0; i < 11; i++)
++		diag_phy_estado[i] =
++			readl_relaxed(csiphy->base +
++				CSIPHY_3PH_CMN_CSI_COMMON_STATUSn(regs->offset,
++						regs->common_status_offset, i));
++
++	dev_info(csiphy->camss->dev,
++		 "csiphy%d al parar: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
++		 csiphy->id, diag_phy_estado[0], diag_phy_estado[1],
++		 diag_phy_estado[2], diag_phy_estado[3], diag_phy_estado[4],
++		 diag_phy_estado[5], diag_phy_estado[6], diag_phy_estado[7],
++		 diag_phy_estado[8], diag_phy_estado[9], diag_phy_estado[10]);
+ 
+ 	writel_relaxed(0, csiphy->base +
+ 			  CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 5));
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 23:16:19.673584527 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 23:16:48.487735788 +0200
+@@ -49,6 +49,11 @@
+  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
+  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  */
++static int diag_phy_sel = -1;
++module_param(diag_phy_sel, int, 0644);
++MODULE_PARM_DESC(diag_phy_sel,
++	"De que CSIPHY escucha el CSID (PHY_NUM_SEL). -1 = el del enlace.");
++
+ static unsigned int diag_rx_mascara;
+ module_param(diag_rx_mascara, uint, 0644);
+ MODULE_PARM_DESC(diag_rx_mascara,
+@@ -220,7 +225,14 @@
+ 
+ 	val = (lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
+ 	val |= phy->lane_assign << CSI2_RX_CFG0_DL0_INPUT_SEL;
+-	val |= phy->csiphy_id << CSI2_RX_CFG0_PHY_NUM_SEL;
++	/*
++	 * DIAGNOSTICO: de que CSIPHY escucha este CSID. Es la ultima suposicion
++	 * de encaminamiento que queda sin probar en el aparato: el driver de
++	 * Qualcomm calcula (res_type & 0xFF) - 1, o sea tambien contando desde
++	 * cero, pero eso esta leido, no medido. Con esto se barre.
++	 */
++	val |= (diag_phy_sel >= 0 ? (u32)diag_phy_sel : phy->csiphy_id)
++		<< CSI2_RX_CFG0_PHY_NUM_SEL;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
+ 
+ 	val = 1 << CSI2_RX_CFG1_PACKET_ECC_CORRECTION_EN;

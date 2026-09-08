@@ -1,0 +1,120 @@
+The rear camera's minimum exposure depends on binning, and with 4 the frame comes out flat
+
+The driver declared a minimum exposure of 4 for every mode. With that value, the
+four-by-four binned modes do not produce an image: they produce a FLAT, HIGH
+field with nothing in it.
+
+MEASURED with the scene in the dark and the gain at minimum, across all FIVE
+modes, with both controls verified before each capture (ten-bit values):
+
+    mode         binning    exp=4 and exp=5            exp>=6
+    2312x1304      4x4      median 733, min 526        median 64
+    1920x1080      4x4      median 733, min 545        median 64
+    3840x2160      2x2      median 64                  median 64
+    4624x3472      2x2      median 64                  median 64
+    9248x6944      none     median 64                  median 64
+
+So ONLY the two 4x4 binned modes break, and they do so below 6 exactly. The
+boundary was bracketed by testing 4, 5, 6, 7, 8, 9, 10 and 12.
+
+A median of 64 is the sensor's black pedestal, which is what should come out with
+the scene in the dark. A flat 733 is neither a dark image nor a blown-out image:
+it is a field with no information.
+
+THIS MATTERS because the default mode is one of the affected ones, and because
+libcamera's automatic exposure control drops down to whatever minimum the driver
+declares as soon as there is light. So the rear camera went white in sunlight.
+
+THE SENSOR DOES NOT DECLARE IT, and it is worth saying so rather than glossing
+over it. Its own limit register was read out:
+
+    0x1004 COARSE_INTEGRATION_TIME_MIN         = 0
+    0x1006 COARSE_INTEGRATION_TIME_MAX_MARGIN  = 48
+
+The margin does check out -it is exactly the one the driver was already using,
+and that is why the maximum exposure of the 2312x1304 mode comes out as
+1680-48 = 1632-, which says the I2C read is good and that the 0 for the minimum
+is a real 0. So the 6 comes from the measurement and from nothing else.
+
+A MEASUREMENT THAT HAD TO BE THROWN AWAY
+----------------------------------------
+The first run of the second mode gave absurd numbers -minimums at 0, maximums at
+1023 and convincing medians- and I was about to conclude that the fault did not
+depend on binning. It was the phone's /tmp being FULL: an earlier test had
+requested 3000 frames to file and had written 2.7 GB, so the captures came out
+truncated and the analysis was reading garbage. The tool now carries a free-space
+guard, because a full disk produces data that looks good.
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -732,6 +732,13 @@
+ 	 */
+ 	u32 crop_top;
+ 	u32 crop_height;
++	/*
++	 * Exposicion minima QUE ADMITE ESTE MODO, medida. No es la misma para
++	 * todos: los dos modos con agrupado 4x4 dan un fotograma plano y alto
++	 * -mediana 733 de mil veintitres- con exposicion 4 o 5, y funcionan a
++	 * partir de 6. Los de 2x2 y el que no agrupa aceptan 4 sin problema.
++	 */
++	u32 exp_min;
+ 	/* indice en imx682_link_freqs: cada modo tiene su PLL de salida */
+ 	u8 link_freq_idx;
+ 	const struct imx682_reg *regs;
+@@ -752,6 +759,7 @@
+ 		.vts_min = 1680,
+ 		.crop_top = 864,
+ 		.crop_height = 5216,	/* agrupado 4x4 -> 1304 */
++		.exp_min = 6,		/* medido: con 4 o 5 sale plano */
+ 		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
+ 		.regs = imx682_2312x1304,
+ 		.num_regs = ARRAY_SIZE(imx682_2312x1304),
+@@ -763,6 +771,7 @@
+ 		.vts_min = 1148,
+ 		.crop_top = 1312,
+ 		.crop_height = 4320,	/* agrupado 4x4 -> 1080 */
++		.exp_min = 6,		/* medido: con 4 o 5 sale plano */
+ 		.link_freq_idx = 3,	/* 520 MHz, PLL x325 */
+ 		.regs = imx682_1920x1080,
+ 		.num_regs = ARRAY_SIZE(imx682_1920x1080),
+@@ -774,6 +783,7 @@
+ 		.vts_min = 2218,
+ 		.crop_top = 1312,
+ 		.crop_height = 4320,	/* agrupado 2x2 -> 2160 */
++		.exp_min = 4,
+ 		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
+ 		.regs = imx682_3840x2160,
+ 		.num_regs = ARRAY_SIZE(imx682_3840x2160),
+@@ -785,6 +795,7 @@
+ 		.vts_min = 3528,
+ 		.crop_top = 0,
+ 		.crop_height = 6944,	/* agrupado 2x2 -> 3472 */
++		.exp_min = 4,
+ 		.link_freq_idx = 2,	/* 476,8 MHz, PLL x298 */
+ 		.regs = imx682_4624x3472,
+ 		.num_regs = ARRAY_SIZE(imx682_4624x3472),
+@@ -796,6 +807,7 @@
+ 		.vts_min = 7030,
+ 		.crop_top = 0,
+ 		.crop_height = 6944,	/* sin agrupar, los 64 Mpx */
++		.exp_min = 4,
+ 		.link_freq_idx = 0,	/* 379,2 MHz, PLL x237 */
+ 		.regs = imx682_9248x6944,
+ 		.num_regs = ARRAY_SIZE(imx682_9248x6944),
+@@ -1097,7 +1109,7 @@
+ 	 * negra o quemada, y parece un fallo de captura cuando no lo es.
+ 	 */
+ 	s->exposure = v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_EXPOSURE,
+-					IMX682_EXPOSURE_MIN,
++					m->exp_min,
+ 					m->vts_def - IMX682_EXPOSURE_MARGIN,
+ 					IMX682_EXPOSURE_STEP,
+ 					m->vts_def - IMX682_EXPOSURE_MARGIN);
+@@ -1274,7 +1286,7 @@
+ 	__v4l2_ctrl_modify_range(s->vblank, m->vts_min - m->height,
+ 				 0xffff - m->height, 1,
+ 				 m->vts_def - m->height);
+-	__v4l2_ctrl_modify_range(s->exposure, IMX682_EXPOSURE_MIN,
++	__v4l2_ctrl_modify_range(s->exposure, m->exp_min,
+ 				 m->vts_def - IMX682_EXPOSURE_MARGIN,
+ 				 IMX682_EXPOSURE_STEP,
+ 				 m->vts_def - IMX682_EXPOSURE_MARGIN);

@@ -1,0 +1,98 @@
+The SM7150's CSID and VFE1 clocks were incomplete too
+
+Same fault as 0063, in the neighbouring blocks. Comparing against the sdm845,
+which carries the same generation and DOES capture on mainline:
+
+    csid_res_845     9 clocks: cpas_ahb, cphy_rx_src, slow_ahb_src, soc_ahb,
+                               vfe0, vfe0_src, vfe0_cphy_rx, csi0, csi0_src
+    csid_res_7150    THREE:    vfe0_csid, vfe0_cphy_rx, vfe0
+
+    vfe_res_7150 VFE0   TWELVE clocks
+    vfe_res_7150 VFE1   THREE:  vfe1, vfe1_src, vfe1_axi
+
+The CSID was missing cpas_ahb, slow_ahb_src, cphy_rx_src, vfeN_src and
+vfeN_csid_src; VFE1 was missing nine of the twelve that VFE0 on the same SoC
+does ask for.
+
+The VFE1 one is not theoretical: trying to capture through csid1 -> vfe1_rdi0
+gives
+
+    VIDIOC_STREAMON returned -1 (I/O error)
+
+which is exactly what you expect from a block that gets neither the AXI bus nor
+the CSID clock turned on.
+
+The SM7150 device tree already declares all those names for the two VFEs and the
+three CSIDs, so this needs no changes outside the driver.
+
+(soc_ahb does not exist in the SM7150's camcc; its equivalent is cpas_ahb, which
+is declared and is now actually requested.)
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-08-17 00:24:01.786309115 +0200
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-08-17 00:24:20.596640555 +0200
+@@ -1829,10 +1829,17 @@
+ 	/* CSID0 */
+ 	{
+ 		.regulators = {},
+-		.clock = { "vfe0_csid", "vfe0_cphy_rx", "vfe0" },
+-		.clock_rate = { { 300000000, 384000000, 400000000 },
++		.clock = { "cpas_ahb", "slow_ahb_src", "cphy_rx_src",
++			   "vfe0", "vfe0_src", "vfe0_cphy_rx",
++			   "vfe0_csid", "vfe0_csid_src" },
++		.clock_rate = { { 0 },
++				{ 0 },
+ 				{ 0 },
+-				{ 380000000, 510000000, 637000000, 760000000 } },
++				{ 380000000, 510000000, 637000000, 760000000 },
++				{ 380000000, 510000000, 637000000, 760000000 },
++				{ 0 },
++				{ 300000000, 384000000, 400000000 },
++				{ 300000000, 384000000, 400000000 } },
+ 		.reg = { "csid0" },
+ 		.interrupt = { "csid0" },
+ 		.csid = {
+@@ -1845,10 +1852,17 @@
+ 	/* CSID1 */
+ 	{
+ 		.regulators = {},
+-		.clock = { "vfe1_csid", "vfe1_cphy_rx", "vfe1" },
+-		.clock_rate = { { 300000000, 384000000, 400000000 },
++		.clock = { "cpas_ahb", "slow_ahb_src", "cphy_rx_src",
++			   "vfe1", "vfe1_src", "vfe1_cphy_rx",
++			   "vfe1_csid", "vfe1_csid_src" },
++		.clock_rate = { { 0 },
+ 				{ 0 },
+-				{ 380000000, 510000000, 637000000, 760000000 } },
++				{ 0 },
++				{ 380000000, 510000000, 637000000, 760000000 },
++				{ 380000000, 510000000, 637000000, 760000000 },
++				{ 0 },
++				{ 300000000, 384000000, 400000000 },
++				{ 300000000, 384000000, 400000000 } },
+ 		.reg = { "csid1" },
+ 		.interrupt = { "csid1" },
+ 		.csid = {
+@@ -1907,9 +1921,21 @@
+ 	/* VFE1 */
+ 	{
+ 		.regulators = {},
+-		.clock = { "vfe1", "vfe1_src", "vfe1_axi"},
+-		.clock_rate = { { 19200000, 380000000, 510000000, 637000000, 760000000 },	/* ftbl_cam_cc_ife_0_clk_src */
+-				{ 19200000, 380000000, 510000000, 637000000, 760000000 },	/* ftbl_cam_cc_ife_0_clk_src */
++		.clock = { "cam_hf_axi", "cam_sf_axi", "slow_ahb_src",
++			   "cpas_ahb", "vfe1", "vfe1_src", "vfe1_axi",
++			   "vfe1_cphy_rx", "vfe1_csid_src", "vfe1_csid",
++			   "camnoc_axi_src", "camnoc_axi" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 19200000, 380000000, 510000000, 637000000, 760000000 },
++				{ 19200000, 380000000, 510000000, 637000000, 760000000 },
++				{ 0 },
++				{ 0 },
++				{ 300000000, 384000000, 400000000 },
++				{ 300000000, 384000000, 400000000 },
++				{ 0 },
+ 				{ 0 } },
+ 		.reg = { "vfe1" },
+ 		.interrupt = { "vfe1" },

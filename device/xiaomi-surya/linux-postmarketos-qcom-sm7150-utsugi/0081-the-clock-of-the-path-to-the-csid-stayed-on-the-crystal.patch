@@ -1,0 +1,161 @@
+The clock that carries the symbols from the CSIPHY to the CSID stayed on the crystal
+
+Between the CSIPHY and the CSID there is a path, and that path has its own
+clock: cphy_rx. On the SM7150 nobody ever asked it for a frequency, so it stayed
+parked on the crystal, at 19,2 MHz.
+
+Measured live with clk_summary, with the pipeline really streaming:
+
+    camcc_ife_0_clk_src         380000097     <- set
+    camcc_ife_0_csid_clk_src    300000000     <- set
+    camcc_csi1phytimer_clk_src  300000000     <- set
+    camcc_camnoc_axi_clk_src    150000000     <- set
+    camcc_cphy_rx_clk_src        19200000     <- the crystal
+
+The cause is in the resource table. csid_set_clock_rates() only calls
+clk_set_rate() if the entry has some frequency:
+
+    } else if (clock->nfreqs) {
+            clk_set_rate(clock->clk, clock->freq[0]);
+    }
+
+and nfreqs is counted stopping at the first zero, so { 0 } literally means "do
+not ask it for anything". The SM7150 had { 0 } for vfe0_cphy_rx and
+vfe1_cphy_rx. The sdm845 -which is the same block and DOES capture in mainline-
+asks for 400000000 for that same clock.
+
+WHY THIS EXPLAINS THE SYMPTOM
+-----------------------------
+With the link at 845,7 Mbps per lane the byte clock runs at ~106 MHz. At 19,2
+MHz the CSID cannot sample anything, and -this is the important part- since the
+receive path is never clocked at all, it does not LATCH ERRORS either.
+
+That fits exactly what had been measured and fitted nothing else:
+
+    the sensor emits         frame counter advancing at ~30/s
+    the CSIPHY receives      the five lanes leave the rest state when emitting,
+                             and their interrupts follow the frame rate
+    the CSID sees NOTHING    packets=0, crc=0, MISR=0, and status register
+                             0x20 reads 0x00000000 WHOLE
+
+A receiver connected to a transmitter that does emit, even with the wrong rate
+or swapped polarity, latches sync errors or bad CRCs. Absolute zero is not "I
+receive badly": it is "the signal does not reach me". And that is why sweeping
+the settle count, the link rate, the lane count (2, 3 and 4) and the PHY
+selector never moved a single bit: all those settings act on a receiver that was
+not working.
+
+The SM7150 supports 19,2 / 300 / 384 / 400 MHz for this clock, so the same 400
+MHz as the sdm845 is used.
+
+A module parameter to sweep the frequency at runtime is added as well, plus a
+trace that records the rate that is REALLY left after asking for it: asking for
+a frequency does not guarantee having it, and this clock had been on the crystal
+forever without anything saying so.
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1837,7 +1837,30 @@
+ 				{ 0 },
+ 				{ 380000000, 510000000, 637000000, 760000000 },
+ 				{ 380000000, 510000000, 637000000, 760000000 },
+-				{ 0 },
++				/*
++				 * cphy_rx es el reloj del camino que va del
++				 * CSIPHY al CSID. Estaba a { 0 }, que en camss
++				 * quiere decir "no le pidas frecuencia": el reloj
++				 * se queda aparcado en el cuarzo, 19,2 MHz.
++				 * Medido en vivo con clk_summary mientras la
++				 * tuberia transmitia:
++				 *
++				 *   camcc_ife_0_csid_clk      300000000
++				 *   camcc_ife_0_clk           380000097
++				 *   camcc_ife_0_cphy_rx_clk    19200000  <--
++				 *
++				 * Con el enlace a 845,7 Mbps por carril el reloj
++				 * de bytes va a ~106 MHz. A 19,2 MHz el CSID no
++				 * puede muestrear, y como el camino de recepcion
++				 * nunca se cadencia tampoco enclava errores: el
++				 * registro de estado sale 0x00000000 entero, que
++				 * es justo el sintoma que se venia observando.
++				 *
++				 * El sdm845 -mismo bloque, y captura en mainline-
++				 * pide 400 MHz para este mismo reloj. El SM7150
++				 * admite 19,2 / 300 / 384 / 400 MHz.
++				 */
++				{ 400000000 },
+ 				{ 300000000, 384000000, 400000000 },
+ 				{ 300000000, 384000000, 400000000 } },
+ 		.reg = { "csid0" },
+@@ -1860,7 +1883,30 @@
+ 				{ 0 },
+ 				{ 380000000, 510000000, 637000000, 760000000 },
+ 				{ 380000000, 510000000, 637000000, 760000000 },
+-				{ 0 },
++				/*
++				 * cphy_rx es el reloj del camino que va del
++				 * CSIPHY al CSID. Estaba a { 0 }, que en camss
++				 * quiere decir "no le pidas frecuencia": el reloj
++				 * se queda aparcado en el cuarzo, 19,2 MHz.
++				 * Medido en vivo con clk_summary mientras la
++				 * tuberia transmitia:
++				 *
++				 *   camcc_ife_0_csid_clk      300000000
++				 *   camcc_ife_0_clk           380000097
++				 *   camcc_ife_0_cphy_rx_clk    19200000  <--
++				 *
++				 * Con el enlace a 845,7 Mbps por carril el reloj
++				 * de bytes va a ~106 MHz. A 19,2 MHz el CSID no
++				 * puede muestrear, y como el camino de recepcion
++				 * nunca se cadencia tampoco enclava errores: el
++				 * registro de estado sale 0x00000000 entero, que
++				 * es justo el sintoma que se venia observando.
++				 *
++				 * El sdm845 -mismo bloque, y captura en mainline-
++				 * pide 400 MHz para este mismo reloj. El SM7150
++				 * admite 19,2 / 300 / 384 / 400 MHz.
++				 */
++				{ 400000000 },
+ 				{ 300000000, 384000000, 400000000 },
+ 				{ 300000000, 384000000, 400000000 } },
+ 		.reg = { "csid1" },
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -27,6 +27,15 @@
+ #include "camss-csid-gen1.h"
+ #include "camss.h"
+ 
++/*
++ * Para barrer la frecuencia del camino CSIPHY->CSID sin recompilar.
++ * -1 usa la de la tabla. El SM7150 admite 19200000, 300000000,
++ * 384000000 y 400000000; cualquier otro valor lo redondea el RCG.
++ */
++static int tasa_cphy_rx = -1;
++module_param(tasa_cphy_rx, int, 0644);
++MODULE_PARM_DESC(tasa_cphy_rx, "Hz del reloj cphy_rx del CSID (-1 = tabla)");
++
+ /* offset of CSID registers in VFE region for VFE 480 */
+ #define VFE_480_CSID_OFFSET 0x4000
+ #define VFE_480_LITE_CSID_OFFSET 0x200
+@@ -589,6 +598,22 @@
+ 				dev_err(dev, "clk set rate failed: %d\n", ret);
+ 				return ret;
+ 			}
++		} else if (strstr(clock->name, "cphy_rx")) {
++			/*
++			 * Se trata aparte para poder barrerlo en caliente y
++			 * para DEJAR CONSTANCIA del ritmo que queda de
++			 * verdad: pedir una frecuencia no garantiza tenerla,
++			 * y este reloj llevaba desde siempre en el cuarzo sin
++			 * que nada lo dijera.
++			 */
++			unsigned long pedida = tasa_cphy_rx > 0 ? tasa_cphy_rx :
++					       (clock->nfreqs ? clock->freq[0] : 0);
++
++			if (pedida)
++				clk_set_rate(clock->clk, pedida);
++
++			dev_info(dev, "%s: pedido %lu Hz, queda %lu Hz\n",
++				 clock->name, pedida, clk_get_rate(clock->clk));
+ 		} else if (clock->nfreqs) {
+ 			clk_set_rate(clock->clk, clock->freq[0]);
+ 		}

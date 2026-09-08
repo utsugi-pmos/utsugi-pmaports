@@ -1,0 +1,66 @@
+pstore discards the whole buffer when the write cursor is ahead of the size,
+even though the data is intact. On the surya that happens ALWAYS, and that is
+why /sys/fs/pstore has come out empty in every session and there has never been
+a trace of the boot hangs.
+
+MEASURED LIKE THIS (2026-08-15): 200 counted lines were written, exactly 5490
+bytes, into /dev/pmsg0. There was a hang, a hard button press and a boot. The
+next boot said:
+
+    ramoops: found existing invalid buffer, size 5234, start 5490
+
+start is EXACTLY the 5490 bytes written: the data survived the forced power-off
+in full. The only thing wrong is the size: 5234 (0x1472) against 5490 (0x1572).
+They differ by ONE BIT.
+
+And it explains the other symptom, which looked unrelated:
+
+    pstore: zlib_inflate() failed, ret = -3!
+
+The dmesg record is read truncated to "size", the compressed stream ends up cut
+in half and fails to inflate. A single cause for both.
+
+Why it happens: persistent_ram_write() advances "start" BEFORE writing and
+"size" AFTER. Between the two there is a window, and if the device dies there
+-or the header loses a bit on reset, which is what is seen here-, start > size
+is left behind. The validity check treats that as garbage and calls
+persistent_ram_zap().
+
+This patch distinguishes the two cases that today are confused:
+
+  - a counter that DOES NOT FIT in the zone: real garbage, thrown away as
+    before.
+  - start ahead of size, both within the zone: the header is half done but the
+    data is there. It is trimmed and saved instead of thrown away.
+
+Worst case: a few extra bytes are read at the end of the trace. In exchange for
+having a trace, which is what there is not.
+
+--- a/fs/pstore/ram_core.c
++++ b/fs/pstore/ram_core.c
+@@ -543,11 +543,23 @@
+ 			return 0;
+ 		}
+
+-		if (buffer_size(prz) > prz->buffer_size ||
+-		    buffer_start(prz) > buffer_size(prz)) {
++		if (buffer_size(prz) > prz->buffer_size ||
++		    buffer_start(prz) > prz->buffer_size) {
++			/* Un contador que no cabe en la zona: basura. */
+ 			pr_info("found existing invalid buffer, size %zu, start %zu\n",
+ 				buffer_size(prz), buffer_start(prz));
+ 			zap = true;
++		} else if (buffer_start(prz) > buffer_size(prz)) {
++			/*
++			 * El cursor de escritura va por delante del tamano: la
++			 * cabecera quedo a medias, pero los datos hasta "start"
++			 * estan escritos. Antes se tiraba el bufer entero por
++			 * esto, y con el la unica traza del fallo.
++			 */
++			pr_info("found half-written buffer, size %zu, start %zu: recovering\n",
++				buffer_size(prz), buffer_start(prz));
++			atomic_set(&prz->buffer->size, buffer_start(prz));
++			persistent_ram_save_old(prz);
+ 		} else {
+ 			pr_debug("found existing buffer, size %zu, start %zu\n",
+ 				 buffer_size(prz), buffer_start(prz));

@@ -1,0 +1,259 @@
+TEMPORARY DIAGNOSTIC: what the CSI-2 receiver sees, and counters that can be
+zeroed
+
+WHY
+---
+Measured on 2026-08-16 with the front camera (S5K3T2, 4 D-PHY lanes, CSIPHY1):
+
+  - the sensor really does transmit: its frame counter (0x0005) advances about
+    30 counts per second while it runs,
+  - CSIPHY1 DOES hear that sensor: stop the sensor over I2C with the pipeline
+    running and the interrupts drop from 8700/s to ZERO; start it again and they
+    come back at 8100/s,
+  - and not a single frame reaches userspace.
+
+That is: the physical link exists and reaches the right PHY. It fails further
+in. To know where, we need to see the status register of the CSID's CSI-2
+receiver, which is what tells whether packets arrive, whether the start-of-
+transmission sync fails, whether there is a CRC error or whether the virtual
+channel does not match.
+
+Mainline leaves it completely in the dark: it only unmasks the CSID's "reset
+done" bit (CSID_TOP_IRQ_MASK = 1) and leaves CSI2_RX_IRQ_MASK and RDIN_IRQ_MASK
+at zero. The CSID's /proc/interrupts counters count one per session -the reset
+one- and that can easily be mistaken for "nothing is arriving".
+
+THE LESSON THIS PATCH BRINGS, AND THAT COST HALF A DAY
+------------------------------------------------------
+The previous diagnostic (0052) prints through dev_info with a cap of 20 or 25
+lines held in a static that is NEVER reset. If anything touches the camera at
+boot -pipewire does-, the quota is already spent and the log comes out EMPTY
+even though the hardware is firing two million times. On that basis a "the
+CSIPHY sees nothing" was taken as good when it was false, and a while was spent
+chasing a routing that was fine.
+
+That is why here the counters go as module parameters in 0644: they are READ and
+ZEROED from userspace, before each test. They do not flood the log and they do
+not lie.
+
+WHAT IT ADDS
+------------
+  diag_rx_visto      OR of CSI2_RX_IRQ_STATUS seen (CSID)
+  diag_rdi0_visto    OR of RDIN0_IRQ_STATUS seen (CSID)
+  diag_rx_mascara    mask to write into both IRQ_MASKs. Default 0, that is, like
+                     mainline: unmasking can give a storm at 30 frames per
+                     second and this phone is sensitive to timing, so it is
+                     turned on by hand
+  diag_phy_estado    OR of the eleven CSIPHY CSI_COMMON_STATUS
+  diag_phy_saltos    number of times the CSIPHY ISR has fired
+
+And it reads the receiver status on the STOP path, which is the only place where
+what happened during the whole transmission can be seen in one piece: the CSID
+ISR only fires on "reset done", which happens on START, and besides, that same
+reset may already have cleared the register.
+
+BUT THE STOP PATH WAS NOT BEING EXECUTED
+----------------------------------------
+csid_set_stream() calls configure_stream() ONLY if need_vc_update is set, and
+clears the flag right there. The flag is set when the link is wired up, that is,
+before starting; by the time the stop comes it is already false, so
+
+    configure_stream(csid, 0)
+
+NEVER runs. Immediate consequence for us: the diagnostic returned 0x00000000 and
+looked like a result. Underlying consequence: the RDI is not stopped when the
+transmission ends and the receiver is not reconfigured.
+
+It is fixed by adding `|| !enable` to that condition.
+
+This does NOT fix anything: it is for looking. It goes away once the cause is
+known.
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 20:50:17.721934459 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 20:49:32.180366010 +0200
+@@ -10,12 +10,50 @@
+ #include <linux/interrupt.h>
+ #include <linux/io.h>
+ #include <linux/kernel.h>
++#include <linux/module.h>
++#include <linux/moduleparam.h>
+ #include <linux/of.h>
+ 
+ #include "camss-csid.h"
+ #include "camss-csid-gen2.h"
+ #include "camss.h"
+ 
++/*
++ * DIAGNOSTICO TEMPORAL: que ve el receptor CSI-2.
++ *
++ * Los contadores van como parametros de modulo en 0644, o sea que se LEEN y se
++ * PONEN A CERO desde el espacio de usuario. Eso importa mas de lo que parece:
++ * el diagnostico anterior imprimia por dev_info con un tope de 25 lineas y un
++ * contador estatico que no se reinicia nunca, asi que si algo tocaba la camara
++ * al arrancar -pipewire lo hace- la cuota estaba gastada y el registro salia
++ * VACIO aunque el hardware estuviera disparando dos millones de veces. Eso ya
++ * llevo a dar por bueno un "el PHY no ve nada" que era falso.
++ *
++ * Un contador que se puede poner a cero antes de cada prueba no tiene ese
++ * problema y ademas no inunda el registro.
++ */
++static unsigned int diag_rx_visto;
++module_param(diag_rx_visto, uint, 0644);
++MODULE_PARM_DESC(diag_rx_visto,
++	"OR de CSI2_RX_IRQ_STATUS visto. Escribir 0 para reiniciar.");
++
++static unsigned int diag_rdi0_visto;
++module_param(diag_rdi0_visto, uint, 0644);
++MODULE_PARM_DESC(diag_rdi0_visto,
++	"OR de RDIN0_IRQ_STATUS visto. Escribir 0 para reiniciar.");
++
++/*
++ * Mainline deja enmascaradas TODAS las interrupciones del receptor CSI-2 y de
++ * los RDI: solo desenmascara el bit de "reset hecho". Con esto se pueden
++ * encender, pero por defecto NO se hace: a 30 fotogramas por segundo y varias
++ * interrupciones por fotograma esto puede convertirse en una tormenta, y este
++ * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
++ */
++static unsigned int diag_rx_mascara;
++module_param(diag_rx_mascara, uint, 0644);
++MODULE_PARM_DESC(diag_rx_mascara,
++	"Mascara para CSI2_RX_IRQ_MASK y RDIN_IRQ_MASK. 0 = como mainline.");
++
+ /* The CSID 2 IP-block is different from the others,
+  * and is of a bare-bones Lite version, with no PIX
+  * interface support. As a result of that it has an
+@@ -190,6 +228,15 @@
+ 		val |= 1 << CSI2_RX_CFG1_VC_MODE;
+ 	val |= 1 << CSI2_RX_CFG1_MISR_EN;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG1);
++
++	/* DIAGNOSTICO: desenmascarar el receptor si nos lo piden. */
++	if (diag_rx_mascara) {
++		writel_relaxed(diag_rx_mascara,
++			       csid->base + CSID_CSI2_RX_IRQ_MASK);
++		writel_relaxed(diag_rx_mascara,
++			       csid->base + CSID_CSI2_RDIN_IRQ_MASK(vc));
++		writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
++	}
+ }
+ 
+ static void __csid_ctrl_rdi(struct csid_device *csid, int enable, u8 rdi)
+@@ -332,6 +379,27 @@
+ 			if (tg->enabled)
+ 				__csid_configure_testgen(csid, enable, i);
+ 
++			/*
++			 * DIAGNOSTICO: leer el estado del receptor ANTES de
++			 * apagar nada. Es el unico sitio donde se puede ver de
++			 * una pieza que ha pasado durante toda la transmision:
++			 * el ISR solo se dispara con el "reset hecho", que
++			 * ocurre al ARRANCAR, asi que esperar a el significa
++			 * leer lo de la sesion anterior.
++			 */
++			if (!enable) {
++				u32 rx = readl_relaxed(csid->base +
++						CSID_CSI2_RX_IRQ_STATUS);
++				u32 rdi = readl_relaxed(csid->base +
++						CSID_CSI2_RDIN_IRQ_STATUS(i));
++
++				diag_rx_visto |= rx;
++				diag_rdi0_visto |= rdi;
++				dev_info(csid->camss->dev,
++					 "csid%d al parar: rx=0x%08x rdin%d=0x%08x\n",
++					 csid->id, rx, i, rdi);
++			}
++
+ 			__csid_configure_rdi_stream(csid, enable, i);
+ 			__csid_configure_rx(csid, &csid->phy, i);
+ 			__csid_ctrl_rdi(csid, enable, i);
+@@ -373,12 +441,15 @@
+ 	 */
+ 	rx_status = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
+ 	writel_relaxed(rx_status, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
++	diag_rx_visto |= rx_status;
+ 
+ 	/* Read and clear IRQ status for each enabled RDI channel */
+ 	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
+ 		if (csid->phy.en_vc & BIT(i)) {
+ 			val = readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_STATUS(i));
+ 			writel_relaxed(val, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
++			if (i == 0)
++				diag_rdi0_visto |= val;
+ 			if (veces < 25)
+ 				dev_info(csid->camss->dev,
+ 					 "csid%d rx=0x%08x rdin%d=0x%08x\n",
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 20:50:17.721794705 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 20:50:00.067722861 +0200
+@@ -964,6 +964,28 @@
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
+ }
+ 
++/*
++ * DIAGNOSTICO: el OR de los once registros de estado y la cuenta de veces que
++ * ha saltado, legibles y reiniciables en caliente por
++ * /sys/module/qcom_camss/parameters/.
++ *
++ * Sustituye al tope de 20 lineas por dev_info que habia antes. Aquel tope
++ * usaba un estatico que no se reinicia nunca, asi que bastaba con que algo
++ * tocara la camara al arrancar -pipewire lo hace- para que la cuota estuviera
++ * gastada y el registro saliera vacio con el PHY disparando dos millones de
++ * veces. Se dio por bueno un "el PHY no ve nada" que era falso.
++ */
++static unsigned int diag_phy_estado[11];
++static int diag_phy_estado_n = 11;
++module_param_array(diag_phy_estado, uint, &diag_phy_estado_n, 0644);
++MODULE_PARM_DESC(diag_phy_estado,
++	"OR de los 11 CSI_COMMON_STATUS del CSIPHY. Escribir ceros para reiniciar.");
++
++static unsigned int diag_phy_saltos;
++module_param(diag_phy_saltos, uint, 0644);
++MODULE_PARM_DESC(diag_phy_saltos,
++	"Veces que ha saltado el ISR del CSIPHY. Escribir 0 para reiniciar.");
++
+ static irqreturn_t csiphy_isr(int irq, void *dev)
+ {
+ 	struct csiphy_device *csiphy = dev;
+@@ -980,6 +1002,7 @@
+ 							  regs->common_status_offset, i));
+ 
+ 		vistos[i] = val;
++		diag_phy_estado[i] |= val;
+ 
+ 		writel_relaxed(val, csiphy->base +
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, c));
+@@ -995,6 +1018,8 @@
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, i));
+ 	}
+ 
++	diag_phy_saltos++;
++
+ 	/* Acotado: si el enlace da ruido, esto se dispara sin parar. */
+ 	if (veces++ < 20)
+ 		dev_info(csiphy->camss->dev,
+--- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-08-16 21:30:17.978653641 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-08-16 21:30:32.676309171 +0200
+@@ -776,7 +776,24 @@
+ 			return -ENOLINK;
+ 	}
+ 
+-	if (csid->phy.need_vc_update) {
++	/*
++	 * DIAGNOSTICO (y probablemente algo mas).
++	 *
++	 * Tal como esta en mainline, configure_stream() SOLO se llama si esta
++	 * puesta need_vc_update, y la bandera se borra ahi mismo. Se pone al
++	 * cablear el enlace, o sea antes de arrancar; cuando se llega a la
++	 * PARADA ya vale falso, asi que configure_stream(csid, 0) no se ejecuta
++	 * NUNCA. El RDI no se para al terminar y el receptor no se reconfigura.
++	 *
++	 * Aqui interesa por una razon inmediata: el unico sitio desde el que se
++	 * puede leer de una pieza que ha visto el receptor CSI-2 durante toda
++	 * la transmision es el camino de parada. Leerlo en el ISR no vale,
++	 * porque el ISR solo salta con el "reset hecho" -que ocurre al
++	 * ARRANCAR- y el propio reset puede haber borrado ya el registro.
++	 *
++	 * Sin esto, el diagnostico daba 0x00000000 y parecia un resultado.
++	 */
++	if (csid->phy.need_vc_update || !enable) {
+ 		csid->res->hw_ops->configure_stream(csid, enable);
+ 		csid->phy.need_vc_update = false;
+ 	}

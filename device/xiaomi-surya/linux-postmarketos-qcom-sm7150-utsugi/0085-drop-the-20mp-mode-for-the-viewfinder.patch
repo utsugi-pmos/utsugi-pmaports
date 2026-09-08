@@ -1,0 +1,94 @@
+Leave the 20 MP mode out: libcamera always picks the biggest one
+
+The 5184x3880 mode WORKS. It is not withdrawn because it is broken, it is
+withdrawn because libcamera always picks the highest-resolution mode and with it
+declared the Plasma camera ends up unusable for two reasons at once:
+
+SLOWNESS. libcamera's Bayer development runs on the CPU. Measured on the phone:
+
+    Debayer processed 30 frames in 1604557us, 53485 us/frame
+
+53 ms per frame is barely 19 per second, and the viewfinder stutters. At
+2592x1940 it is four times fewer pixels.
+
+DARKNESS. The 5 MP mode comes out of a 2x2 binning, that is four times more
+light per pixel. With the same scene and the same exposure, the signal above the
+black pedestal was ~6 times higher in the combined one:
+
+    mode         median    (pedestal = 64)
+    2592x1940      70..156
+    5184x3880      65
+
+So the big mode gives less image and costs four times the work.
+
+WARNING FOR THE FUTURE
+----------------------
+An earlier version of this patch said the big mode "produces no image". IT WAS
+FALSE, and the instrument was to blame: the analysis used 3240 bytes per line
+(2592 packed pixels) when the real stride is 3248 -there are 8 bytes of padding-
+so every row was shifted and the unpacking went out of alignment. It was
+withdrawn before compiling. The mode is kept in the file, marked __maybe_unused,
+to restore it when there is hardware development.
+--- a/drivers/media/i2c/s5k3t2.c
++++ b/drivers/media/i2c/s5k3t2.c
+@@ -463,7 +463,7 @@
+ 	{ CCI_REG16(0xb13c), 0x0800 },
+ };
+ 
+-static const struct cci_reg_sequence s5k3t2_mode_5184x3880[] = {
++static const struct cci_reg_sequence __maybe_unused s5k3t2_mode_5184x3880[] = {
+ 	{ CCI_REG16(0x6028), 0x4000 },
+ 	{ CCI_REG16(0x0136), 0x1300 },
+ 	{ CCI_REG16(0x013e), 0x00c8 },
+@@ -620,17 +620,40 @@
+ 			.num_regs = ARRAY_SIZE(s5k3t2_mode_2592x1940),
+ 		},
+ 	},
+-	{
+-		.width = 5184,
+-		.height = 3880,
+-		.hts = 5440,
+-		.vts = 4160,
+-		.exposure = 512,
+-		.reg_list = {
+-			.regs = s5k3t2_mode_5184x3880,
+-			.num_regs = ARRAY_SIZE(s5k3t2_mode_5184x3880),
+-		},
+-	},
++	/*
++	 * El modo de 20 MP se queda FUERA de momento, y no porque este roto
++	 * -funciona-, sino porque libcamera elige siempre el modo MAS GRANDE y
++	 * con este declarado la camara de Plasma es inusable por dos motivos a
++	 * la vez, los dos medidos en el movil:
++	 *
++	 *   LENTITUD. El revelado de Bayer de libcamera va por CPU:
++	 *
++	 *       Debayer processed 30 frames in 1604557us, 53485 us/frame
++	 *
++	 *     53 ms por fotograma son 19 por segundo mal contados, y el visor
++	 *     va a tirones. A 2592x1940 son cuatro veces menos pixeles.
++	 *
++	 *   OSCURIDAD. El de 5 MP sale de un agrupado 2x2, o sea cuatro veces
++	 *     mas luz por pixel. Medido con la misma escena y la misma
++	 *     exposicion, la mediana sobre el pedestal de negro (64) era ~6
++	 *     veces mayor en el combinado.
++	 *
++	 * O sea que el modo grande da menos imagen y cuesta cuatro veces mas.
++	 * Se repone cuando haya revelado por hardware o alguna forma de
++	 * sugerirle a libcamera que modo usar para el visor.
++	 *
++	 *	{
++	 *		.width = 5184,
++	 *		.height = 3880,
++	 *		.hts = 5440,
++	 *		.vts = 4160,
++	 *		.exposure = 512,
++	 *		.reg_list = {
++	 *			.regs = s5k3t2_mode_5184x3880,
++	 *			.num_regs = ARRAY_SIZE(s5k3t2_mode_5184x3880),
++	 *		},
++	 *	},
++	 */
+ };
+ 
+ /*

@@ -1,0 +1,75 @@
+DIAGNOSTIC: dump the CSIPHY register space on stop
+
+WHY
+---
+Same as with the CSID (patch 0078): everything the vendor writes has already
+been verified one by one and it matches -lane table 115 of 115 against
+csiphy_2ph_v1_2_reg, common block corrected to version 1.2, reset sequence,
+interrupt masks with the exact pattern-, so what is missing is what is NOT
+written and is not known to exist.
+
+And there is one concrete measurement that can only be made with the whole dump:
+COMPARING IT WITH THE SENSOR EMITTING AGAINST THE SENSOR SILENT.
+
+The registers that change between those two captures are the ones that respond
+to the real signal. That is where the only clue left lies about the question
+that the whole investigation has gone without answering: whether the PHY ever
+sees HIGH SPEED or only low-power transitions.
+
+So far that question could only be attacked with the eleven status registers,
+which are undocumented anywhere -not even Qualcomm decodes them, their driver
+dumps them raw- and with the interrupt rate.
+
+It goes behind a parameter because it is 288 reads and 72 lines of register.
+
+This does NOT fix anything: it is to look.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 14:38:20.963164673 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 14:38:20.979295927 +0200
+@@ -1085,6 +1085,11 @@
+ MODULE_PARM_DESC(pulso_terminacion,
+ 	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
+ 
++static int volcado_csiphy;
++module_param(volcado_csiphy, int, 0644);
++MODULE_PARM_DESC(volcado_csiphy,
++	"1 = volcar el espacio de registros del CSIPHY al parar la transmision.");
++
+ static int releer_registros;
+ module_param(releer_registros, int, 0644);
+ MODULE_PARM_DESC(releer_registros,
+@@ -1487,6 +1492,35 @@
+ 				CSIPHY_3PH_CMN_CSI_COMMON_STATUSn(regs->offset,
+ 						regs->common_status_offset, i));
+ 
++	/*
++	 * VOLCADO COMPLETO DEL CSIPHY.
++	 *
++	 * Igual que con el CSID: ya se ha comprobado uno por uno todo lo que el
++	 * fabricante escribe y coincide, asi que lo que falta es lo que no se
++	 * escribe y no se sabe que existe.
++	 *
++	 * Lo interesante es COMPARAR el volcado con el sensor emitiendo contra
++	 * el sensor mudo: los registros que cambien son los que responden a la
++	 * senal de verdad, y ahi estaria la unica pista que queda sobre si el
++	 * PHY llega a ver alta velocidad o solo baja potencia.
++	 */
++	if (volcado_csiphy) {
++		int a;
++
++		for (a = 0; a < 0x900; a += 32)
++			dev_info(csiphy->camss->dev,
++				 "csiphy%d %03x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
++				 csiphy->id, a,
++				 readl_relaxed(csiphy->base + a + 0x00),
++				 readl_relaxed(csiphy->base + a + 0x04),
++				 readl_relaxed(csiphy->base + a + 0x08),
++				 readl_relaxed(csiphy->base + a + 0x0c),
++				 readl_relaxed(csiphy->base + a + 0x10),
++				 readl_relaxed(csiphy->base + a + 0x14),
++				 readl_relaxed(csiphy->base + a + 0x18),
++				 readl_relaxed(csiphy->base + a + 0x1c));
++	}
++
+ 	dev_info(csiphy->camss->dev,
+ 		 "csiphy%d al parar: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+ 		 csiphy->id, diag_phy_estado[0], diag_phy_estado[1],

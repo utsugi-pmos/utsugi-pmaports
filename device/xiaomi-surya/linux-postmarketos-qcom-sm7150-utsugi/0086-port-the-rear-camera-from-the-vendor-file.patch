@@ -1,0 +1,313 @@
+Port the rear camera from the phone's own vendor file
+
+The IMX682 driver did not come from this phone: its tables were copied from
+MediaTek's GPL driver for the same sensor. That left FOUR things wrong, all of
+them checkable against com.qti.sensormodule.j20c_*_imx682_wide.bin, which is
+what the vendor Android hands to CamX:
+
+                     vendor           driver             where it shows
+    input clock      19.200.000 Hz    24.000.000         powerSetting
+    lanes            3                2                  laneAssign = 0x210
+                                                         and 0x0114 = 0x02
+    link_freq        435,2 MHz        1020 MHz           output PLL
+    tables           from this phone  from a MediaTek    regSetting
+
+THE CLOCK, WHICH IS THE MOST TREACHEROUS ONE
+--------------------------------------------
+Changing assigned-clock-rates is not enough. The sensor itself carries the clock
+it BELIEVES it has in 0x0136/0x0137, in 8.8 fixed point, and the inherited table
+left it at 0x1800 = 24 MHz. With that value wrong, all the PLL multipliers
+produce the wrong frequencies even if the physical clock is the right one. It
+becomes 0x1333.
+
+THE MODE
+--------
+The file carries FIVE modes, all of them at three lanes:
+
+    9248x6944  1x1  hts=20576 vts=7030  link 379,2 MHz
+    4624x3472  2x2  hts= 9432 vts=3528  link 476,8 MHz
+    3840x2160  2x2  hts= 5144 vts=2218  link 435,2 MHz
+    2312x1304  4x4  hts= 2728 vts=1680  link 435,2 MHz   <- this one
+    1920x1080  4x4  hts= 2728 vts=1148  link 520,0 MHz
+
+Only the 2312x1304 one is declared, and on purpose. With the front camera it was
+learned that libcamera ALWAYS takes the biggest mode and that Bayer development
+runs on the CPU: with the 20 MP one declared the viewfinder ran at 53 ms per
+frame and darker on top of that. This one bins 4x4, so it is 3 MP instead of 64
+and sixteen times more light per pixel. The other four are noted down in the
+comment.
+
+HOW IT WAS EXTRACTED
+--------------------
+With camara/sacar-la-trasera.py. The format was not obvious: regSetting does NOT
+carry (address, value) pairs but groups of ten u64 of which only the third is
+useful -the address-, and the values live apart in 8-byte registerData
+descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
+(RAW10) and 0x0114 = 0x02; any other way you get garbage.
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -74,15 +74,15 @@
+  * aborta con "Pixel clock is too high for CSIPHY". Ver el comentario de la
+  * tabla del modo.
+  */
+-#define IMX682_LINK_FREQ		1020000000LL
+-#define IMX682_DATA_LANES		2
++#define IMX682_LINK_FREQ		435200000LL
++#define IMX682_DATA_LANES		3
+ #define IMX682_BITS_PER_PIXEL		10
+ 
+ /* pixeles por segundo que salen por el enlace, que es lo que espera V4L2 */
+ #define IMX682_PIXEL_RATE \
+ 	(IMX682_LINK_FREQ * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL)
+ 
+-#define IMX682_XVCLK_HZ			24000000
++#define IMX682_XVCLK_HZ			19200000
+ 
+ struct imx682_reg {
+ 	u16 addr;
+@@ -94,8 +94,16 @@
+  * proveedor de modulo (imx682sunny). Vale tal cual porque aqui el MCLK se
+  * pone a 24 MHz, que es para lo que estan calculados sus multiplicadores. */
+ static const struct imx682_reg imx682_global[] = {
+-	{ 0x0136, 0x18 },
+-	{ 0x0137, 0x00 },
++	/*
++	 * 0x0136/0x0137 es el reloj de entrada que el sensor cree tener,
++	 * en coma fija 8.8. Estaba a 0x1800 = 24 MHz, que es lo que
++	 * suponia el driver de MediaTek del que venia esta tabla. La
++	 * secuencia de encendido de FABRICA de este movil le da
++	 * 19.200.000 Hz, o sea 0x1333. Con el valor mal, todos los
++	 * multiplicadores del PLL producen frecuencias equivocadas.
++	 */
++	{ 0x0136, 0x13 },
++	{ 0x0137, 0x33 },
+ 	{ 0x3C7E, 0x02 },
+ 	{ 0x3C7F, 0x0A },
+ 	{ 0x0111, 0x02 },
+@@ -281,97 +289,97 @@
+  * diagnosticar.
+  *
+  * El precio son unos 4,2 fotogramas por segundo a 48 megapixeles. */
+-static const struct imx682_reg imx682_8000x6000[] = {
++/*
++ * Modo 3 de los CINCO que trae el fichero de fabrica
++ * (com.qti.sensormodule.j20c_*_imx682_wide.bin), sacado con
++ * camara/sacar-la-trasera.py. 74 registros, copiados sin tocar nada.
++ *
++ * Se elige este y no el de 64 MP por lo aprendido con la frontal:
++ * libcamera coge siempre el modo mas grande, y el revelado de Bayer
++ * va por CPU. Este agrupa 4x4 (0x0900/0x0901 = 0x01/0x44), asi que
++ * son 3 MP en vez de 64 y ademas dieciseis veces mas luz por pixel.
++ *
++ * Los otros cuatro, para cuando haga falta:
++ *     9248x6944  1x1  hts=20576 vts=7030  link 379,2 MHz
++ *     4624x3472  2x2  hts= 9432 vts=3528  link 476,8 MHz
++ *     3840x2160  2x2  hts= 5144 vts=2218  link 435,2 MHz
++ *     1920x1080  4x4  hts= 2728 vts=1148  link 520,0 MHz
++ */
++static const struct imx682_reg imx682_2312x1304[] = {
+ 	{ 0x0112, 0x0A },
+ 	{ 0x0113, 0x0A },
+-	{ 0x0114, 0x01 },
+-	{ 0x0342, 0x39 },
+-	{ 0x0343, 0x70 },
+-	{ 0x0340, 0x19 },
+-	{ 0x0341, 0x80 },
++	{ 0x0114, 0x02 },
++	{ 0x0342, 0x0A },
++	{ 0x0343, 0xA8 },
++	{ 0x0340, 0x06 },
++	{ 0x0341, 0x90 },
+ 	{ 0x0344, 0x00 },
+ 	{ 0x0345, 0x00 },
+-	{ 0x0346, 0x00 },
+-	{ 0x0347, 0x00 },
+-	{ 0x0348, 0x1F },
+-	{ 0x0349, 0x3F },
++	{ 0x0346, 0x03 },
++	{ 0x0347, 0x60 },
++	{ 0x0348, 0x24 },
++	{ 0x0349, 0x1F },
+ 	{ 0x034A, 0x17 },
+-	{ 0x034B, 0x6F },
+-	{ 0x0220, 0x62 },
+-	{ 0x0222, 0x01 },
+-	{ 0x0900, 0x00 },
+-	{ 0x0901, 0x11 },
+-	{ 0x0902, 0x0A },
+-	{ 0x3140, 0x00 },
+-	{ 0x3246, 0x01 },
+-	{ 0x3247, 0x01 },
+-	{ 0x3F15, 0x00 },
+-	{ 0x0401, 0x00 },
+-	{ 0x0404, 0x00 },
+-	{ 0x0405, 0x10 },
++	{ 0x034B, 0xBF },
++	{ 0x0900, 0x01 },
++	{ 0x0901, 0x44 },
++	{ 0x0902, 0x08 },
++	{ 0x30D8, 0x00 },
++	{ 0x3200, 0x43 },
++	{ 0x3201, 0x43 },
+ 	{ 0x0408, 0x00 },
+ 	{ 0x0409, 0x00 },
+ 	{ 0x040A, 0x00 },
+ 	{ 0x040B, 0x00 },
+-	{ 0x040C, 0x1F },
+-	{ 0x040D, 0x40 },
+-	{ 0x040E, 0x17 },
+-	{ 0x040F, 0x70 },
+-	{ 0x034C, 0x1F },
+-	{ 0x034D, 0x40 },
+-	{ 0x034E, 0x17 },
+-	{ 0x034F, 0x70 },
+-	{ 0x0301, 0x05 },
+-	{ 0x0303, 0x04 },
+-	{ 0x0305, 0x04 },
+-	{ 0x0306, 0x01 },
+-	{ 0x0307, 0x26 },
+-	{ 0x030B, 0x01 },
+-	{ 0x030D, 0x04 },
++	{ 0x040C, 0x09 },
++	{ 0x040D, 0x08 },
++	{ 0x040E, 0x05 },
++	{ 0x040F, 0x18 },
++	{ 0x034C, 0x09 },
++	{ 0x034D, 0x08 },
++	{ 0x034E, 0x05 },
++	{ 0x034F, 0x18 },
++	{ 0x0301, 0x08 },
++	{ 0x0303, 0x02 },
++	{ 0x0305, 0x03 },
++	{ 0x0306, 0x00 },
++	{ 0x0307, 0xAC },
++	{ 0x030B, 0x02 },
++	{ 0x030D, 0x03 },
+ 	{ 0x030E, 0x01 },
+-	{ 0x030F, 0x54 },
++	{ 0x030F, 0x10 },
+ 	{ 0x0310, 0x01 },
+-	{ 0x3620, 0x01 },
+-	{ 0x3621, 0x01 },
+-	{ 0x3C11, 0x08 },
+-	{ 0x3C12, 0x08 },
+-	{ 0x3C13, 0x2A },
+-	{ 0x3F0C, 0x00 },
+-	{ 0x3F14, 0x01 },
+-	{ 0x3F80, 0x00 },
+-	{ 0x3F81, 0x14 },
+-	{ 0x3F8C, 0x00 },
+-	{ 0x3F8D, 0x14 },
+-	{ 0x3FF8, 0x00 },
+-	{ 0x3FF9, 0x00 },
+-	{ 0x3FFE, 0x03 },
+-	{ 0x3FFF, 0x52 },
+-	{ 0x0202, 0x19 },
+-	{ 0x0203, 0x50 },
+-	{ 0x0224, 0x01 },
+-	{ 0x0225, 0xF4 },
+-	{ 0x3FE0, 0x01 },
+-	{ 0x3FE1, 0xF4 },
++	{ 0x30D9, 0x01 },
++	{ 0x32D5, 0x00 },
++	{ 0x32D6, 0x00 },
++	{ 0x401E, 0x4D },
++	{ 0x40B8, 0x00 },
++	{ 0x40B9, 0x32 },
++	{ 0x40BC, 0x00 },
++	{ 0x40BD, 0x08 },
++	{ 0x40BE, 0x00 },
++	{ 0x40BF, 0x08 },
++	{ 0x41A4, 0x00 },
++	{ 0x5A09, 0x00 },
++	{ 0x5A17, 0x00 },
++	{ 0x5A25, 0x00 },
++	{ 0x5A33, 0x00 },
++	{ 0x98D7, 0xB4 },
++	{ 0x98D8, 0x8C },
++	{ 0x98D9, 0x0A },
++	{ 0x99C4, 0x16 },
++	{ 0x0202, 0x06 },
++	{ 0x0203, 0x60 },
+ 	{ 0x0204, 0x00 },
+-	{ 0x0205, 0x70 },
+-	{ 0x0216, 0x00 },
+-	{ 0x0217, 0x70 },
+-	{ 0x0218, 0x01 },
+-	{ 0x0219, 0x00 },
++	{ 0x0205, 0x00 },
+ 	{ 0x020E, 0x01 },
+ 	{ 0x020F, 0x00 },
+-	{ 0x0210, 0x01 },
+-	{ 0x0211, 0x00 },
+-	{ 0x0212, 0x01 },
+-	{ 0x0213, 0x00 },
+-	{ 0x0214, 0x01 },
+-	{ 0x0215, 0x00 },
+-	{ 0x3FE2, 0x00 },
+-	{ 0x3FE3, 0x70 },
+-	{ 0x3FE4, 0x01 },
+-	{ 0x3FE5, 0x00 },
+-	{ 0x3E20, 0x01 },
+-	{ 0x3E37, 0x00 },
++	{ 0x4018, 0x00 },
++	{ 0x4019, 0x00 },
++	{ 0x401A, 0x00 },
++	{ 0x401B, 0x00 },
++	{ 0x3400, 0x01 },
++	{ 0x3093, 0x00 },
+ };
+ struct imx682_mode {
+ 	u32 width;
+@@ -385,13 +393,13 @@
+ 
+ static const struct imx682_mode imx682_modes[] = {
+ 	{
+-		.width = 8000,
+-		.height = 6000,
+-		.hts = 14704,
+-		.vts_def = 6528,
+-		.vts_min = 6528,
+-		.regs = imx682_8000x6000,
+-		.num_regs = ARRAY_SIZE(imx682_8000x6000),
++		.width = 2312,
++		.height = 1304,
++		.hts = 2728,		/* 0x0342 = 0x0aa8 */
++		.vts_def = 1680,	/* 0x0340 = 0x0690 */
++		.vts_min = 1680,
++		.regs = imx682_2312x1304,
++		.num_regs = ARRAY_SIZE(imx682_2312x1304),
+ 	},
+ };
+ 
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -240,7 +240,7 @@
+ 		 */
+ 		port@0 {
+ 			csiphy0_ep: endpoint {
+-				data-lanes = <0 1>;
++				data-lanes = <0 1 2>;
+ 				remote-endpoint = <&imx682_ep>;
+ 			};
+ 		};
+@@ -280,7 +280,7 @@
+ 		clocks = <&camcc CAMCC_MCLK1_CLK>;
+ 		clock-names = "xvclk";
+ 		assigned-clocks = <&camcc CAMCC_MCLK1_CLK>;
+-		assigned-clock-rates = <24000000>;
++		assigned-clock-rates = <19200000>;
+ 
+ 		dovdd-supply = <&vreg_l13a_1p8>;
+ 		avdd-supply = <&vreg_wide_ldo_avdd2>;
+@@ -288,8 +288,8 @@
+ 
+ 		port {
+ 			imx682_ep: endpoint {
+-				data-lanes = <1 2>;
+-				link-frequencies = /bits/ 64 <1020000000>;
++				data-lanes = <1 2 3>;
++				link-frequencies = /bits/ 64 <435200000>;
+ 				remote-endpoint = <&csiphy0_ep>;
+ 			};
+ 		};

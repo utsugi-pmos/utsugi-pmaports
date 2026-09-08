@@ -1,0 +1,97 @@
+The rear camera's exposure ceiling follows the frame length
+
+THE SYMPTOM
+-----------
+Lengthening the frame did not give more light. Vertical blanking goes in and
+stays set, but the exposure ceiling does not move:
+
+    v4l2-ctl -c vertical_blanking=6000     <- goes in, and reads back 6000
+    exposure ... min=6 max=1632            <- does not move
+
+1632 is 1680 of vts_def minus 48 of margin, that is, the MODE's limit. With that,
+in a normal room and with the gain already at maximum, the signal stayed at 22
+counts out of 255.
+
+WHY IT MATTERS MORE THAN IT LOOKS
+---------------------------------
+With the image down in the sensor's noise, contrast autofocus CANNOT converge,
+and not because of the motor: the noise is added AFTER the optics, so it does not
+defocus. The hill comes out flat, the reticle comes out red, and everything works
+perfectly except that there is nothing to measure.
+
+It took several rounds of measurements before I understood it.
+
+THE CAUSE
+---------
+`imx682_set_ctrl()` writes the new frame length on receiving V4L2_CID_VBLANK:
+
+    case V4L2_CID_VBLANK:
+    	ret = imx682_write16(s, IMX682_REG_FRAME_LENGTH,
+    			     s->mode->height + ctrl->val);
+
+...but it does not touch the exposure range, which is only set when changing
+mode, using the DEFAULT vts. So the sensor accepts the long frame and the control
+still believes the frame is the short one.
+
+It is the same fault the hi1337 had, and which was fixed there in patches 0180
+and 0181.
+
+THE FIX
+-------
+Move the exposure range when the vertical blanking changes, with the ceiling set
+to height + blanking - margin, and preserving the current value, clamped.
+
+AND IT GOES BEFORE THE pm_runtime_get_if_in_use, which is the detail that
+matters. That call is on the function's first line and RETURNS if the sensor is
+powered down. Putting the adjustment after it, the range would not be updated
+with the camera stopped -which is exactly when the knobs get adjusted- and any
+exposure requested afterwards would be silently clipped against the old limit. It
+is the same order imx219 and company use in mainline, and for the same reason.
+
+The minmax.h include is also added, for clamp_t: it was arriving transitively,
+but that means relying on a chain of headers that can change.
+
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -36,6 +36,7 @@
+ #include <linux/delay.h>
+ #include <linux/gpio/consumer.h>
+ #include <linux/i2c.h>
++#include <linux/minmax.h>	/* clamp_t */
+ #include <linux/module.h>
+ #include <linux/pm_runtime.h>
+ #include <linux/regulator/consumer.h>
+@@ -1027,6 +1028,33 @@
+ 	struct imx682 *s = container_of(ctrl->handler, struct imx682, ctrls);
+ 	int ret;
+ 
++	/*
++	 * EL TECHO DE LA EXPOSICION SIGUE A LA LONGITUD DE TRAMA
++	 *
++	 * La exposicion no puede pasar de la trama, o sea alto mas blanco
++	 * vertical. El rango se fijaba solo al cambiar de modo, con el vts por
++	 * defecto, asi que alargar la trama no servia de nada: medido, con
++	 * vertical_blanking=6000 aceptado, `exposure` se quedaba en max=1632
++	 * -1680 de vts_def menos 48 de margen-.
++	 *
++	 * En penumbra eso deja la imagen en ruido del sensor, y el ruido NO se
++	 * desenfoca porque se anade despues de la optica: el autoenfoque no
++	 * puede converger por mucho que la lente se mueva bien.
++	 *
++	 * Va ANTES del pm_runtime_get_if_in_use de abajo a proposito. Ese
++	 * devuelve si el sensor esta apagado, y el rango hay que moverlo
++	 * IGUALMENTE: quien ajusta los mandos suele hacerlo con la camara
++	 * parada, y si el techo no se entera, la exposicion que pida despues
++	 * se recorta en silencio contra el limite viejo.
++	 */
++	if (ctrl->id == V4L2_CID_VBLANK) {
++		int techo = s->mode->height + ctrl->val - IMX682_EXPOSURE_MARGIN;
++		int valor = clamp_t(int, s->exposure->val, s->mode->exp_min, techo);
++
++		__v4l2_ctrl_modify_range(s->exposure, s->mode->exp_min, techo,
++					 IMX682_EXPOSURE_STEP, valor);
++	}
++
+ 	/* Sin alimentacion no hay a quien escribirle; no es un error. */
+ 	if (!pm_runtime_get_if_in_use(&s->client->dev))
+ 		return 0;

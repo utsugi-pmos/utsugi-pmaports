@@ -1,0 +1,35 @@
+Do not let an ACDB failure leave the phone mute
+
+q6core_probe returned the result of loading the ACDB, so any stumble there
+brought down q6core's probe and with it THE WHOLE AUDIO CHAIN: the phone
+booted with "--- no soundcards ---", PulseAudio on auto_null and not a single
+device on the apr bus (no q6afe, no q6routing, nothing).
+
+It happened on 2026-08-11 while trying surya's own ACDB, and it left the phone
+completely mute until the previous one was put back.
+
+Registering the topologies is OPTIONAL: it serves the audio of calls, and
+without it everything else works just the same. It has no right whatsoever to
+take the sound card down with it.
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -501,7 +501,17 @@
+ 	g_core->adev = adev;
+ 	init_waitqueue_head(&g_core->wait);
+ 
+-	return q6core_load_and_register_topologies(&adev->dev);
++	/*
++	 * A PROPOSITO se ignora el resultado. Registrar las topologias es
++	 * OPCIONAL: sirve para las llamadas, y sin ello el resto del audio
++	 * funciona igual. Devolverlo hacia que cualquier tropiezo cargando la
++	 * ACDB tumbase el probe de q6core y con el la cadena de audio ENTERA:
++	 * el movil arrancaba con "--- no soundcards ---" y ni un dispositivo
++	 * en el bus apr. Paso el 2026-08-11 y dejo el telefono mudo.
++	 */
++	q6core_load_and_register_topologies(&adev->dev);
++
++	return 0;
+ }
+ 
+ static void q6core_exit(struct apr_device *adev)

@@ -1,0 +1,1710 @@
+The front camera: an S5K3T2 driver with the phone's own tables
+
+WHY THE CAMERA IS BEING SWITCHED
+--------------------------------
+Patch 0050 left the rear IMX682 identified, transmitting and with the CAMSS
+pipeline validating in full. And even so not a single frame arrived, not even
+with the sensor's internal bar pattern.
+
+Now it is known why, and it was no driver fault: the rear camera is wired in
+C-PHY, and CAMSS only speaks D-PHY. It is measured in the surya's own factory
+calibration file, by two independent paths that agree:
+
+    laneAssign = 0x0210    three lanes -> C-PHY trios
+    0x0114     = 0x02      three lanes, in ALL FIVE mode tables
+
+The front camera, on the other hand, says laneAssign = 0x3210 and
+0x0114 = 0x0300: four D-PHY lanes. And so do the others. The detail is in
+surya/docs/CAMARA-04-la-trasera-es-cphy.md.
+
+(Along the way it corrects a note from the previous handover which read that
+register as 0x0111 and concluded D-PHY. The register is 0x0114 and it says the
+opposite.)
+
+WHAT THIS PATCH BRINGS
+----------------------
+1. drivers/media/i2c/s5k3t2.c, a complete v4l2_subdev for the 20 MP Samsung
+   S5K3T2, with two modes: 2592x1940 binned and 5184x3880 full.
+2. The device tree: the front camera on cci0_i2c1 against csiphy1, and the rear
+   one out.
+3. camss.c: it raises the bandwidth request to the bus, without which the
+   stream stops after a few seconds (see below).
+
+THE TABLES ARE FROM THIS PHONE, NOT FROM ANOTHER
+------------------------------------------------
+They come from com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, that is from
+the same module this device carries, read with
+surya/camara/leer-sensormodule.py. Nothing like the rear camera, where they had
+to be brought from MediaTek's GPL driver for another phone and the PLL
+recalculated. Here nothing is recalculated.
+
+To read them the format of the regSetting block had to be deciphered, as it was
+not documented: it is an array of u64, ten per register, with the address at
+index 2 of each group; the values go separately, in the registerData
+descriptors that follow, one per register and in the same order.
+
+THE LINK ARITHMETIC, AND HOW IT WAS CHECKED
+-------------------------------------------
+With INCK = 19.2 MHz and the PLL registers from the tables:
+
+    vt_pix_clk = 19.2 / 3 (0x0304) * 185 (0x0306) / 1 (0x0302) / 7 (0x0300)
+               = 169.14 MHz
+    pixel_rate = vt_pix_clk * 4 pixels per cycle = 676.57 MHz
+    link_freq  = pixel_rate * 10 bits / (2 * 4 lanes) = 845.71 MHz
+
+The "4 pixels per cycle" factor is not assumed: it was calibrated with the
+sibling driver s5k3m5.c from this same tree, which declares 602.5 MHz and whose
+tables give exactly that figure with this formula.
+
+And it adds up by a second path, the physical one: in the full mode
+5184 x 10 / 4 = 12960 bits per lane and line are needed, which at 1691 Mbit/s
+take 7.66 us, within the 8.04 us the line lasts. A 5 % margin.
+
+Both modes come out at 30.1 fps, which is what is declared by someone who has
+already made this sensor capture on this same SoC.
+
+And 845.71 MHz fits comfortably in the SM7150's CSIPHY, which is where the
+first attempt with the rear camera died: its timer clock stops at 300 MHz and
+the driver asks for link_freq/4 below that. 845.71/4 = 211 MHz.
+
+THE BUS BANDWIDTH
+-----------------
+icc_res_sm7150 asked for 2 GiB/s, and with that the CSI-2 receiver runs out of
+FIFO after a few seconds as soon as the CPU touches memory -which is exactly
+what libcamera does when developing in software-. It is raised to 4 GiB/s,
+which is the figure measured to hold up cleanly. It comes from PR #59 of
+sm7150-mainline/linux, done on a Xiaomi Mi 9T with this same SoC and this same
+sensor.
+
+THE TWO UNKNOWNS, AND WHY THEY GO AS PARAMETERS
+-----------------------------------------------
+This phone hangs on roughly one boot in four, so spending a reboot per
+hypothesis is expensive. The two things that cannot be settled by reading go as
+module parameters, and are tested with rmmod/insmod:
+
+  i2c_addr     The factory file does NOT carry the sensor's address: its only
+               slaveAddr is 0xa0, that is the EEPROM at 0x50 -the same trap
+               that already cost time with the rear camera, where the
+               "documented" 0x50 was the EEPROM and the sensor was at 0x1a-. By
+               default the driver looks for it by reading the identification
+               (0x3142) and relocates itself.
+  mipi_switch  The front camera and the wide angle share CSIPHY1 through a MIPI
+               switch and it is not known which position is which. By default it
+               is not touched.
+  bayer        The mosaic order cannot be deduced from the factory file. Getting
+               it wrong only spoils the colour, it does not prevent capturing.
+
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 21:27:33.259841996 +0200
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 21:26:14.266412211 +0200
+@@ -227,12 +227,23 @@
+ 
+ &camss {
+ 	ports {
+-		port@0 {
+-			csiphy0_ep: endpoint {
++		/*
++		 * La trasera estaba en el port@0 y se ha quitado: ese sensor
++		 * esta cableado en C-PHY y CAMSS solo admite D-PHY, asi que no
++		 * puede funcionar. Medido en el fichero de fabrica; el porque
++		 * esta en docs/CAMARA-04-la-trasera-es-cphy.md.
++		 *
++		 * Y no basta con desactivar el nodo del sensor dejando aqui su
++		 * puerto: el notificador asincrono de CAMSS se quedaria
++		 * esperando un subdev que no llega nunca y se pierde
++		 * /dev/media0. O los dos, o ninguno.
++		 */
++		port@1 {
++			csiphy1_ep: endpoint {
+ 				clock-lanes = <7>;
+-				data-lanes = <0 1>;
++				data-lanes = <0 1 2 3>;
+ 				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
+-				remote-endpoint = <&imx682_ep>;
++				remote-endpoint = <&s5k3t2_ep>;
+ 			};
+ 		};
+ 	};
+@@ -240,56 +251,75 @@
+ 
+ &cci0_i2c0 {
+ 	/*
+-	 * El 0x50 que decia el comentario de antes es la EEPROM de
+-	 * calibracion del modulo, no el sensor: contesta incluso con la
+-	 * camara sin alimentar. El 0x10 que dicen los drivers del mismo chip
+-	 * para MediaTek tampoco vale aqui: medido con el sensor alimentado y
+-	 * con reloj, en este movil aparece en 0x1a.
++	 * Aqui vivia el IMX682 de 64 MP. Contesta, se identifica y transmite,
++	 * pero esta cableado en C-PHY de 3 carriles y CAMSS solo habla D-PHY:
++	 * no llega un solo fotograma y no hay forma de que llegue.
++	 *
++	 * Sony IMX682 Main @ 1a  (C-PHY, inutilizable con CAMSS)
++	 */
++};
++
++&cci0_i2c1 {
++	/* OmniVision ov02b1b Depth @ 50 */
++
++	/*
++	 * La frontal, un Samsung S5K3T2 de 20 MP. Segun el kernel Android del
++	 * propio surya va en CCI0 master 1 -o sea este bus-, con MCLK0 en el
++	 * pin 13 y el reset en el 23.
++	 *
++	 * La direccion es provisional: el fichero de fabrica NO la trae (su
++	 * unico slaveAddr es 0xa0, la EEPROM, la misma trampa que ya costo
++	 * tiempo con la trasera). El driver la busca leyendo la
++	 * identificacion y se recoloca solo, asi que este 0x10 solo tiene que
++	 * ser una direccion libre.
+ 	 */
+-	camera@1a {
+-		compatible = "sony,imx682";
+-		reg = <0x1a>;
++	camera@10 {
++		compatible = "samsung,s5k3t2";
++		reg = <0x10>;
+ 
+-		/* CAM1_RST_N, segun los nombres de pin de este mismo fichero */
+-		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++		/* CAM3_RST_N */
++		reset-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
+ 		pinctrl-names = "default";
+-		pinctrl-0 = <&cam_mclk1_active>;
++		pinctrl-0 = <&cam_mclk0_active>;
+ 
+ 		/*
+-		 * 24 MHz, NO los 19,2 del Android de fabrica: las tablas de
+-		 * registros del driver estan calculadas para 24 y adaptarlas
+-		 * obligaria a recalcular el PLL del sensor. El camcc del
+-		 * SM7150 admite las dos. Si se cambia aqui, hay que cambiarlo
+-		 * tambien en el driver.
++		 * 19,2 MHz, que es lo que usa el Android de fabrica. Aqui NO
++		 * se sube a 24 como se hizo con la trasera: las tablas son las
++		 * del propio movil y estan calculadas para 19,2. Si se cambia,
++		 * hay que cambiarlo tambien en el driver.
+ 		 */
+-		clocks = <&camcc CAMCC_MCLK1_CLK>;
++		clocks = <&camcc CAMCC_MCLK0_CLK>;
+ 		clock-names = "xvclk";
+-		assigned-clocks = <&camcc CAMCC_MCLK1_CLK>;
+-		assigned-clock-rates = <24000000>;
++		assigned-clocks = <&camcc CAMCC_MCLK0_CLK>;
++		assigned-clock-rates = <19200000>;
+ 
+-		dovdd-supply = <&vreg_l13a_1p8>;
+-		avdd-supply = <&vreg_wide_ldo_avdd2>;
+-		dvdd-supply = <&wl_dvdd1>;
++		vddio-supply = <&vreg_l13a_1p8>;
++		vdda-supply = <&vreg_camera_vdig>;
++		vddd-supply = <&wl_dvdd2>;
++
++		/*
++		 * La frontal y el gran angular comparten el CSIPHY1 a traves
++		 * de un conmutador MIPI. Que posicion corresponde a cual no
++		 * esta medido, asi que el driver no lo toca salvo que se lo
++		 * pidan por parametro (mipi_switch=0 o 1).
++		 */
++		mipi-switch-supply = <&vreg_camera_mipi_switch_en>;
+ 
+ 		port {
+-			imx682_ep: endpoint {
++			s5k3t2_ep: endpoint {
+ 				/*
+-				 * Ojo, no es una errata: el lado del sensor
+-				 * numera los carriles desde 1 y el de CAMSS
+-				 * desde 0. Son los mismos dos cables.
++				 * No es una errata: el lado del sensor numera
++				 * los carriles desde 1 y el de CAMSS desde 0.
++				 * Son los mismos cuatro cables.
+ 				 */
+-				data-lanes = <1 2>;
+-				link-frequencies = /bits/ 64 <1020000000>;
+-				remote-endpoint = <&csiphy0_ep>;
++				data-lanes = <1 2 3 4>;
++				link-frequencies = /bits/ 64 <845714286>;
++				remote-endpoint = <&csiphy1_ep>;
+ 			};
+ 		};
+ 	};
+ };
+ 
+-&cci0_i2c1 {
+-	/* OmniVision ov02b1b Depth @ 50 */
+-};
+-
+ &cci1_i2c0 {
+ 	/* Samsung S5K3T2 Front @ ? */
+ 	/* Sk Hynix Hi-259 Macro @ ? */
+@@ -673,6 +703,13 @@
+ 		function = "cam_mclk";
+ 		drive-strength = <2>;
+ 		bias-disable;
++	};
++
++	cam_mclk0_active: cam-mclk0-active-state {
++		pins = "gpio13";
++		function = "cam_mclk";
++		drive-strength = <2>;
++		bias-disable;
+ 	};
+ };
+ 
+--- a/drivers/media/i2c/Kconfig	2026-08-14 21:27:33.260184562 +0200
++++ b/drivers/media/i2c/Kconfig	2026-08-14 21:33:15.956925989 +0200
+@@ -790,6 +790,16 @@
+ 	  To compile this driver as a module, choose M here: the
+ 	  module will be called s5k3m5.
+ 
++config VIDEO_S5K3T2
++	tristate "Samsung S5K3T2 sensor support"
++	select V4L2_CCI_I2C
++	help
++	  This is a Video4Linux2 sensor-level driver for the Samsung
++	  S5K3T2 camera.
++
++	  To compile this driver as a module, choose M here: the
++	  module will be called s5k3t2.
++
+ config VIDEO_S5K5BAF
+ 	tristate "Samsung S5K5BAF sensor support"
+ 	help
+--- a/drivers/media/i2c/Makefile	2026-08-14 21:27:33.260271365 +0200
++++ b/drivers/media/i2c/Makefile	2026-08-14 21:26:43.244649808 +0200
+@@ -130,6 +130,7 @@
+ obj-$(CONFIG_VIDEO_S5C73M3) += s5c73m3/
+ obj-$(CONFIG_VIDEO_S5K3L6XX) += s5k3l6xx.o
+ obj-$(CONFIG_VIDEO_S5K3M5) += s5k3m5.o
++obj-$(CONFIG_VIDEO_S5K3T2) += s5k3t2.o
+ obj-$(CONFIG_VIDEO_S5K5BAF) += s5k5baf.o
+ obj-$(CONFIG_VIDEO_S5K6A3) += s5k6a3.o
+ obj-$(CONFIG_VIDEO_S5KJN1) += s5kjn1.o
+--- a/drivers/media/i2c/s5k3t2.c	1970-01-01 01:00:00.000000000 +0100
++++ b/drivers/media/i2c/s5k3t2.c	1970-01-01 01:00:00.000000000 +0100
+@@ -0,0 +1,1375 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Samsung S5K3T2: la camara frontal del Xiaomi POCO X3 NFC (surya).
++ *
++ * POR QUE ESTE SENSOR Y NO EL TRASERO
++ * -----------------------------------
++ * El de 64 MP de detras (IMX682) no se puede usar con CAMSS, y no por falta de
++ * trabajo: esta cableado en C-PHY. Esta medido en el fichero de calibracion de
++ * fabrica del propio movil, por dos caminos que coinciden:
++ *
++ *   laneAssign = 0x0210            tres carriles -> trios C-PHY
++ *   0x0114     = 0x02              tres carriles, en las cinco tablas de modo
++ *
++ * CAMSS solo admite D-PHY. El frontal, en cambio, dice laneAssign = 0x3210 y
++ * 0x0114 = 0x0300: cuatro carriles D-PHY. Ver docs/CAMARA-04-la-trasera-es-cphy.md.
++ *
++ * DE DONDE SALEN LAS TABLAS
++ * -------------------------
++ * Del fichero de fabrica de ESTE movil y ESTE modulo,
++ * com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, leido con
++ * surya/camara/leer-sensormodule.py. No son de otro telefono ni de otro
++ * proveedor, asi que no hay que recalcular ningun PLL.
++ *
++ * LAS CUENTAS DEL ENLACE, Y COMO SE COMPROBARON
++ * ---------------------------------------------
++ * Los registros del PLL de las tablas dan, con INCK = 19,2 MHz:
++ *
++ *   vt_pix_clk = 19,2 / 3 (0x0304) * 185 (0x0306) / 1 (0x0302) / 7 (0x0300)
++ *              = 169,14 MHz
++ *   pixel_rate = vt_pix_clk * 4 pixeles por ciclo = 676,57 MHz
++ *   link_freq  = pixel_rate * 10 bits / (2 * 4 carriles) = 845,71 MHz
++ *
++ * El "4 pixeles por ciclo" no esta supuesto: se calibro con el driver hermano
++ * s5k3m5.c de este mismo arbol, que declara 602,5 MHz y cuyas tablas dan
++ * exactamente esa cifra con esta misma formula.
++ *
++ * Y cuadra por un segundo camino, el fisico: en el modo completo caben
++ * 5184 px x 10 bits / 4 carriles = 12960 bits por carril y linea, que a
++ * 1691 Mbit/s tardan 7,66 us, dentro de los 8,04 us que dura la linea
++ * (5440 / 676,57 MHz). Un 5 % de margen, que es justo lo que se espera.
++ *
++ * Los dos modos salen a 30,1 fps, que es lo que declara quien ya ha hecho
++ * capturar a este sensor en este mismo SoC (PR #59 de sm7150-mainline/linux).
++ *
++ * PARAMETROS DE MODULO, Y POR QUE EXISTEN
++ * ---------------------------------------
++ * Quedan dos incognitas que no se pueden resolver leyendo, y este movil se
++ * cuelga aproximadamente uno de cada cuatro arranques. Asi que en vez de
++ * gastar un reinicio por hipotesis, van como parametros: se prueban con
++ * rmmod/insmod, sin recompilar y sin reiniciar.
++ *
++ *   i2c_addr      la direccion del sensor no esta en el fichero de fabrica
++ *                 (el unico slaveAddr que trae es 0xa0, o sea la EEPROM en
++ *                 0x50, la misma trampa que ya costo tiempo con el trasero).
++ *                 Por defecto el driver la BUSCA leyendo la identificacion.
++ *   mipi_switch   el frontal y el gran angular comparten el CSIPHY1 a traves
++ *                 de un conmutador MIPI, y no se sabe que posicion es cual.
++ */
++
++#include <linux/clk.h>
++#include <linux/delay.h>
++#include <linux/gpio/consumer.h>
++#include <linux/i2c.h>
++#include <linux/module.h>
++#include <linux/moduleparam.h>
++#include <linux/pm_runtime.h>
++#include <linux/regulator/consumer.h>
++#include <linux/units.h>
++#include <media/v4l2-cci.h>
++#include <media/v4l2-ctrls.h>
++#include <media/v4l2-device.h>
++#include <media/v4l2-fwnode.h>
++
++#define S5K3T2_MCLK_FREQ	(19200 * HZ_PER_KHZ)
++#define S5K3T2_DATA_LANES	4
++#define S5K3T2_BPP		10
++
++/* 845,71 MHz. La cuenta, y como se comprobo, en el comentario de arriba. */
++#define S5K3T2_LINK_FREQ	845714286ULL
++
++#define S5K3T2_REG_CHIP_ID	CCI_REG16(0x0000)
++#define S5K3T2_CHIP_ID		0x3142
++
++/*
++ * Un solo registro manda la transmision y los dos volteos a la vez. El Android
++ * de fabrica arranca con 0x0103, o sea transmitiendo y con los dos volteos
++ * puestos: el modulo va montado del reves, como es normal en una frontal.
++ */
++#define S5K3T2_REG_CTRL_MODE	CCI_REG16(0x0100)
++#define S5K3T2_MODE_STREAMING	BIT(8)
++#define S5K3T2_VFLIP		BIT(1)
++#define S5K3T2_HFLIP		BIT(0)
++
++#define S5K3T2_REG_RESET	CCI_REG16(0x6010)
++#define S5K3T2_REG_PAGE		CCI_REG16(0x6028)
++
++#define S5K3T2_REG_EXPOSURE	CCI_REG16(0x0202)
++#define S5K3T2_EXPOSURE_MIN	8
++#define S5K3T2_EXPOSURE_STEP	1
++#define S5K3T2_EXPOSURE_MARGIN	4
++
++#define S5K3T2_REG_AGAIN	CCI_REG16(0x0204)
++#define S5K3T2_AGAIN_MIN	32
++#define S5K3T2_AGAIN_MAX	512
++#define S5K3T2_AGAIN_STEP	1
++#define S5K3T2_AGAIN_DEFAULT	32
++
++#define S5K3T2_REG_VTS		CCI_REG16(0x0340)
++#define S5K3T2_VTS_MAX		0xfffc
++#define S5K3T2_REG_HTS		CCI_REG16(0x0342)
++
++#define S5K3T2_REG_TEST_PATTERN	CCI_REG16(0x0600)
++
++#define to_s5k3t2(_sd)		container_of(_sd, struct s5k3t2, sd)
++
++static int i2c_addr = -1;
++module_param(i2c_addr, int, 0444);
++MODULE_PARM_DESC(i2c_addr,
++	"Direccion I2C de 7 bits del sensor. -1 (por defecto) = buscarla.");
++
++static int mipi_switch = -1;
++module_param(mipi_switch, int, 0444);
++MODULE_PARM_DESC(mipi_switch,
++	"Conmutador MIPI compartido con el gran angular: 0, 1, o -1 para no tocarlo.");
++
++static const s64 s5k3t2_link_freq_menu[] = {
++	S5K3T2_LINK_FREQ,
++};
++
++static const char * const s5k3t2_test_pattern_menu[] = {
++	"Disabled",
++	"Solid colour",
++	"Colour bars",
++	"Fade to grey colour bars",
++	"PN9",
++};
++
++/*
++ * El reparto exacto de los cuatro LDOs del WL2866D entre los cinco sensores
++ * todavia no se sabe, y por eso el device tree los deja siempre encendidos.
++ * Aqui se piden los tres carriles que si estan identificados.
++ */
++static const char * const s5k3t2_supply_names[] = {
++	"vdda",		/* analogica */
++	"vddd",		/* digital */
++	"vddio",	/* entrada/salida, 1,8 V */
++};
++
++#define S5K3T2_NUM_SUPPLIES	ARRAY_SIZE(s5k3t2_supply_names)
++
++struct s5k3t2_reg_list {
++	const struct cci_reg_sequence *regs;
++	unsigned int num_regs;
++};
++
++struct s5k3t2_mode {
++	u32 width;
++	u32 height;
++	u32 hts;
++	u32 vts;
++	u32 exposure;
++	struct s5k3t2_reg_list reg_list;
++};
++
++struct s5k3t2 {
++	struct device *dev;
++	struct regmap *regmap;
++	struct clk *mclk;
++	struct gpio_desc *reset_gpio;
++	struct regulator *mipi_switch_reg;
++	struct regulator_bulk_data supplies[S5K3T2_NUM_SUPPLIES];
++
++	struct v4l2_subdev sd;
++	struct media_pad pad;
++
++	struct v4l2_ctrl_handler ctrl_handler;
++	struct v4l2_ctrl *link_freq;
++	struct v4l2_ctrl *pixel_rate;
++	struct v4l2_ctrl *hblank;
++	struct v4l2_ctrl *vblank;
++	struct v4l2_ctrl *exposure;
++
++	const struct s5k3t2_mode *mode;
++};
++
++static const struct cci_reg_sequence s5k3t2_init[] = {
++	{ CCI_REG16(0x6214), 0xff7d },
++	{ CCI_REG16(0x6218), 0x0000 },
++	{ CCI_REG16(0x0a02), 0x003f },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x3aec },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x6f12), 0x0549 },
++	{ CCI_REG16(0x6f12), 0x0448 },
++	{ CCI_REG16(0x6f12), 0x054a },
++	{ CCI_REG16(0x6f12), 0xc1f8 },
++	{ CCI_REG16(0x6f12), 0x2c05 },
++	{ CCI_REG16(0x6f12), 0x101a },
++	{ CCI_REG16(0x6f12), 0xa1f8 },
++	{ CCI_REG16(0x6f12), 0x3005 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x7bb8 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x3ca0 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x2670 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x9c00 },
++	{ CCI_REG16(0x6f12), 0x70b5 },
++	{ CCI_REG16(0x6f12), 0x0646 },
++	{ CCI_REG16(0x6f12), 0x4348 },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x6f12), 0x0168 },
++	{ CCI_REG16(0x6f12), 0x0c0c },
++	{ CCI_REG16(0x6f12), 0x8db2 },
++	{ CCI_REG16(0x6f12), 0x2946 },
++	{ CCI_REG16(0x6f12), 0x2046 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x9bf8 },
++	{ CCI_REG16(0x6f12), 0x3046 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x9df8 },
++	{ CCI_REG16(0x6f12), 0x3d48 },
++	{ CCI_REG16(0x6f12), 0x3e4a },
++	{ CCI_REG16(0x6f12), 0x0830 },
++	{ CCI_REG16(0x6f12), 0x0188 },
++	{ CCI_REG16(0x6f12), 0x1180 },
++	{ CCI_REG16(0x6f12), 0x911c },
++	{ CCI_REG16(0x6f12), 0x4088 },
++	{ CCI_REG16(0x6f12), 0x0880 },
++	{ CCI_REG16(0x6f12), 0x2946 },
++	{ CCI_REG16(0x6f12), 0x2046 },
++	{ CCI_REG16(0x6f12), 0xbde8 },
++	{ CCI_REG16(0x6f12), 0x7040 },
++	{ CCI_REG16(0x6f12), 0x0122 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x89b8 },
++	{ CCI_REG16(0x6f12), 0x70b5 },
++	{ CCI_REG16(0x6f12), 0x0646 },
++	{ CCI_REG16(0x6f12), 0x3548 },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x6f12), 0x4068 },
++	{ CCI_REG16(0x6f12), 0x84b2 },
++	{ CCI_REG16(0x6f12), 0x050c },
++	{ CCI_REG16(0x6f12), 0x2146 },
++	{ CCI_REG16(0x6f12), 0x2846 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x7ef8 },
++	{ CCI_REG16(0x6f12), 0x3046 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x85f8 },
++	{ CCI_REG16(0x6f12), 0x3149 },
++	{ CCI_REG16(0x6f12), 0x314b },
++	{ CCI_REG16(0x6f12), 0x0120 },
++	{ CCI_REG16(0x6f12), 0x0988 },
++	{ CCI_REG16(0x6f12), 0x40ea },
++	{ CCI_REG16(0x6f12), 0x0110 },
++	{ CCI_REG16(0x6f12), 0x5881 },
++	{ CCI_REG16(0x6f12), 0x2f48 },
++	{ CCI_REG16(0x6f12), 0x0078 },
++	{ CCI_REG16(0x6f12), 0x68b1 },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x6f12), 0x2e48 },
++	{ CCI_REG16(0x6f12), 0x2f49 },
++	{ CCI_REG16(0x6f12), 0x80f8 },
++	{ CCI_REG16(0x6f12), 0xc428 },
++	{ CCI_REG16(0x6f12), 0x0a80 },
++	{ CCI_REG16(0x6f12), 0x2e49 },
++	{ CCI_REG16(0x6f12), 0x0e78 },
++	{ CCI_REG16(0x6f12), 0x36b1 },
++	{ CCI_REG16(0x6f12), 0x90f8 },
++	{ CCI_REG16(0x6f12), 0xe803 },
++	{ CCI_REG16(0x6f12), 0x18b1 },
++	{ CCI_REG16(0x6f12), 0x0120 },
++	{ CCI_REG16(0x6f12), 0x02e0 },
++	{ CCI_REG16(0x6f12), 0x0122 },
++	{ CCI_REG16(0x6f12), 0xf0e7 },
++	{ CCI_REG16(0x6f12), 0x0020 },
++	{ CCI_REG16(0x6f12), 0x4978 },
++	{ CCI_REG16(0x6f12), 0x01b1 },
++	{ CCI_REG16(0x6f12), 0x42b1 },
++	{ CCI_REG16(0x6f12), 0x0021 },
++	{ CCI_REG16(0x6f12), 0x40ea },
++	{ CCI_REG16(0x6f12), 0x0110 },
++	{ CCI_REG16(0x6f12), 0x5880 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x66f8 },
++	{ CCI_REG16(0x6f12), 0x0128 },
++	{ CCI_REG16(0x6f12), 0x02d0 },
++	{ CCI_REG16(0x6f12), 0x1be0 },
++	{ CCI_REG16(0x6f12), 0x0121 },
++	{ CCI_REG16(0x6f12), 0xf5e7 },
++	{ CCI_REG16(0x6f12), 0x2248 },
++	{ CCI_REG16(0x6f12), 0x234a },
++	{ CCI_REG16(0x6f12), 0x234e },
++	{ CCI_REG16(0x6f12), 0xb0f8 },
++	{ CCI_REG16(0x6f12), 0x7211 },
++	{ CCI_REG16(0x6f12), 0x92f8 },
++	{ CCI_REG16(0x6f12), 0x9420 },
++	{ CCI_REG16(0x6f12), 0x90f8 },
++	{ CCI_REG16(0x6f12), 0x7401 },
++	{ CCI_REG16(0x6f12), 0xd140 },
++	{ CCI_REG16(0x6f12), 0xd040 },
++	{ CCI_REG16(0x6f12), 0x4318 },
++	{ CCI_REG16(0x6f12), 0x96f8 },
++	{ CCI_REG16(0x6f12), 0x7f63 },
++	{ CCI_REG16(0x6f12), 0x581e },
++	{ CCI_REG16(0x6f12), 0x022e },
++	{ CCI_REG16(0x6f12), 0x03d9 },
++	{ CCI_REG16(0x6f12), 0x0220 },
++	{ CCI_REG16(0x6f12), 0x9040 },
++	{ CCI_REG16(0x6f12), 0x181a },
++	{ CCI_REG16(0x6f12), 0x401c },
++	{ CCI_REG16(0x6f12), 0x164a },
++	{ CCI_REG16(0x6f12), 0x703a },
++	{ CCI_REG16(0x6f12), 0x1180 },
++	{ CCI_REG16(0x6f12), 0x911c },
++	{ CCI_REG16(0x6f12), 0x0880 },
++	{ CCI_REG16(0x6f12), 0x2146 },
++	{ CCI_REG16(0x6f12), 0x2846 },
++	{ CCI_REG16(0x6f12), 0xbde8 },
++	{ CCI_REG16(0x6f12), 0x7040 },
++	{ CCI_REG16(0x6f12), 0x0122 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x31b8 },
++	{ CCI_REG16(0x6f12), 0x10b5 },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x6f12), 0xaff2 },
++	{ CCI_REG16(0x6f12), 0xb501 },
++	{ CCI_REG16(0x6f12), 0x1348 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x3ef8 },
++	{ CCI_REG16(0x6f12), 0x064c },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x6f12), 0xaff2 },
++	{ CCI_REG16(0x6f12), 0xff01 },
++	{ CCI_REG16(0x6f12), 0x6060 },
++	{ CCI_REG16(0x6f12), 0x1048 },
++	{ CCI_REG16(0x6f12), 0x00f0 },
++	{ CCI_REG16(0x6f12), 0x36f8 },
++	{ CCI_REG16(0x6f12), 0x0f49 },
++	{ CCI_REG16(0x6f12), 0x2060 },
++	{ CCI_REG16(0x6f12), 0x7a20 },
++	{ CCI_REG16(0x6f12), 0x0968 },
++	{ CCI_REG16(0x6f12), 0x4883 },
++	{ CCI_REG16(0x6f12), 0x10bd },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x3c90 },
++	{ CCI_REG16(0x6f12), 0x4000 },
++	{ CCI_REG16(0x6f12), 0x950c },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x16f0 },
++	{ CCI_REG16(0x6f12), 0x4000 },
++	{ CCI_REG16(0x6f12), 0xd000 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x19a0 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x30c0 },
++	{ CCI_REG16(0x6f12), 0x4000 },
++	{ CCI_REG16(0x6f12), 0x9800 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x1dd0 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x17c0 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x2210 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x2670 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x6f12), 0xf45f },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x6f12), 0xd957 },
++	{ CCI_REG16(0x6f12), 0x2000 },
++	{ CCI_REG16(0x6f12), 0x08c0 },
++	{ CCI_REG16(0x6f12), 0x49f6 },
++	{ CCI_REG16(0x6f12), 0x213c },
++	{ CCI_REG16(0x6f12), 0xc0f2 },
++	{ CCI_REG16(0x6f12), 0x000c },
++	{ CCI_REG16(0x6f12), 0x6047 },
++	{ CCI_REG16(0x6f12), 0x4df6 },
++	{ CCI_REG16(0x6f12), 0x571c },
++	{ CCI_REG16(0x6f12), 0xc0f2 },
++	{ CCI_REG16(0x6f12), 0x000c },
++	{ CCI_REG16(0x6f12), 0x6047 },
++	{ CCI_REG16(0x6f12), 0x4ff2 },
++	{ CCI_REG16(0x6f12), 0x5f4c },
++	{ CCI_REG16(0x6f12), 0xc0f2 },
++	{ CCI_REG16(0x6f12), 0x000c },
++	{ CCI_REG16(0x6f12), 0x6047 },
++	{ CCI_REG16(0x6f12), 0x44f2 },
++	{ CCI_REG16(0x6f12), 0x9b0c },
++	{ CCI_REG16(0x6f12), 0xc0f2 },
++	{ CCI_REG16(0x6f12), 0x000c },
++	{ CCI_REG16(0x6f12), 0x6047 },
++	{ CCI_REG16(0x6f12), 0x4bf2 },
++	{ CCI_REG16(0x6f12), 0xed0c },
++	{ CCI_REG16(0x6f12), 0xc0f2 },
++	{ CCI_REG16(0x6f12), 0x000c },
++	{ CCI_REG16(0x6f12), 0x6047 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x1014 },
++	{ CCI_REG16(0x6f12), 0x0100 },
++	{ CCI_REG16(0x6f12), 0x7000 },
++	{ CCI_REG16(0x602a), 0x108a },
++	{ CCI_REG16(0x6f12), 0x0006 },
++	{ CCI_REG16(0x602a), 0x1092 },
++	{ CCI_REG16(0x6f12), 0x0005 },
++	{ CCI_REG16(0x602a), 0x1096 },
++	{ CCI_REG16(0x6f12), 0x0002 },
++	{ CCI_REG16(0x6f12), 0x001a },
++	{ CCI_REG16(0x602a), 0x109c },
++	{ CCI_REG16(0x6f12), 0x0014 },
++	{ CCI_REG16(0x602a), 0x10a2 },
++	{ CCI_REG16(0x6f12), 0x0022 },
++	{ CCI_REG16(0x602a), 0x10ae },
++	{ CCI_REG16(0x6f12), 0x0007 },
++	{ CCI_REG16(0x602a), 0x10c2 },
++	{ CCI_REG16(0x6f12), 0x001e },
++	{ CCI_REG16(0x602a), 0x10f4 },
++	{ CCI_REG16(0x6f12), 0x0003 },
++	{ CCI_REG16(0x6f12), 0x0003 },
++	{ CCI_REG16(0x602a), 0x110a },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x602a), 0x113e },
++	{ CCI_REG16(0x6f12), 0x0001 },
++	{ CCI_REG16(0x6f12), 0x014e },
++	{ CCI_REG16(0x602a), 0x13ea },
++	{ CCI_REG16(0x6f12), 0x160f },
++	{ CCI_REG16(0x6f12), 0x0d00 },
++	{ CCI_REG16(0x602a), 0x13fa },
++	{ CCI_REG16(0x6f12), 0x009d },
++	{ CCI_REG16(0x6f12), 0x0107 },
++	{ CCI_REG16(0x602a), 0x14e2 },
++	{ CCI_REG16(0x6f12), 0x04c2 },
++	{ CCI_REG16(0x6f12), 0x02ae },
++	{ CCI_REG16(0x6f12), 0x0020 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0xf44a), 0x0010 },
++	{ CCI_REG16(0xf46a), 0xb6a0 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0f5e },
++	{ CCI_REG16(0x6f12), 0x0200 },
++	{ CCI_REG16(0x602a), 0x0f90 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x602a), 0x17c0 },
++	{ CCI_REG16(0x6f12), 0x0010 },
++	{ CCI_REG16(0x6f12), 0x0201 },
++	{ CCI_REG16(0x602a), 0x1da2 },
++	{ CCI_REG16(0x6f12), 0x0001 },
++	{ CCI_REG16(0x6f12), 0x0203 },
++	{ CCI_REG16(0x6f12), 0x0405 },
++	{ CCI_REG16(0x6f12), 0x0607 },
++	{ CCI_REG16(0x6f12), 0x0809 },
++	{ CCI_REG16(0x6f12), 0x0a0b },
++	{ CCI_REG16(0x6f12), 0x0c0d },
++	{ CCI_REG16(0x6f12), 0x0e0f },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x020c), 0x0001 },
++	{ CCI_REG16(0x0bc6), 0x0000 },
++	{ CCI_REG16(0x0d00), 0x0000 },
++	{ CCI_REG16(0xb13c), 0x0800 },
++};
++
++static const struct cci_reg_sequence s5k3t2_mode_5184x3880[] = {
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0136), 0x1300 },
++	{ CCI_REG16(0x013e), 0x00c8 },
++	{ CCI_REG16(0x0304), 0x0003 },
++	{ CCI_REG16(0x0306), 0x00b9 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e0e },
++	{ CCI_REG16(0x6f12), 0x0103 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x602a), 0x1078 },
++	{ CCI_REG16(0x6f12), 0x04a6 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x030c), 0x0000 },
++	{ CCI_REG16(0x0302), 0x0001 },
++	{ CCI_REG16(0x0300), 0x0007 },
++	{ CCI_REG16(0x030e), 0x0003 },
++	{ CCI_REG16(0x0310), 0x008c },
++	{ CCI_REG16(0x0312), 0x0000 },
++	{ CCI_REG16(0x0308), 0x0008 },
++	{ CCI_REG16(0x030a), 0x0001 },
++	{ CCI_REG16(0x0344), 0x0008 },
++	{ CCI_REG16(0x0346), 0x0008 },
++	{ CCI_REG16(0x0348), 0x1447 },
++	{ CCI_REG16(0x034a), 0x0f2f },
++	{ CCI_REG16(0x034c), 0x1440 },
++	{ CCI_REG16(0x034e), 0x0f28 },
++	{ CCI_REG16(0x0350), 0x0000 },
++	{ CCI_REG16(0x0352), 0x0000 },
++	{ CCI_REG16(0x0900), 0x0111 },
++	{ CCI_REG16(0x0404), 0x1000 },
++	{ CCI_REG16(0x0380), 0x0001 },
++	{ CCI_REG16(0x0382), 0x0001 },
++	{ CCI_REG16(0x0384), 0x0001 },
++	{ CCI_REG16(0x0386), 0x0001 },
++	{ CCI_REG16(0x0342), 0x1540 },
++	{ CCI_REG16(0x0340), 0x1040 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x010c), 0x0000 },
++	{ CCI_REG16(0x0114), 0x0300 },
++	{ CCI_REG16(0x0116), 0x3000 },
++	{ CCI_REG16(0x011a), 0x0001 },
++	{ CCI_REG16(0x0118), 0x0002 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e92 },
++	{ CCI_REG16(0x6f12), 0xffff },
++	{ CCI_REG16(0x602a), 0x165a },
++	{ CCI_REG16(0x6f12), 0x0003 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0b04), 0x0001 },
++	{ CCI_REG16(0x0b06), 0x0101 },
++	{ CCI_REG16(0x0fea), 0x04a0 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x3c98 },
++	{ CCI_REG16(0x6f12), 0x0a58 },
++	{ CCI_REG16(0x6f12), 0x1477 },
++	{ CCI_REG16(0x602a), 0x1da0 },
++	{ CCI_REG16(0x6f12), 0x0010 },
++	{ CCI_REG16(0x602a), 0x10ac },
++	{ CCI_REG16(0x6f12), 0x000a },
++	{ CCI_REG16(0x602a), 0x1110 },
++	{ CCI_REG16(0x6f12), 0x001d },
++	{ CCI_REG16(0x6f12), 0x003f },
++	{ CCI_REG16(0x602a), 0x13e8 },
++	{ CCI_REG16(0x6f12), 0x0804 },
++	{ CCI_REG16(0x602a), 0x13f8 },
++	{ CCI_REG16(0x6f12), 0x38c8 },
++};
++
++static const struct cci_reg_sequence s5k3t2_mode_2592x1940[] = {
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0136), 0x1300 },
++	{ CCI_REG16(0x013e), 0x00c8 },
++	{ CCI_REG16(0x0304), 0x0003 },
++	{ CCI_REG16(0x0306), 0x00b9 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e0e },
++	{ CCI_REG16(0x6f12), 0x0104 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x602a), 0x1078 },
++	{ CCI_REG16(0x6f12), 0x04a6 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x030c), 0x0000 },
++	{ CCI_REG16(0x0302), 0x0001 },
++	{ CCI_REG16(0x0300), 0x0007 },
++	{ CCI_REG16(0x030e), 0x0003 },
++	{ CCI_REG16(0x0310), 0x00bb },
++	{ CCI_REG16(0x0312), 0x0002 },
++	{ CCI_REG16(0x0308), 0x0008 },
++	{ CCI_REG16(0x030a), 0x0001 },
++	{ CCI_REG16(0x0344), 0x0008 },
++	{ CCI_REG16(0x0346), 0x0008 },
++	{ CCI_REG16(0x0348), 0x1447 },
++	{ CCI_REG16(0x034a), 0x0f2f },
++	{ CCI_REG16(0x034c), 0x0a20 },
++	{ CCI_REG16(0x034e), 0x0794 },
++	{ CCI_REG16(0x0350), 0x0000 },
++	{ CCI_REG16(0x0352), 0x0000 },
++	{ CCI_REG16(0x0900), 0x0122 },
++	{ CCI_REG16(0x0404), 0x1000 },
++	{ CCI_REG16(0x0380), 0x0002 },
++	{ CCI_REG16(0x0382), 0x0002 },
++	{ CCI_REG16(0x0384), 0x0002 },
++	{ CCI_REG16(0x0386), 0x0002 },
++	{ CCI_REG16(0x0342), 0x2a80 },
++	{ CCI_REG16(0x0340), 0x0810 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x010c), 0x0000 },
++	{ CCI_REG16(0x0114), 0x0300 },
++	{ CCI_REG16(0x0116), 0x3000 },
++	{ CCI_REG16(0x011a), 0x0001 },
++	{ CCI_REG16(0x0118), 0x0002 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e92 },
++	{ CCI_REG16(0x6f12), 0xffff },
++	{ CCI_REG16(0x602a), 0x165a },
++	{ CCI_REG16(0x6f12), 0x0003 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0b04), 0x0001 },
++	{ CCI_REG16(0x0b06), 0x0101 },
++	{ CCI_REG16(0x0fea), 0x04a0 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x3c98 },
++	{ CCI_REG16(0x6f12), 0x052c },
++	{ CCI_REG16(0x6f12), 0x0a3b },
++	{ CCI_REG16(0x602a), 0x1da0 },
++	{ CCI_REG16(0x6f12), 0x0010 },
++	{ CCI_REG16(0x602a), 0x10ac },
++	{ CCI_REG16(0x6f12), 0x0014 },
++	{ CCI_REG16(0x602a), 0x1110 },
++	{ CCI_REG16(0x6f12), 0x001d },
++	{ CCI_REG16(0x6f12), 0x004d },
++	{ CCI_REG16(0x602a), 0x13e8 },
++	{ CCI_REG16(0x6f12), 0x080f },
++	{ CCI_REG16(0x602a), 0x13f8 },
++	{ CCI_REG16(0x6f12), 0x38c8 },
++};
++
++static const struct s5k3t2_mode s5k3t2_supported_modes[] = {
++	{
++		/*
++		 * El modo combinado. Va primero a proposito: es el que ya se
++		 * ha visto capturar en este SoC, y 5 MP son un tamano que el
++		 * revelado por software puede seguir. Los 20 MP de abajo
++		 * piden lo mismo al enlace pero cuadruplican el trabajo del
++		 * revelado.
++		 */
++		.width = 2592,
++		.height = 1940,
++		.hts = 10880,
++		.vts = 2064,
++		.exposure = 512,
++		.reg_list = {
++			.regs = s5k3t2_mode_2592x1940,
++			.num_regs = ARRAY_SIZE(s5k3t2_mode_2592x1940),
++		},
++	},
++	{
++		.width = 5184,
++		.height = 3880,
++		.hts = 5440,
++		.vts = 4160,
++		.exposure = 512,
++		.reg_list = {
++			.regs = s5k3t2_mode_5184x3880,
++			.num_regs = ARRAY_SIZE(s5k3t2_mode_5184x3880),
++		},
++	},
++};
++
++/*
++ * El orden del mosaico de Bayer no se puede deducir del fichero de fabrica, y
++ * equivocarse solo estropea el color, no impide la captura. Va como parametro
++ * para poder corregirlo mirando la primera foto, sin recompilar.
++ */
++static const u32 s5k3t2_bayer_codes[] = {
++	MEDIA_BUS_FMT_SGRBG10_1X10,
++	MEDIA_BUS_FMT_SRGGB10_1X10,
++	MEDIA_BUS_FMT_SBGGR10_1X10,
++	MEDIA_BUS_FMT_SGBRG10_1X10,
++};
++
++static int bayer;
++module_param(bayer, int, 0444);
++MODULE_PARM_DESC(bayer, "Orden del mosaico: 0=GRBG 1=RGGB 2=BGGR 3=GBRG");
++
++static u32 s5k3t2_get_format_code(void)
++{
++	return s5k3t2_bayer_codes[clamp(bayer, 0, 3)];
++}
++
++static inline u64 s5k3t2_freq_to_pixel_rate(u64 freq)
++{
++	return div_u64(freq * 2 * S5K3T2_DATA_LANES, S5K3T2_BPP);
++}
++
++static int s5k3t2_set_ctrl(struct v4l2_ctrl *ctrl)
++{
++	struct s5k3t2 *s5k3t2 = container_of(ctrl->handler, struct s5k3t2,
++					     ctrl_handler);
++	const struct s5k3t2_mode *mode = s5k3t2->mode;
++	s64 exposure_max;
++	int ret;
++
++	if (ctrl->id == V4L2_CID_VBLANK) {
++		/* La exposicion no puede pasar del alto total del fotograma. */
++		exposure_max = mode->height + ctrl->val - S5K3T2_EXPOSURE_MARGIN;
++		__v4l2_ctrl_modify_range(s5k3t2->exposure,
++					 s5k3t2->exposure->minimum,
++					 exposure_max, s5k3t2->exposure->step,
++					 min(s5k3t2->exposure->val, exposure_max));
++	}
++
++	if (!pm_runtime_get_if_in_use(s5k3t2->dev))
++		return 0;
++
++	ret = 0;
++	switch (ctrl->id) {
++	case V4L2_CID_EXPOSURE:
++		cci_write(s5k3t2->regmap, S5K3T2_REG_EXPOSURE, ctrl->val, &ret);
++		break;
++	case V4L2_CID_ANALOGUE_GAIN:
++		cci_write(s5k3t2->regmap, S5K3T2_REG_AGAIN, ctrl->val, &ret);
++		break;
++	case V4L2_CID_VBLANK:
++		cci_write(s5k3t2->regmap, S5K3T2_REG_VTS,
++			  mode->height + ctrl->val, &ret);
++		break;
++	case V4L2_CID_TEST_PATTERN:
++		cci_write(s5k3t2->regmap, S5K3T2_REG_TEST_PATTERN,
++			  ctrl->val, &ret);
++		break;
++	default:
++		ret = -EINVAL;
++		break;
++	}
++
++	pm_runtime_mark_last_busy(s5k3t2->dev);
++	pm_runtime_put_autosuspend(s5k3t2->dev);
++
++	return ret;
++}
++
++static const struct v4l2_ctrl_ops s5k3t2_ctrl_ops = {
++	.s_ctrl = s5k3t2_set_ctrl,
++};
++
++static int s5k3t2_init_controls(struct s5k3t2 *s5k3t2)
++{
++	struct v4l2_ctrl_handler *hdl = &s5k3t2->ctrl_handler;
++	const struct s5k3t2_mode *mode = s5k3t2->mode;
++	struct v4l2_fwnode_device_properties props;
++	s64 pixel_rate, hblank, vblank, exposure_max;
++	int ret;
++
++	ret = v4l2_ctrl_handler_init(hdl, 10);
++	if (ret)
++		return ret;
++
++	/*
++	 * LINK_FREQ y PIXEL_RATE no son opcionales: sin ellos CAMSS aborta con
++	 * "Cannot get CSI2 transmitter's link frequency" y no se enciende nada.
++	 */
++	s5k3t2->link_freq = v4l2_ctrl_new_int_menu(hdl, &s5k3t2_ctrl_ops,
++						   V4L2_CID_LINK_FREQ, 0, 0,
++						   s5k3t2_link_freq_menu);
++	if (s5k3t2->link_freq)
++		s5k3t2->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	pixel_rate = s5k3t2_freq_to_pixel_rate(S5K3T2_LINK_FREQ);
++	s5k3t2->pixel_rate = v4l2_ctrl_new_std(hdl, &s5k3t2_ctrl_ops,
++					       V4L2_CID_PIXEL_RATE,
++					       pixel_rate, pixel_rate, 1,
++					       pixel_rate);
++	if (s5k3t2->pixel_rate)
++		s5k3t2->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	hblank = mode->hts - mode->width;
++	s5k3t2->hblank = v4l2_ctrl_new_std(hdl, &s5k3t2_ctrl_ops,
++					   V4L2_CID_HBLANK, hblank, hblank, 1,
++					   hblank);
++	if (s5k3t2->hblank)
++		s5k3t2->hblank->flags |= V4L2_CTRL_FLAG_READ_ONLY;
++
++	vblank = mode->vts - mode->height;
++	s5k3t2->vblank = v4l2_ctrl_new_std(hdl, &s5k3t2_ctrl_ops,
++					   V4L2_CID_VBLANK, vblank,
++					   S5K3T2_VTS_MAX - mode->height, 1,
++					   vblank);
++
++	exposure_max = mode->vts - S5K3T2_EXPOSURE_MARGIN;
++	s5k3t2->exposure = v4l2_ctrl_new_std(hdl, &s5k3t2_ctrl_ops,
++					     V4L2_CID_EXPOSURE,
++					     S5K3T2_EXPOSURE_MIN, exposure_max,
++					     S5K3T2_EXPOSURE_STEP,
++					     mode->exposure);
++
++	v4l2_ctrl_new_std(hdl, &s5k3t2_ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
++			  S5K3T2_AGAIN_MIN, S5K3T2_AGAIN_MAX,
++			  S5K3T2_AGAIN_STEP, S5K3T2_AGAIN_DEFAULT);
++
++	v4l2_ctrl_new_std_menu_items(hdl, &s5k3t2_ctrl_ops,
++				     V4L2_CID_TEST_PATTERN,
++				     ARRAY_SIZE(s5k3t2_test_pattern_menu) - 1,
++				     0, 0, s5k3t2_test_pattern_menu);
++
++	if (hdl->error) {
++		ret = hdl->error;
++		dev_err(s5k3t2->dev, "no pude crear los controles: %d\n", ret);
++		goto error;
++	}
++
++	ret = v4l2_fwnode_device_parse(s5k3t2->dev, &props);
++	if (ret)
++		goto error;
++
++	ret = v4l2_ctrl_new_fwnode_properties(hdl, &s5k3t2_ctrl_ops, &props);
++	if (ret)
++		goto error;
++
++	s5k3t2->sd.ctrl_handler = hdl;
++
++	return 0;
++
++error:
++	v4l2_ctrl_handler_free(hdl);
++
++	return ret;
++}
++
++static int s5k3t2_enable_streams(struct v4l2_subdev *sd,
++				 struct v4l2_subdev_state *state, u32 pad,
++				 u64 streams_mask)
++{
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++	const struct s5k3t2_reg_list *reg_list;
++	int ret;
++
++	ret = pm_runtime_resume_and_get(s5k3t2->dev);
++	if (ret < 0)
++		return ret;
++
++	/*
++	 * Reinicio por programa antes de nada. Va aqui y no en la tabla porque
++	 * necesita una espera detras, y las tablas se escriben de un tiron.
++	 */
++	ret = 0;
++	cci_write(s5k3t2->regmap, S5K3T2_REG_PAGE, 0x4000, &ret);
++	cci_write(s5k3t2->regmap, S5K3T2_REG_RESET, 0x0001, &ret);
++	if (ret)
++		goto err_rpm_put;
++
++	usleep_range(5000, 6000);
++
++	ret = cci_multi_reg_write(s5k3t2->regmap, s5k3t2_init,
++				  ARRAY_SIZE(s5k3t2_init), NULL);
++	if (ret) {
++		dev_err(s5k3t2->dev, "fallo la tabla de inicializacion\n");
++		goto err_rpm_put;
++	}
++
++	reg_list = &s5k3t2->mode->reg_list;
++	ret = cci_multi_reg_write(s5k3t2->regmap, reg_list->regs,
++				  reg_list->num_regs, NULL);
++	if (ret) {
++		dev_err(s5k3t2->dev, "fallo la tabla del modo\n");
++		goto err_rpm_put;
++	}
++
++	ret = __v4l2_ctrl_handler_setup(&s5k3t2->ctrl_handler);
++	if (ret)
++		goto err_rpm_put;
++
++	/*
++	 * Los dos volteos van puestos, como hace el Android de fabrica: el
++	 * modulo esta montado del reves.
++	 */
++	ret = cci_write(s5k3t2->regmap, S5K3T2_REG_CTRL_MODE,
++			S5K3T2_MODE_STREAMING | S5K3T2_VFLIP | S5K3T2_HFLIP,
++			NULL);
++	if (ret)
++		goto err_rpm_put;
++
++	return 0;
++
++err_rpm_put:
++	pm_runtime_mark_last_busy(s5k3t2->dev);
++	pm_runtime_put_autosuspend(s5k3t2->dev);
++
++	return ret;
++}
++
++static int s5k3t2_disable_streams(struct v4l2_subdev *sd,
++				  struct v4l2_subdev_state *state, u32 pad,
++				  u64 streams_mask)
++{
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++	int ret;
++
++	ret = cci_write(s5k3t2->regmap, S5K3T2_REG_CTRL_MODE, 0, NULL);
++
++	pm_runtime_mark_last_busy(s5k3t2->dev);
++	pm_runtime_put_autosuspend(s5k3t2->dev);
++
++	return ret;
++}
++
++static void s5k3t2_update_pad_format(const struct s5k3t2_mode *mode,
++				     struct v4l2_mbus_framefmt *fmt)
++{
++	fmt->width = mode->width;
++	fmt->height = mode->height;
++	fmt->code = s5k3t2_get_format_code();
++	fmt->field = V4L2_FIELD_NONE;
++	fmt->colorspace = V4L2_COLORSPACE_RAW;
++	fmt->ycbcr_enc = V4L2_YCBCR_ENC_DEFAULT;
++	fmt->quantization = V4L2_QUANTIZATION_FULL_RANGE;
++	fmt->xfer_func = V4L2_XFER_FUNC_NONE;
++}
++
++static int s5k3t2_set_pad_format(struct v4l2_subdev *sd,
++				 struct v4l2_subdev_state *state,
++				 struct v4l2_subdev_format *fmt)
++{
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++	const struct s5k3t2_mode *mode;
++	struct v4l2_mbus_framefmt *format;
++	struct v4l2_rect *crop;
++	s64 exposure_max, hblank, vblank;
++
++	mode = v4l2_find_nearest_size(s5k3t2_supported_modes,
++				      ARRAY_SIZE(s5k3t2_supported_modes),
++				      width, height,
++				      fmt->format.width, fmt->format.height);
++
++	s5k3t2_update_pad_format(mode, &fmt->format);
++
++	format = v4l2_subdev_state_get_format(state, 0);
++	*format = fmt->format;
++
++	crop = v4l2_subdev_state_get_crop(state, 0);
++	crop->left = 0;
++	crop->top = 0;
++	crop->width = mode->width;
++	crop->height = mode->height;
++
++	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE) {
++		s5k3t2->mode = mode;
++
++		hblank = mode->hts - mode->width;
++		__v4l2_ctrl_modify_range(s5k3t2->hblank, hblank, hblank, 1,
++					 hblank);
++
++		vblank = mode->vts - mode->height;
++		__v4l2_ctrl_modify_range(s5k3t2->vblank, vblank,
++					 S5K3T2_VTS_MAX - mode->height, 1,
++					 vblank);
++		__v4l2_ctrl_s_ctrl(s5k3t2->vblank, vblank);
++
++		exposure_max = mode->vts - S5K3T2_EXPOSURE_MARGIN;
++		__v4l2_ctrl_modify_range(s5k3t2->exposure,
++					 S5K3T2_EXPOSURE_MIN, exposure_max,
++					 S5K3T2_EXPOSURE_STEP, mode->exposure);
++	}
++
++	return 0;
++}
++
++static int s5k3t2_enum_mbus_code(struct v4l2_subdev *sd,
++				 struct v4l2_subdev_state *state,
++				 struct v4l2_subdev_mbus_code_enum *code)
++{
++	if (code->index > 0)
++		return -EINVAL;
++
++	code->code = s5k3t2_get_format_code();
++
++	return 0;
++}
++
++static int s5k3t2_enum_frame_size(struct v4l2_subdev *sd,
++				  struct v4l2_subdev_state *state,
++				  struct v4l2_subdev_frame_size_enum *fse)
++{
++	if (fse->index >= ARRAY_SIZE(s5k3t2_supported_modes))
++		return -EINVAL;
++
++	if (fse->code != s5k3t2_get_format_code())
++		return -EINVAL;
++
++	fse->min_width = s5k3t2_supported_modes[fse->index].width;
++	fse->max_width = fse->min_width;
++	fse->min_height = s5k3t2_supported_modes[fse->index].height;
++	fse->max_height = fse->min_height;
++
++	return 0;
++}
++
++static int s5k3t2_get_selection(struct v4l2_subdev *sd,
++				struct v4l2_subdev_state *state,
++				struct v4l2_subdev_selection *sel)
++{
++	switch (sel->target) {
++	case V4L2_SEL_TGT_CROP:
++		sel->r = *v4l2_subdev_state_get_crop(state, 0);
++		return 0;
++	case V4L2_SEL_TGT_NATIVE_SIZE:
++	case V4L2_SEL_TGT_CROP_DEFAULT:
++	case V4L2_SEL_TGT_CROP_BOUNDS:
++		sel->r.top = 0;
++		sel->r.left = 0;
++		sel->r.width = 5184;
++		sel->r.height = 3880;
++		return 0;
++	}
++
++	return -EINVAL;
++}
++
++static int s5k3t2_init_state(struct v4l2_subdev *sd,
++			     struct v4l2_subdev_state *state)
++{
++	struct v4l2_subdev_format fmt = {
++		.which = V4L2_SUBDEV_FORMAT_TRY,
++		.pad = 0,
++		.format = {
++			.width = s5k3t2_supported_modes[0].width,
++			.height = s5k3t2_supported_modes[0].height,
++		},
++	};
++
++	return s5k3t2_set_pad_format(sd, state, &fmt);
++}
++
++static const struct v4l2_subdev_video_ops s5k3t2_video_ops = {
++	.s_stream = v4l2_subdev_s_stream_helper,
++};
++
++static const struct v4l2_subdev_pad_ops s5k3t2_pad_ops = {
++	.enum_mbus_code = s5k3t2_enum_mbus_code,
++	.get_fmt = v4l2_subdev_get_fmt,
++	.set_fmt = s5k3t2_set_pad_format,
++	.enum_frame_size = s5k3t2_enum_frame_size,
++	.get_selection = s5k3t2_get_selection,
++	.enable_streams = s5k3t2_enable_streams,
++	.disable_streams = s5k3t2_disable_streams,
++};
++
++static const struct v4l2_subdev_ops s5k3t2_subdev_ops = {
++	.video = &s5k3t2_video_ops,
++	.pad = &s5k3t2_pad_ops,
++};
++
++static const struct v4l2_subdev_internal_ops s5k3t2_internal_ops = {
++	.init_state = s5k3t2_init_state,
++};
++
++static const struct media_entity_operations s5k3t2_subdev_entity_ops = {
++	.link_validate = v4l2_subdev_link_validate,
++};
++
++/* Lee la identificacion en una direccion concreta, sin usar el regmap. */
++static int s5k3t2_probe_id_at(struct i2c_client *client, u8 addr, u16 *id)
++{
++	u8 reg[2] = { 0x00, 0x00 };
++	u8 val[2];
++	struct i2c_msg msgs[2] = {
++		{ .addr = addr, .flags = 0, .len = 2, .buf = reg },
++		{ .addr = addr, .flags = I2C_M_RD, .len = 2, .buf = val },
++	};
++	int ret;
++
++	ret = i2c_transfer(client->adapter, msgs, 2);
++	if (ret != 2)
++		return -ENODEV;
++
++	*id = (val[0] << 8) | val[1];
++
++	return 0;
++}
++
++/*
++ * El fichero de fabrica NO trae la direccion del sensor -su unico slaveAddr es
++ * la EEPROM-, asi que se busca leyendo la identificacion. Es la misma trampa
++ * que con el trasero, donde el 0x50 "documentado" resulto ser la EEPROM y el
++ * sensor estaba en 0x1a.
++ */
++static int s5k3t2_find_sensor(struct s5k3t2 *s5k3t2, struct i2c_client *client)
++{
++	static const u8 probables[] = { 0x10, 0x2d, 0x1a, 0x16, 0x20, 0x36, 0x3c, 0x5a };
++	u16 id;
++	int i;
++
++	if (i2c_addr >= 0) {
++		client->addr = i2c_addr;
++		dev_info(s5k3t2->dev, "direccion forzada por parametro: 0x%02x\n",
++			 i2c_addr);
++		return 0;
++	}
++
++	for (i = 0; i < ARRAY_SIZE(probables); i++) {
++		if (!s5k3t2_probe_id_at(client, probables[i], &id) &&
++		    id == S5K3T2_CHIP_ID) {
++			dev_info(s5k3t2->dev, "S5K3T2 encontrado en 0x%02x\n",
++				 probables[i]);
++			client->addr = probables[i];
++			return 0;
++		}
++	}
++
++	/* Nada en las probables: barrido completo, y se dice quien contesta. */
++	for (i = 0x08; i <= 0x77; i++) {
++		if (s5k3t2_probe_id_at(client, i, &id))
++			continue;
++
++		dev_info(s5k3t2->dev, "contesta 0x%02x, identificacion 0x%04x\n",
++			 i, id);
++
++		if (id == S5K3T2_CHIP_ID) {
++			client->addr = i;
++			return 0;
++		}
++	}
++
++	return -ENODEV;
++}
++
++static int s5k3t2_check_hwcfg(struct s5k3t2 *s5k3t2)
++{
++	struct fwnode_handle *fwnode = dev_fwnode(s5k3t2->dev), *ep;
++	struct v4l2_fwnode_endpoint bus_cfg = {
++		.bus = {
++			.mipi_csi2 = {
++				.num_data_lanes = S5K3T2_DATA_LANES,
++			},
++		},
++		.bus_type = V4L2_MBUS_CSI2_DPHY,
++	};
++	unsigned long freq_bitmap;
++	int ret;
++
++	if (!fwnode)
++		return -ENODEV;
++
++	ep = fwnode_graph_get_next_endpoint(fwnode, NULL);
++	if (!ep)
++		return -EINVAL;
++
++	ret = v4l2_fwnode_endpoint_alloc_parse(ep, &bus_cfg);
++	fwnode_handle_put(ep);
++	if (ret)
++		return ret;
++
++	if (bus_cfg.bus.mipi_csi2.num_data_lanes != S5K3T2_DATA_LANES) {
++		dev_err(s5k3t2->dev, "hacen falta %u carriles, el device tree dice %u\n",
++			S5K3T2_DATA_LANES, bus_cfg.bus.mipi_csi2.num_data_lanes);
++		ret = -EINVAL;
++		goto endpoint_free;
++	}
++
++	ret = v4l2_link_freq_to_bitmap(s5k3t2->dev, bus_cfg.link_frequencies,
++				       bus_cfg.nr_of_link_frequencies,
++				       s5k3t2_link_freq_menu,
++				       ARRAY_SIZE(s5k3t2_link_freq_menu),
++				       &freq_bitmap);
++
++endpoint_free:
++	v4l2_fwnode_endpoint_free(&bus_cfg);
++
++	return ret;
++}
++
++static int s5k3t2_power_on(struct device *dev)
++{
++	struct v4l2_subdev *sd = dev_get_drvdata(dev);
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++	int ret;
++
++	ret = regulator_bulk_enable(S5K3T2_NUM_SUPPLIES, s5k3t2->supplies);
++	if (ret)
++		return ret;
++
++	ret = clk_prepare_enable(s5k3t2->mclk);
++	if (ret)
++		goto disable_regulators;
++
++	gpiod_set_value_cansleep(s5k3t2->reset_gpio, 0);
++	usleep_range(10 * USEC_PER_MSEC, 15 * USEC_PER_MSEC);
++
++	return 0;
++
++disable_regulators:
++	regulator_bulk_disable(S5K3T2_NUM_SUPPLIES, s5k3t2->supplies);
++
++	return ret;
++}
++
++static int s5k3t2_power_off(struct device *dev)
++{
++	struct v4l2_subdev *sd = dev_get_drvdata(dev);
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++
++	gpiod_set_value_cansleep(s5k3t2->reset_gpio, 1);
++	clk_disable_unprepare(s5k3t2->mclk);
++	regulator_bulk_disable(S5K3T2_NUM_SUPPLIES, s5k3t2->supplies);
++
++	return 0;
++}
++
++static int s5k3t2_probe(struct i2c_client *client)
++{
++	struct s5k3t2 *s5k3t2;
++	unsigned long freq;
++	unsigned int i;
++	u16 id;
++	int ret;
++
++	s5k3t2 = devm_kzalloc(&client->dev, sizeof(*s5k3t2), GFP_KERNEL);
++	if (!s5k3t2)
++		return -ENOMEM;
++
++	s5k3t2->dev = &client->dev;
++
++	/*
++	 * Esto va lo primero, y no es cosmetico: es lo que deja el subdev
++	 * colgado del device, y s5k3t2_power_on() lo busca ahi con
++	 * dev_get_drvdata(). Encender antes de esta linea es una
++	 * desreferencia a NULL nada mas arrancar.
++	 */
++	v4l2_i2c_subdev_init(&s5k3t2->sd, client, &s5k3t2_subdev_ops);
++
++	s5k3t2->mclk = devm_v4l2_sensor_clk_get(s5k3t2->dev, NULL);
++	if (IS_ERR(s5k3t2->mclk))
++		return dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->mclk),
++				     "no pude coger el MCLK\n");
++
++	freq = clk_get_rate(s5k3t2->mclk);
++	if (freq != S5K3T2_MCLK_FREQ)
++		return dev_err_probe(s5k3t2->dev, -EINVAL,
++				     "el MCLK esta a %lu Hz y las tablas son para %lu\n",
++				     freq, (unsigned long)S5K3T2_MCLK_FREQ);
++
++	ret = s5k3t2_check_hwcfg(s5k3t2);
++	if (ret)
++		return dev_err_probe(s5k3t2->dev, ret,
++				     "el device tree no cuadra\n");
++
++	s5k3t2->reset_gpio = devm_gpiod_get_optional(s5k3t2->dev, "reset",
++						     GPIOD_OUT_HIGH);
++	if (IS_ERR(s5k3t2->reset_gpio))
++		return dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->reset_gpio),
++				     "no pude coger el pin de reset\n");
++
++	for (i = 0; i < S5K3T2_NUM_SUPPLIES; i++)
++		s5k3t2->supplies[i].supply = s5k3t2_supply_names[i];
++
++	ret = devm_regulator_bulk_get(s5k3t2->dev, S5K3T2_NUM_SUPPLIES,
++				      s5k3t2->supplies);
++	if (ret)
++		return dev_err_probe(s5k3t2->dev, ret,
++				     "no pude coger los reguladores\n");
++
++	/*
++	 * El conmutador MIPI que comparten la frontal y el gran angular. Se
++	 * pide como opcional y solo se toca si lo mandan por parametro: no se
++	 * conduce un pin cuya posicion correcta todavia no esta medida.
++	 */
++	s5k3t2->mipi_switch_reg = devm_regulator_get_optional(s5k3t2->dev,
++							      "mipi-switch");
++	if (IS_ERR(s5k3t2->mipi_switch_reg))
++		s5k3t2->mipi_switch_reg = NULL;
++
++	if (s5k3t2->mipi_switch_reg && mipi_switch >= 0) {
++		ret = mipi_switch ?
++			regulator_enable(s5k3t2->mipi_switch_reg) :
++			regulator_disable(s5k3t2->mipi_switch_reg);
++		if (ret)
++			dev_warn(s5k3t2->dev,
++				 "no pude poner el conmutador MIPI a %d: %d\n",
++				 mipi_switch, ret);
++		else
++			dev_info(s5k3t2->dev, "conmutador MIPI puesto a %d\n",
++				 mipi_switch);
++	}
++
++	/* Hay que alimentarlo y darle reloj antes de que conteste por I2C. */
++	ret = s5k3t2_power_on(s5k3t2->dev);
++	if (ret)
++		return ret;
++
++	ret = s5k3t2_find_sensor(s5k3t2, client);
++	if (ret) {
++		dev_err(s5k3t2->dev, "no encuentro el S5K3T2 en el bus\n");
++		goto power_off;
++	}
++
++	s5k3t2->regmap = devm_cci_regmap_init_i2c(client, 16);
++	if (IS_ERR(s5k3t2->regmap)) {
++		ret = dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->regmap),
++				    "no pude arrancar el CCI\n");
++		goto power_off;
++	}
++
++	ret = s5k3t2_probe_id_at(client, client->addr, &id);
++	if (ret || id != S5K3T2_CHIP_ID) {
++		dev_err(s5k3t2->dev, "identificacion 0x%04x, esperaba 0x%04x\n",
++			id, S5K3T2_CHIP_ID);
++		ret = -ENODEV;
++		goto power_off;
++	}
++
++	dev_info(s5k3t2->dev, "ES UN S5K3T2: identificacion 0x%04x en 0x%02x\n",
++		 id, client->addr);
++
++	s5k3t2->mode = &s5k3t2_supported_modes[0];
++
++	ret = s5k3t2_init_controls(s5k3t2);
++	if (ret) {
++		dev_err_probe(s5k3t2->dev, ret, "fallaron los controles\n");
++		goto power_off;
++	}
++
++	s5k3t2->sd.state_lock = s5k3t2->ctrl_handler.lock;
++	s5k3t2->sd.internal_ops = &s5k3t2_internal_ops;
++	s5k3t2->sd.flags |= V4L2_SUBDEV_FL_HAS_DEVNODE;
++	s5k3t2->sd.entity.ops = &s5k3t2_subdev_entity_ops;
++	s5k3t2->sd.entity.function = MEDIA_ENT_F_CAM_SENSOR;
++	s5k3t2->pad.flags = MEDIA_PAD_FL_SOURCE;
++
++	ret = media_entity_pads_init(&s5k3t2->sd.entity, 1, &s5k3t2->pad);
++	if (ret)
++		goto ctrl_free;
++
++	ret = v4l2_subdev_init_finalize(&s5k3t2->sd);
++	if (ret < 0)
++		goto media_cleanup;
++
++	pm_runtime_set_active(s5k3t2->dev);
++	pm_runtime_enable(s5k3t2->dev);
++
++	ret = v4l2_async_register_subdev_sensor(&s5k3t2->sd);
++	if (ret < 0) {
++		dev_err_probe(s5k3t2->dev, ret, "no pude registrar el subdev\n");
++		goto subdev_cleanup;
++	}
++
++	pm_runtime_set_autosuspend_delay(s5k3t2->dev, 1000);
++	pm_runtime_use_autosuspend(s5k3t2->dev);
++	pm_runtime_idle(s5k3t2->dev);
++
++	return 0;
++
++subdev_cleanup:
++	v4l2_subdev_cleanup(&s5k3t2->sd);
++	pm_runtime_disable(s5k3t2->dev);
++	pm_runtime_set_suspended(s5k3t2->dev);
++
++media_cleanup:
++	media_entity_cleanup(&s5k3t2->sd.entity);
++
++ctrl_free:
++	v4l2_ctrl_handler_free(&s5k3t2->ctrl_handler);
++
++power_off:
++	s5k3t2_power_off(s5k3t2->dev);
++
++	return ret;
++}
++
++static void s5k3t2_remove(struct i2c_client *client)
++{
++	struct v4l2_subdev *sd = i2c_get_clientdata(client);
++	struct s5k3t2 *s5k3t2 = to_s5k3t2(sd);
++
++	v4l2_async_unregister_subdev(sd);
++	v4l2_subdev_cleanup(sd);
++	media_entity_cleanup(&sd->entity);
++	v4l2_ctrl_handler_free(sd->ctrl_handler);
++	pm_runtime_disable(s5k3t2->dev);
++
++	if (!pm_runtime_status_suspended(s5k3t2->dev)) {
++		s5k3t2_power_off(s5k3t2->dev);
++		pm_runtime_set_suspended(s5k3t2->dev);
++	}
++}
++
++static const struct dev_pm_ops s5k3t2_pm_ops = {
++	SET_RUNTIME_PM_OPS(s5k3t2_power_off, s5k3t2_power_on, NULL)
++};
++
++static const struct of_device_id s5k3t2_of_match[] = {
++	{ .compatible = "samsung,s5k3t2" },
++	{ /* sentinel */ }
++};
++MODULE_DEVICE_TABLE(of, s5k3t2_of_match);
++
++static struct i2c_driver s5k3t2_i2c_driver = {
++	.driver = {
++		.name = "s5k3t2",
++		.pm = &s5k3t2_pm_ops,
++		.of_match_table = s5k3t2_of_match,
++	},
++	.probe = s5k3t2_probe,
++	.remove = s5k3t2_remove,
++};
++
++module_i2c_driver(s5k3t2_i2c_driver);
++
++MODULE_DESCRIPTION("Samsung S5K3T2 sensor driver");
++MODULE_LICENSE("GPL");
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-05-13 02:27:25.000000000 +0200
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-08-14 21:26:43.244733356 +0200
+@@ -1894,6 +1894,27 @@
+ 	},
+ };
+ 
++/*
++ * Los 2 GiB/s de antes no aguantan: con el sensor frontal transmitiendo y la
++ * CPU tocando memoria -que es justo lo que pasa cuando libcamera revela por
++ * software- el receptor CSI-2 se queda sin FIFO a los pocos segundos y la
++ * tuberia se para. Se ve como desbordamiento de carril en
++ * CSID_CSI2_RX_IRQ_STATUS, seguido de fallos del SMMU.
++ *
++ * La medida que lo arregla es 4 GiB/s, y esta hecha en aparato subiendo la
++ * escalera de uno en uno: a 2 y a 3 se para, a 4 y a 6 aguanta limpio. Subir
++ * en cambio el reloj del CAMNOC dejando la peticion vieja no cambia nada, asi
++ * que lo que falta es la peticion al bus, no el reloj.
++ *
++ * Y no es el trafico de la camara: el sensor escribe unos 190 MB/s, veinte
++ * veces menos. Lo que se compra es un punto de trabajo del bus y de la DDR en
++ * el que el receptor sigue atendido aunque la memoria este ocupada. Por eso un
++ * modelo calculado a partir de resolucion x fotogramas x bits daria ~0,2 GB/s
++ * y empeoraria las cosas.
++ *
++ * De sm7150-mainline/linux PR #59, medido en un Xiaomi Mi 9T (davinci) con
++ * este mismo SoC y este mismo sensor.
++ */
+ static const struct resources_icc icc_res_sm7150[] = {
+ 	{
+ 		.name = "cam_ahb",
+@@ -1902,18 +1923,18 @@
+ 	},
+ 	{
+ 		.name = "cam_hf_0_mnoc",
+-		.icc_bw_tbl.avg = 2097152,
+-		.icc_bw_tbl.peak = 2097152,
++		.icc_bw_tbl.avg = 4194304,
++		.icc_bw_tbl.peak = 4194304,
+ 	},
+ 	{
+ 		.name = "cam_sf_0_mnoc",
+ 		.icc_bw_tbl.avg = 0,
+-		.icc_bw_tbl.peak = 2097152,
++		.icc_bw_tbl.peak = 4194304,
+ 	},
+ 	{
+ 		.name = "cam_sf_icp_mnoc",
+-		.icc_bw_tbl.avg = 2097152,
+-		.icc_bw_tbl.peak = 2097152,
++		.icc_bw_tbl.avg = 4194304,
++		.icc_bw_tbl.peak = 4194304,
+ 	},
+ };
+ 

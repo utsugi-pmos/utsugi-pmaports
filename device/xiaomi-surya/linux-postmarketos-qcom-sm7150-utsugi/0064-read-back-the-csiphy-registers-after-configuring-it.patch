@@ -1,0 +1,95 @@
+DIAGNOSTIC: read the CSIPHY registers back after configuring it
+
+WHY
+---
+Everything else has already been ruled out WITH MEASUREMENT on the device:
+
+  - the sensor emits (its frame counter advances and the PHY's activity rate
+    follows the frame rate when it is lowered),
+  - the CSIPHY hears it (stopping the sensor over I2C takes its interrupts to
+    zero),
+  - the five lanes, clock included, come out of idle,
+  - the clocks are all on and at their rate (looked at WHILE it transmits),
+  - the routing is the right one (PHY_NUM_SEL swept from 0 to 7),
+  - the link speed does not matter (swept from 2393 to 307 Mbps per lane),
+  - nor does the settle count (swept from 10 to 58, twice),
+  - the sensor firmware is properly loaded (the 244 values of its internal RAM
+    read back one by one: 244 out of 244 match),
+  - and the CSID receiver DOES know how to report: with its pattern generator it
+    marks SOT and EOT on all four lanes.
+
+And even so the PHY does not hand the CSID a single symbol.
+
+The silliest thing of all is left to check: that the PHY's writes land. A block
+that is only half powered, a wrong offset or a register that ignores what is
+written to it show up here and nowhere else. And it cannot be looked at from
+userspace: with CONFIG_STRICT_DEVMEM, reads through /dev/mem silently return
+zeros.
+
+WHAT IT DOES
+------------
+After writing the lane table, it walks it again reading each register and warns
+about the ones that do not return what was written. It sits behind the
+releer_registros parameter because it is 115 reads for every transmission start.
+
+This does NOT fix anything: it is for looking.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 00:12:20.920071431 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 00:12:40.484056759 +0200
+@@ -1057,6 +1057,11 @@
+  * reiniciar, que en este movil cuesta caro: se cuelga uno de cada cuatro
+  * arranques.
+  */
++static int releer_registros;
++module_param(releer_registros, int, 0644);
++MODULE_PARM_DESC(releer_registros,
++	"1 = releer los registros del CSIPHY tras configurarlo y avisar de los que no cuadren.");
++
+ static int desenmascarar;
+ module_param(desenmascarar, int, 0644);
+ MODULE_PARM_DESC(desenmascarar,
+@@ -1179,6 +1184,45 @@
+ 		if (r->delay_us)
+ 			udelay(r->delay_us);
+ 	}
++
++	/*
++	 * DIAGNOSTICO: releer lo que se acaba de escribir.
++	 *
++	 * Todo lo demas esta ya descartado con medida -el sensor emite, el PHY
++	 * lo oye, los relojes estan puestos, el encaminamiento es el bueno y el
++	 * receptor del CSID SI sabe reportar cuando le llega algo, comprobado
++	 * con su generador de patron-. Y aun asi el PHY no le entrega un solo
++	 * simbolo.
++	 *
++	 * Queda por comprobar lo mas tonto: que las escrituras aterricen. Un
++	 * bloque a medio alimentar, un offset equivocado o un registro que
++	 * ignora lo que se le escribe se ven aqui y en ningun otro sitio.
++	 *
++	 * Va detras de un parametro porque son 115 lecturas por arranque de
++	 * transmision y no hace falta tenerlas siempre.
++	 */
++	if (!releer_registros)
++		return;
++
++	r = csiphy->regs->lane_regs;
++	for (i = 0; i < array_size; i++, r++) {
++		u32 leido;
++
++		if (r->csiphy_param_type == CSIPHY_SKEW_CAL ||
++		    r->csiphy_param_type == CSIPHY_DNP_PARAMS)
++			continue;
++
++		val = r->csiphy_param_type == CSIPHY_SETTLE_CNT_LOWER_BYTE ?
++			(settle_cnt & 0xff) : r->reg_data;
++
++		leido = readl_relaxed(csiphy->base + r->reg_addr);
++		if (leido != val)
++			dev_info(csiphy->camss->dev,
++				 "csiphy%d 0x%04x: escrito 0x%02x, leido 0x%08x\n",
++				 csiphy->id, r->reg_addr, val, leido);
++	}
++	dev_info(csiphy->camss->dev, "csiphy%d: relectura terminada\n",
++		 csiphy->id);
+ }
+ 
+ static u8 csiphy_get_lane_mask(struct csiphy_lanes_cfg *lane_cfg)
