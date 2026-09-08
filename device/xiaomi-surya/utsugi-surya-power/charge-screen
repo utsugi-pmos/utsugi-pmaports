@@ -39,7 +39,7 @@ def consola(modo):
 
     Without this fbcon writes the kernel messages ON TOP of the drawing, and this
     phone boots with the console at level 7 on purpose so that a hang leaves a
-    trace (see the caja-negra setting): meaning it writes a lot. The console
+    trace (see the blackbox setting): meaning it writes a lot. The console
     drawing is turned off, not the logging; not a single line is lost.
     """
     try:

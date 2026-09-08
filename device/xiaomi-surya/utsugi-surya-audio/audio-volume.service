@@ -13,9 +13,9 @@ ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -e /dev/snd/controlC0 ] && e
 # 'todo', not 'altavoz': that mode turns off the top speaker on purpose.
 # Without this service the chips boot at around -36 dB and the phone seems mute.
 #
-# 'salida-audio' saves the state with 'alsactl store' when it finishes, so what
+# 'audio-output' saves the state with 'alsactl store' when it finishes, so what
 # 'alsa-restore' restores on the next boot will be exactly this.
-ExecStart=/usr/bin/salida-audio todo 85
+ExecStart=/usr/bin/audio-output todo 85
 
 [Install]
 WantedBy=multi-user.target

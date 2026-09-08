@@ -8,7 +8,7 @@ Type=oneshot
 # Wait for the session to settle: warming up while competing with Plasma's own
 # boot would be counterproductive.
 ExecStartPre=/bin/sleep 25
-ExecStart=/usr/libexec/utsugi-surya/precalentar-marcador
+ExecStart=/usr/libexec/utsugi-surya/dialer-warmup
 # Low priority on CPU and disk: this must never get in the way.
 Nice=15
 IOSchedulingClass=idle

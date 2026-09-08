@@ -8,7 +8,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # anyone touching audio.
 pkgname=utsugi-surya-sensors
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Accelerometer, light, compass and proximity for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -18,10 +18,10 @@ options="!check"
 depends="hexagonrpcd-utsugi iio-sensor-proxy-utsugi firmware-xiaomi-surya"
 subpackages="$pkgname-systemd"
 source="sensors-seed
-	hexagonrpcd-esta-parcheado
-	iio-sensor-proxy-esta-parcheado
+	hexagonrpcd-is-patched
+	iio-sensor-proxy-is-patched
 	utsugi-surya-sensors-seed.service
-	sensores-al-despertar.service
+	sensors-on-resume.service
 	10-utsugi-surya.conf
 	10-utsugi-surya-iio.conf
 	10-utsugi-iio-sensor-proxy.rules
@@ -30,7 +30,7 @@ source="sensors-seed
 
 package() {
 	local helper
-	for helper in sensors-seed hexagonrpcd-esta-parcheado iio-sensor-proxy-esta-parcheado; do
+	for helper in sensors-seed hexagonrpcd-is-patched iio-sensor-proxy-is-patched; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 
@@ -40,7 +40,7 @@ package() {
 		-t "$pkgdir"/usr/share/polkit-1/rules.d/
 
 	install -Dm644 "$srcdir"/utsugi-surya-sensors-seed.service \
-		"$srcdir"/sensores-al-despertar.service \
+		"$srcdir"/sensors-on-resume.service \
 		-t "$pkgdir"/usr/lib/systemd/system/
 	install -Dm644 "$srcdir"/10-utsugi-surya.conf \
 		-t "$pkgdir"/usr/lib/systemd/system/hexagonrpcd-adsp-sensorspd.service.d/
@@ -55,12 +55,12 @@ systemd() {
 }
 sha512sums="
 a373261e404a166c5dc1295d5e4146057db2947f56cd28e4ad934d7db927cfdf8838c899a246c7487dc4d22c4888f5d8de183e79a47d56c46f67cf1021ac2332  sensors-seed
-4fa576a3ffefa90bed16ba97716a4579bd621951f3ee94466e5d089cd65628e61b7556c116ad270a4169c92b9ca7b59e9d9f3a62560a2fec09e1d99b044811e6  hexagonrpcd-esta-parcheado
-9b05651803041a98b6b7a52b0f71308c5e3eb560f8b93b578f0bab458c60edd8fae1509e8e24906e4b73779f1ed5653438ce5b7b317e5ecfee0e7eb04540919c  iio-sensor-proxy-esta-parcheado
+4fa576a3ffefa90bed16ba97716a4579bd621951f3ee94466e5d089cd65628e61b7556c116ad270a4169c92b9ca7b59e9d9f3a62560a2fec09e1d99b044811e6  hexagonrpcd-is-patched
+324cc27abd2ab0b4f74b730b74b5f46488f0eb9cfad2b5e58d271c66716eae04503bbfa7a15433f038d9043d1e1e83dab86e9a501bdc5b7049cd0a17b79b91ee  iio-sensor-proxy-is-patched
 49b9f7c9e28651360d4e47c7f9fc40a888784cc679e2fc22d7bbe6e4d98db245fba0347984220a020b7a8fa3fb6216a226cb3d4df3957d30dff100e0a7293b77  utsugi-surya-sensors-seed.service
-093cceb5d508adf6205db1775b304f6f9a5688a337e0f281d2733072c3d164b3e2dcc22fc2fde50b174d9885bfe1aa3fa098ef04201c5827d6d6adf9be53ce01  sensores-al-despertar.service
-f5eac008fa41023377cb0533be46a648ac9b95c0f62a9656dcf57aac23eb5d20e6a49d7bb9d413180e56a2103cba0a8be0d288f9cd7372e6d22c1800d60a85ba  10-utsugi-surya.conf
+093cceb5d508adf6205db1775b304f6f9a5688a337e0f281d2733072c3d164b3e2dcc22fc2fde50b174d9885bfe1aa3fa098ef04201c5827d6d6adf9be53ce01  sensors-on-resume.service
+1169c330ac38a6827549119110759eaacf877461454f18e99720593524cc06f4b2363f11a8d08c7dbbe0b69ec876c67160f35b13e1fd513ad89b5f17b9432240  10-utsugi-surya.conf
 3a3db82f6bfe6cc415bb3809a3f634a38429dab20caa5f0d809e5105fed25ac44d991688d52b6d9d0da08aa8df83b56c256067b74f7cdf2c337aa6bf54a8daf2  10-utsugi-surya-iio.conf
 64f3ca85a77d16f1d3df0933b813edd980118d32b4b36e13d7ca0cfb895a916b1272f2841a338fbb47800dd681c84b5a7aae8c8478ddfcedef7db26c8f7ad64e  10-utsugi-iio-sensor-proxy.rules
-d545ed425de2f62fe6ac275d50bb690b0ac1057d3015e75fa84fbb1c694c30548408a8b882341439f1005ec0e14bf8e95c2f2976b763d5df0f1bda8ec37213af  80-utsugi-surya-sensors.preset
+ad0e9837c25e94efe2b1a24712219903204401e11f6d2dd1181c0235e9685339748cb386ec9ea99821875d02a4d5b09441321a0ab38236b5774e6ef065894523  80-utsugi-surya-sensors.preset
 "

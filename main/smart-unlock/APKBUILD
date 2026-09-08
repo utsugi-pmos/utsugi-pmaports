@@ -1,0 +1,55 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+pkgname=smart-unlock
+pkgver=1.0
+pkgrel=0
+pkgdesc="Skip the PIN on a trusted wifi, after unlocking, or in chosen time slots"
+url="https://github.com/utsugi-pmos/smart-unlock"
+arch="all"
+license="GPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	plasma-settings
+	kcmutils
+	kirigami
+	qt6-qtdeclarative
+	qt6-qtsvg
+	networkmanager
+	"
+makedepends="
+	cmake
+	samurai
+	extra-cmake-modules
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	kcmutils-dev
+	kconfig-dev
+	kcoreaddons-dev
+	ki18n-dev
+	kirigami-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
+	80-smart-unlock.preset
+	"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm644 "$srcdir"/80-smart-unlock.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
+
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+532d2b797c661feeb1d460e6462c23653a2136faebc25e33742e9f9ae48cf3d4831b980faefee969e32405e22a7d0c21c489f0be5af83df8d245e4de2039d3dc  smart-unlock-1.0.tar.gz
+f8b5642475a7c373fa9b62246ea3402f380823527f3aece44f41ad44f9e8a6900bb06d9b77618f1b9bd8d1f958a5774a82db7c5ed628ea450247647cbfa145af  80-smart-unlock.preset
+"

@@ -1,0 +1,69 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# Screenglaze: volume-down + power takes a screenshot, and a sheet follows to
+# share, save or crop it.
+#
+# Three dependencies that are NOT optional:
+#
+#   spectacle        takes the picture. KWin authorises org.kde.KWin.ScreenShot2
+#                    only for /usr/bin/spectacle and answers NoAuthorized to any
+#                    other executable -- measured, not assumed.
+#   layer-shell-qt   puts the sheet above everything without it appearing in the
+#                    task switcher. Without it the app still runs, as an
+#                    ordinary window.
+#   feedbackd        the shutter click and the vibration, from the device's own
+#                    theme.
+pkgname=screenglaze
+pkgver=1.0
+pkgrel=0
+pkgdesc="Screenshot with volume-down + power on Plasma Mobile, Android-style"
+url="https://github.com/utsugi-pmos/screenglaze"
+arch="all"
+license="LGPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	qt6-qtdeclarative
+	qt6-qtsvg
+	layer-shell-qt
+	purpose
+	spectacle
+	feedbackd
+	"
+makedepends="
+	cmake
+	samurai
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
+	80-screenglaze.preset
+	"
+
+# No prepare() any more. The old recipe carried the sources flat next to itself
+# and had to un-symlink them (CMake's install(FILES) preserved the link and
+# shipped a .desktop pointing into the build directory, so the app installed
+# fine and simply never appeared in the launcher) and then move the C++ back
+# into src/. A tarball with a real tree needs none of that.
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm644 71-screenglaze.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+	install -Dm644 screenglaze.service -t "$pkgdir"/usr/lib/systemd/user/
+	install -Dm644 "$srcdir"/80-screenglaze.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+9a16a97c5f932213e4de7a9c98e9a63271aa25dbc86754f5e04fc384cd66d104753f203fadad63462e65f4b0a6fbc8702ff894ea0d9f8d342cb73523f3ee394b  screenglaze-1.0.tar.gz
+b11f764b600261069ca26f2d41b997c4c359e1fa63bb067a842e868ad3c70823522c47cb498bac99d58f3689233254b6438b4837d03d6082ddf0f3d248b6425e  80-screenglaze.preset
+"

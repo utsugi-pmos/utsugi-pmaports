@@ -11,7 +11,7 @@ Before=shutdown.target
 [Service]
 Type=oneshot
 RemainAfterExit=yes
-ExecStart=/usr/libexec/utsugi-surya/ucm-antes-de-pulseaudio
+ExecStart=/usr/libexec/utsugi-surya/ucm-before-pulseaudio
 TimeoutStartSec=90
 
 [Install]

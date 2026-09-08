@@ -1,0 +1,102 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# Apps that stay alive: swiping their card away in the task switcher minimises
+# them instead of killing them, so the next open is instant.
+#
+# Two halves. The application and its Settings module manage the list; the
+# behaviour itself is one guard inside Plasma Mobile's task switcher, which is a
+# KWin effect written in loose QML.
+#
+# THE EFFECT IS NOT PATCHED IN PLACE. It is rebuilt from plasma-mobile's own
+# tarball and installed into a data directory of ours, which environment.d puts
+# AHEAD of /usr/share so KPackage finds it first. Owning plasma-mobile's file
+# instead would mean that after a Plasma upgrade our old Task.qml sits next to
+# new siblings -- mixed versions, and no error to say so.
+#
+# That is also why the dependency on plasma-mobile is pinned to the version the
+# patch was made against: when Plasma moves, apk refuses to upgrade until this
+# package is rebuilt. Loud, rather than silently broken.
+pkgname=keepalive
+pkgver=1.0
+pkgrel=0
+_pmver=6.7.4
+pkgdesc="Keep chosen apps alive: swiping their card away minimises instead of closing"
+url="https://github.com/utsugi-pmos/keepalive"
+arch="all"
+license="GPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	plasma-settings
+	kcmutils
+	kirigami
+	qt6-qtdeclarative
+	qt6-qtsvg
+	plasma-mobile~$_pmver
+	"
+makedepends="
+	cmake
+	samurai
+	extra-cmake-modules
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	kcmutils-dev
+	kconfig-dev
+	kcoreaddons-dev
+	ki18n-dev
+	kservice-dev
+	kirigami-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
+	plasma-mobile-$_pmver.tar.xz::https://download.kde.org/stable/plasma/$_pmver/plasma-mobile-$_pmver.tar.xz
+	0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+	80-keepalive.preset
+	40-keepalive.conf
+	"
+
+prepare() {
+	# NOT default_prepare: it would try to apply the patch to OUR tree, and the
+	# file it touches lives in plasma-mobile's.
+	cd "$srcdir/plasma-mobile-$_pmver"
+	patch -p1 -i "$srcdir"/0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+}
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+
+	# The patched effect, complete: KPackage needs the whole directory, not just
+	# the file that changed.
+	local eff="$srcdir/plasma-mobile-$_pmver/kwin/mobiletaskswitcher/package"
+	mkdir -p "$pkgdir"/usr/share/keepalive/xdg-data/kwin/effects/mobiletaskswitcher
+	cp -r "$eff"/. \
+		"$pkgdir"/usr/share/keepalive/xdg-data/kwin/effects/mobiletaskswitcher/
+	install -Dm644 "$srcdir"/40-keepalive.conf -t "$pkgdir"/usr/lib/environment.d/
+
+	# Opens a marked application that is not running yet, minimised, and only
+	# after the screen has actually been unlocked.
+	# These come from the application's own tarball, not carried separately.
+	install -Dm755 launch "$pkgdir"/usr/bin/keepalive-launch
+	install -Dm755 wait-for-unlock \
+		"$pkgdir"/usr/libexec/utsugi-surya/keepalive-wait-for-unlock
+	install -Dm644 keepalive-unlock.service -t "$pkgdir"/usr/lib/systemd/user/
+	install -Dm644 "$srcdir"/80-keepalive.preset \
+		-t "$pkgdir"/usr/lib/systemd/user-preset/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+cdc05fc40eb5dd976b920b26fc6e910fcb52427f21ce8bb802e792b9a85730bc7677c8bdd0453c69d440f535186f8a8d9b4d0cee9835d4ee78025caecc6fab23  keepalive-1.0.tar.gz
+961474235224b829d1d270196d409d7ef82a1581a97466e839d59672d996c97d42ec73632bc5049193b16adf6a635d90c4cda0b235b9ac29be878fe1ba0a38c2  plasma-mobile-6.7.4.tar.xz
+f4b871e98c5afa4d8aa87e419d4e4de13a90cd778a2b44bcbf7d33d5d36095754190956f1e03424790fe7a8dcb48348854345f42969250eac9ea57cc3ae6f89e  0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+06035ad96e1777c9a892e6542a933f7ad8d283e3cf2f16b5a1f900dc7af6e7156c0f17e42c146f636ea593668efa0e254431f7044ae23b9022fc7c8c93e87fb9  80-keepalive.preset
+42740ac84b7459681a87c7c34f35f7d5f2a2c43dbbc2c8de94992b36cae7f2f83d887276af56d8703322a0e375eb0b344fcace3b87d889ea608626c21ee70702  40-keepalive.conf
+"

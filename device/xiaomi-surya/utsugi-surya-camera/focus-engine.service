@@ -8,7 +8,7 @@ Description=Rear camera focus engine (surya)
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/utsugi-surya/enfoque-surya
+ExecStart=/usr/libexec/utsugi-surya/focus-engine
 Restart=always
 RestartSec=5
 # It dies and comes back without leaving the lens where it was, because when its

@@ -1,0 +1,3 @@
+# postmarketOS runs "systemctl preset --global" from an apk trigger for every
+# new user unit, so this is what enables the key watcher on install.
+enable screenglaze.service

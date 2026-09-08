@@ -7,39 +7,39 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # enough room not to rotate it away.
 pkgname=utsugi-surya-blackbox
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Keep evidence across the reboots this phone does not survive"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
 subpackages="$pkgname-systemd"
-source="caja-negra
-	caja-negra-latido
-	caja-negra-archivar
-	sincronizar-journal
-	caja-negra-ajustes.service
-	caja-negra-archivar.service
-	caja-negra-latido.service
-	caja-negra-latido.timer
-	sincronizar-journal.service
+source="blackbox
+	blackbox-heartbeat
+	blackbox-archive
+	journal-sync
+	blackbox-settings.service
+	blackbox-archive.service
+	blackbox-heartbeat.service
+	blackbox-heartbeat.timer
+	journal-sync.service
 	50-utsugi-blackbox.conf
 	80-utsugi-surya-blackbox.preset
 	"
 
 package() {
-	# caja-negra is the command you type to read the box; the rest only run from
+	# blackbox is the command you type to read the box; the rest only run from
 	# their units.
-	install -Dm755 "$srcdir"/caja-negra -t "$pkgdir"/usr/bin/
+	install -Dm755 "$srcdir"/blackbox -t "$pkgdir"/usr/bin/
 	local helper
-	for helper in caja-negra-latido caja-negra-archivar sincronizar-journal; do
+	for helper in blackbox-heartbeat blackbox-archive journal-sync; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 
 	local unit
-	for unit in caja-negra-ajustes.service caja-negra-archivar.service \
-	            caja-negra-latido.service caja-negra-latido.timer \
-	            sincronizar-journal.service; do
+	for unit in blackbox-settings.service blackbox-archive.service \
+	            blackbox-heartbeat.service blackbox-heartbeat.timer \
+	            journal-sync.service; do
 		install -Dm644 "$srcdir/$unit" -t "$pkgdir"/usr/lib/systemd/system/
 	done
 	install -Dm644 "$srcdir"/50-utsugi-blackbox.conf \
@@ -52,15 +52,15 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-fc37913c41c27f6aa3704008d2822a153628d51828435ecf5c6615b40ad64d2838ddb0d008c4f1178961a7e330f475cfeda7b6ce3b71b279f9bebe19b9a8fa21  caja-negra
-4db6fdf08b5d9c6be65907bab98927b84a7d66cbc2e81f1091e51385e8a5ccf705acf6628ca91e81ca29131cbc0d293b825d8e2b7b2171734618254a7ea86625  caja-negra-latido
-070cbe0c6f0303b7ccd527ca9cb3f5b992e34049cf5381bb01929f3cf7cf0999d571e10dd58fccab6ec5d764c902d3c89bf44cc20f07fe9a219fbb8f43f3bfc0  caja-negra-archivar
-601d4cc34ba6eae5bffc82eeeb39d657a2f3af527d9e65c832a3bd9c9403112e3dc460b74b286b4610454e23a0a5fd886be31a2936d22c03e65b0e44079b94e9  sincronizar-journal
-ed5bf64d69ff248d8f475b9a3bb444da01fcfea24793723b7cad2dd455e11ec977f9cdfed2744b95d8584ffc699296d2c28a5493fe913da16b4aaaa766db6526  caja-negra-ajustes.service
-1a5c9945509a83229e718bcf30d438acbd81425ea72aaeea3f2a0dbfe330962119ff8343c2a6c72bb19385ec38095c0a7f6e3a160e0e7de4fdea5f8145003c52  caja-negra-archivar.service
-12dfad11486bfb7c9111bcd564942c21fc9c9249c85e423d02bfc92c7e551ce2afa2ad4df7d820062e78207b1988adb3c902478cbad73ef32c8d62df3220888f  caja-negra-latido.service
-3a940b00e70117b8d8f73fb4c07263f39fa44dffa4b3711e9b0e675a087c4e23e5544a588ced2e439fe698b959b9aa155e46f534b88b97749b40adff03321a5d  caja-negra-latido.timer
-b56be94adab1f87959f9f6cc69fe8313a3cb59d550c62b3991367248f781b02184ba4df8182e04824264cfb0981d1f2cd03966c49c3748c14daec966c7a50038  sincronizar-journal.service
+bf29814c7c27c78d74cdfcccdf09a15c9d475b81182d68e234cc050764782c263b42b69772e735b80636c92fd619b59ea997a6cc87ff16cd9eafc16071ad6a7c  blackbox
+f5f5bd0798d31f727805fda09490aad81516ebb55840233e5b005fc4427c499fa51c95c16158d11ad8cef6dcddb37c53651c519e1c1b742f0ca3bdf61456f354  blackbox-heartbeat
+e5834faf2a8a0d5a23ecd0b2017bfcc70f66937055a449917a6234923290a2aa0e4cf03ef17803df608ce6c2622473c918386dc153afa44a1bf3b528680cda71  blackbox-archive
+601d4cc34ba6eae5bffc82eeeb39d657a2f3af527d9e65c832a3bd9c9403112e3dc460b74b286b4610454e23a0a5fd886be31a2936d22c03e65b0e44079b94e9  journal-sync
+df450003de074048f85be0301d12f14afe3de5fb7204a6ec65fee479662ce67a384771837065e1c3211ebf4b0a3a4cfe330bcd6ce93807b06a5b3666ea317678  blackbox-settings.service
+cacf47223a718cca93e8174243daa770548e6c88b0fe1da9ee5f126cd78ce829b4115b117b07ad9cb9f1c65182f1a567b27cb1cc9ee0f3a01443ab11293a226f  blackbox-archive.service
+8a4348266114421743cb306d6e79adc44d74f93083eb7ab3f3a67713ae462305b525c391929fe4adfeb0158d8c03364dabf2a03da459ce88ab052a10bd8aab89  blackbox-heartbeat.service
+3a940b00e70117b8d8f73fb4c07263f39fa44dffa4b3711e9b0e675a087c4e23e5544a588ced2e439fe698b959b9aa155e46f534b88b97749b40adff03321a5d  blackbox-heartbeat.timer
+aa829deeab37b468aac90f8061e4a8f8389cd57e5eefeea9ca594ab8dfd8e0c2bda8fe68716e98d2d3937113ccf76fb90f828a1019ba41951f604847d682610a  journal-sync.service
 07a90f91efe797a1a3611028e17aac781d7a4c83e05b50d9b70ad8018586667b3fb9d4a770f3cac7ec29760bb9b7995fdcddfe1d0c56827d42b85d1169ffcfc6  50-utsugi-blackbox.conf
-f59759c003f6d545cfcd671fc3f9f77ed431382fe7c742b0bcffa6816adecc1df18fbdcdf47fa6e25c72f71438386e2b20d028fcf59fbc5ac790fd0c73e06b20  80-utsugi-surya-blackbox.preset
+df05ed8e3780e884595b212abd1d1cba503f862ec0a76e4e4f4b02e2d9d3645912f93fc38b4b7ce36089449aae495275d5478f67874ed1af660fdae74b7bb92d  80-utsugi-surya-blackbox.preset
 "

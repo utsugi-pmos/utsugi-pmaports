@@ -1,3 +1,3 @@
-enable apagar-de-verdad.service
-enable modo-carga-decidir.service
-enable modo-carga.service
+enable poweroff-for-real.service
+enable charge-mode-decide.service
+enable charge-mode.service

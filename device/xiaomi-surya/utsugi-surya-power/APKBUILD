@@ -3,7 +3,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # power-saving profile.
 #
 # Powering off hangs on this phone at a different point every time, with no oops
-# and no panic. apagar-de-verdad hands the power-off to the kernel BEFORE the
+# and no panic. poweroff-for-real hands the power-off to the kernel BEFORE the
 # teardown that freezes, and it is ordered so that it is the first unit stopped
 # on the way down.
 #
@@ -12,7 +12,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -20,13 +20,13 @@ license="MIT"
 options="!check"
 depends="python3"
 subpackages="$pkgname-systemd"
-source="apagar-de-verdad
-	modo-carga
-	modo-carga-decidir
-	pantalla-de-carga
-	apagar-de-verdad.service
-	modo-carga.service
-	modo-carga-decidir.service
+source="poweroff-for-real
+	charge-mode
+	charge-mode-decide
+	charge-screen
+	poweroff-for-real.service
+	charge-mode.service
+	charge-mode-decide.service
 	10-utsugi-charge-mode.conf
 	50-utsugi-surya-watchdog.conf
 	tuned.conf
@@ -35,7 +35,7 @@ source="apagar-de-verdad
 
 package() {
 	local helper
-	for helper in apagar-de-verdad modo-carga modo-carga-decidir pantalla-de-carga; do
+	for helper in poweroff-for-real charge-mode charge-mode-decide charge-screen; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 
@@ -45,7 +45,7 @@ package() {
 	install -Dm644 "$srcdir"/tuned.conf -t "$pkgdir"/etc/tuned/profiles/powersave/
 
 	local unit
-	for unit in apagar-de-verdad modo-carga modo-carga-decidir; do
+	for unit in poweroff-for-real charge-mode charge-mode-decide; do
 		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/system/
 	done
 	install -Dm644 "$srcdir"/10-utsugi-charge-mode.conf \
@@ -62,15 +62,15 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-2b817b5bb989f23b5b93833262d75479668a1fb49a0740fdd984e47520973359b955915a8eb41240f1e4b311671660a1d7d9ab028ad528c8dfc8d5903e5bd43c  apagar-de-verdad
-dcf5625b7e34859d43de05e18cd111b15249d3e3f9d4681b3b85961a678365d91d149efb477d6482de22bc82a2e6fb0591360bd1e8cde2d604b34ee18657941f  modo-carga
-9d1bdafd13b5273a5adc0941729cdfa4a51c4fe6b0bfe2cd8c66149a3db480aec249480ff8632987f2516af8ed57c0341908a99b153b8a9d4dca45e269cfb67d  modo-carga-decidir
-bd160c77aa6afdffc3f538706ddb8b4099b6ad6a75d02d4a8f0c7e852705cc18a4fa2adace6534d16a2973424ebb310236f12fab7f5df5b506a80f15ab87b199  pantalla-de-carga
-308ad5b8d585ad1b14c30c548c5f142b6f2deb52f51d7b79ef61f0e08203d71342752c7dca73f10ea173d9b183fc4d5d231c89a8e38e7ddcbd1722174cf14b89  apagar-de-verdad.service
-bd64968c65f0977b575bb00f8869ad7ab2a956e0061c377f5e1d73e32dbcd071d92ed4753639a69a723909d2794ae4d54a79e388663ee8e8270bbfa570f234ea  modo-carga.service
-b83d63b8261b5273e44ab486ec81851a995944136da78edb66b139d91105c6a33a464f636f354ad83ce26abc89c6c33da7f4144e3c5a74dda6cba85c820d06c4  modo-carga-decidir.service
-8cf2f836f8ccd2254e601d30e2b563ab9968d579d3b27bb87f265cb7dca72d36f6222e5419459ead1b994ee60e046536c1161d95ef770d7578c75c3b9254b84f  10-utsugi-charge-mode.conf
+28ec632ba6de7a46a3c8b849449caaa0000425a685f44b53ecc876e8305ffb25305138a6da28867babe4079ab3c79aac9e9599d7e3717e41995c305453ff2253  poweroff-for-real
+94c4f180fcbed541bf4416f5899fc7e86eada50204aa6e4a37e24b75d1f9a4099944056c450ab7c4fab88a24036ebd28615b1220b9de485f55acebf2437ff5a0  charge-mode
+aaf3046ffb980e538820acc2aea8da53a65230e785d3bc1084a9d9df59a0545b7a6e40881e7cea403b559826bdaa16e6a0e2330ac03c358c47fdfd7702637383  charge-mode-decide
+436a6278610eafe52876b36f6cbf2a541ef60b31bb7173e2137d27bdb2437103c96387e5c83de0304dd2bbe7a9039ce56a2882cdb3e2535646610b80590c494e  charge-screen
+e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903e460509bb11cc2dc3b817b5ee39a8878e68358c7f011e5ef  poweroff-for-real.service
+d435c973e8f3e3d5be421704387c4a98e932115153b9cf96c50fdae30cc5c877ff6e97581474c99f8c0c3f9839a6444b6e960403ed420c4f78b9184c960755bc  charge-mode.service
+dd43c63d7cb7f0eb68ca64e3d29db5c17e499cc6a9759ea6625b28d931bbfac597f989c15daf04502886a9d9bab11da8d3ddfb4556b9b14e9840f0a125465cce  charge-mode-decide.service
+de18a34ce063c1a2c2d4e1a980b6e856af3044491d427d573fb4d4ad029ae0db8914c0d2a8c208b6b936f779040811d7b236bc631d7c24bc77fc2f2ca9be1215  10-utsugi-charge-mode.conf
 84f5c593026d9007267af2ccfbfca7cae7161eb8b3dba684c48a3917cc4a4a05ff68ebe8c206a8fee849bd2e7d9f6a9e0932073824e39a8c03b016d47b44f2be  50-utsugi-surya-watchdog.conf
 090c7f0022030eb0fe71a55863059d3df169335fbe30088bdaba080e58b717ca61fa77067cc9473a4db72a9eb4fdb037f24908fde3757646f635abb3edb39772  tuned.conf
-10ffc35aecd1ac2fc4561d3443e953d203ea19a5e58c737620888332b09e7928e3c51fc8329dbb584f8e31137d46fb0730bc4b0fcc4fbcd855a155e38a448a3f  80-utsugi-surya-power.preset
+89da0d299043cba804186434c5c81fd1dc03258951f01745488a06583867b64df819ac2d7be395c87a6b23deabcf88d36e6b75aa7a71cb39236178791d926fb4  80-utsugi-surya-power.preset
 "

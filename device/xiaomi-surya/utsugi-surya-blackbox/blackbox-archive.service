@@ -7,7 +7,7 @@ Requires=systemd-pstore.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/utsugi-surya/caja-negra-archivar
+ExecStart=/usr/libexec/utsugi-surya/blackbox-archive
 
 [Install]
 WantedBy=multi-user.target

@@ -1,12 +1,12 @@
 [Unit]
 Description=Charging screen: the phone plugged in, with no graphical session
-Documentation=file:///usr/libexec/utsugi-surya/modo-carga
-ConditionPathExists=/run/modo-carga
-After=modo-carga-decidir.service
+Documentation=file:///usr/libexec/utsugi-surya/charge-mode
+ConditionPathExists=/run/charge-mode
+After=charge-mode-decide.service
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/utsugi-surya/modo-carga
+ExecStart=/usr/libexec/utsugi-surya/charge-mode
 # If the loop crashes, the phone stays plugged in with nothing attending the
 # button or the unplug. Bring it back.
 Restart=on-failure

@@ -1,0 +1,45 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+pkgname=poconav
+pkgver=1.0
+pkgrel=0
+pkgdesc="Car navigation with neural-network voice, made for the dashboard"
+url="https://github.com/utsugi-pmos/poconav"
+arch="all"
+license="LGPL-2.0-or-later"
+options="!check"
+depends="
+	qt6-qtdeclarative
+	qt6-qtlocation
+	qt6-qtpositioning
+	qt6-qtsensors
+	kirigami
+	espeak-ng
+	alsa-utils
+	python3
+	py3-valhalla-utsugi
+	"
+makedepends="
+	cmake
+	samurai
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	qt6-qtpositioning-dev
+	qt6-qttools-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm755 poconav-rutas mapas-locales -t "$pkgdir"/usr/bin/
+}
+sha512sums="
+4efe851c1c243636ee736bbb25ee8cb37378bca862742573c3a6de68731c02f03e9ffc34b9587e69ba66ea89f2aeedee3180d276ff6321db3479aaf6c5b52dc6  poconav-1.0.tar.gz
+"

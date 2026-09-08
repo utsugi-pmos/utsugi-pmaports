@@ -1,0 +1,60 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+pkgname=lost-phone
+pkgver=1.0
+pkgrel=0
+pkgdesc="Find your phone without Google: SMS, your own network, your own relay or ntfy"
+url="https://github.com/utsugi-pmos/lost-phone"
+arch="all"
+license="GPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	plasma-settings
+	kcmutils
+	kirigami
+	qt6-qtdeclarative
+	qt6-qtsvg
+	modemmanager
+	networkmanager-cli
+	pulseaudio-utils
+	alsa-utils
+	plasma-mobile-sounds
+	"
+makedepends="
+	cmake
+	samurai
+	extra-cmake-modules
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	kcmutils-dev
+	kconfig-dev
+	kcoreaddons-dev
+	ki18n-dev
+	kirigami-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
+	80-lost-phone.preset
+	"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm644 "$srcdir"/80-lost-phone.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
+	# Opens the LAN door on wifi only; the daemon refuses to listen without it.
+	install -Dm644 50_lost-phone.nft -t "$pkgdir"/etc/nftables.d/
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+11d4fbfa8f241031df2ced2046b5c6c2523dc083151f01b811152cca79b950a9287854fd4151c6515e32fa57d92c860aebf8ae33f05ee51e6055e0b616d0fbdd  lost-phone-1.0.tar.gz
+b0f9eb656292bc109414ee370aad7189691bba7160c676229cfe9f007957920ac9fb3413a9e2e86d8c2819037862bc1fd5a022de7e33d3955c91972b5a693229  80-lost-phone.preset
+"

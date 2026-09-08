@@ -16,7 +16,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # The bug is upstream and affects every Qualcomm device on postmarketOS.
 pkgname=utsugi-surya-gps
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Unlock the GPS engine that pmaports leaves unusable"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -24,12 +24,12 @@ license="MIT"
 options="!check"
 depends="qmi-utils"
 subpackages="$pkgname-systemd"
-source="gnss-listo
+source="gnss-ready
 	10-utsugi-surya.conf
 	"
 
 package() {
-	install -Dm755 "$srcdir"/gnss-listo -t "$pkgdir"/usr/libexec/utsugi-surya/
+	install -Dm755 "$srcdir"/gnss-ready -t "$pkgdir"/usr/libexec/utsugi-surya/
 	# A drop-in, not a replacement unit: soc-qcom keeps owning modem-gnss.service
 	# and only the ExecStart chain is overridden.
 	install -Dm644 "$srcdir"/10-utsugi-surya.conf \
@@ -40,6 +40,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-6c1905c7515708f6ee1ac115d5c66fe1ee1944794caa6c71b7feac25cf455cf3a2b4ff1b6622a432672cb74457a5571b4820332a61a6416dd4d4b35ed1039733  gnss-listo
-23a2dedbf86d83266206e4f88052261acf731098b93fd7ec6b9214036ea9c942af2223efc7e6ceb85f24b81c22668a822e9604ccf2f24a28a62740b121b9fbad  10-utsugi-surya.conf
+6c1905c7515708f6ee1ac115d5c66fe1ee1944794caa6c71b7feac25cf455cf3a2b4ff1b6622a432672cb74457a5571b4820332a61a6416dd4d4b35ed1039733  gnss-ready
+6e07be9a9bb189c07b84d0cf17aec5303c8730add967a4b85f7b9c1ac6863d5f4ceb9c0337b7434b216b99177e40d11143eb35d6182329dd2a08d3b13a3a5362  10-utsugi-surya.conf
 "

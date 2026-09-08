@@ -1,2 +1,2 @@
 enable utsugi-surya-sensors-seed.service
-enable sensores-al-despertar.service
+enable sensors-on-resume.service

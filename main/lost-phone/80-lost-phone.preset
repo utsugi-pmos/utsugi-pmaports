@@ -1,0 +1,3 @@
+# postmarketOS runs "systemctl preset --global" from an apk trigger whenever a
+# package drops a new user unit, so this is what turns it on at install time.
+enable lost-phoned.service

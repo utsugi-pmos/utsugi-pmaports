@@ -1,0 +1,47 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+pkgname=app-usage
+pkgver=1.0
+pkgrel=0
+pkgdesc="Battery usage per application, the screen Plasma Mobile does not ship"
+url="https://github.com/utsugi-pmos/app-usage"
+arch="all"
+license="LGPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	qt6-qtdeclarative
+	qt6-qtsvg
+	python3
+	"
+makedepends="
+	cmake
+	samurai
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	qt6-qttools
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
+	80-app-usage.preset
+	"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+	install -Dm644 "$srcdir"/80-app-usage.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
+
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+2903c0f92ecfa132d6300eea39619bc8f3149afa661052644cc7f854294c63a7f6de7fa2d0916dc54cd8f749fcbb52b21287a729aee549bba56e6a29e467170c  app-usage-1.0.tar.gz
+2d1464fa2fe8c5ff48c36e2e10c542ac600b26453039f02acdfd984b59273c8c581d6cda39f18182ffb0eef4d772482b3234d4f87c308d841ccbf1da957c4dad  80-app-usage.preset
+"

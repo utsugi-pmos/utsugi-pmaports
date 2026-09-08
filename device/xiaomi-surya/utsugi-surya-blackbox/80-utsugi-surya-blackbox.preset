@@ -1,6 +1,6 @@
-enable caja-negra-ajustes.service
-enable caja-negra-archivar.service
-enable caja-negra-latido.timer
-# sincronizar-journal is deliberately NOT enabled: it writes the journal to disk
+enable blackbox-settings.service
+enable blackbox-archive.service
+enable blackbox-heartbeat.timer
+# journal-sync is deliberately NOT enabled: it writes the journal to disk
 # on every message, which costs flash writes. Turn it on only while chasing a
 # hang that eats the last seconds of the log.

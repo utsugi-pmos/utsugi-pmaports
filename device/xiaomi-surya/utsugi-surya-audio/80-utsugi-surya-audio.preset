@@ -1,5 +1,5 @@
 # Enabled through a preset rather than a post-install script: postmarketOS runs
 # "systemctl preset" from an apk trigger whenever a package drops a new unit.
 enable adsp-audio-init.service
-enable audio-volumen.service
-enable ucm-antes-de-pulseaudio.service
+enable audio-volume.service
+enable ucm-before-pulseaudio.service
