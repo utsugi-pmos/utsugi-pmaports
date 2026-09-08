@@ -1,0 +1,62 @@
+#!/bin/sh
+# Checks that run before publishing, and in CI on every pull request.
+#
+#   scripts/lint [--base REF]
+#
+# 1. every fork claims its upstream name with a versioned provides
+# 2. a touched package has a higher version than before (pmbootstrap silently
+#    skips a build whose version already exists, so a forgotten bump looks like
+#    a successful publish that changed nothing)
+# 3. apkbuild-lint, when atools is available
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+BASE=""
+[ "${1:-}" = "--base" ] && BASE="${2:?--base needs a git ref}"
+rc=0
+
+title "Fork bookkeeping"
+for pkg in $(all_aports); do
+	orig="$(apkbuild_get "$pkg" _orig 2>/dev/null || true)"
+	[ -n "$orig" ] || { grey "  $pkg: not a fork"; continue; }
+	ver="$(apkbuild_version "$pkg")"
+	prov="$(apkbuild_get "$pkg" provides)"
+	repl="$(apkbuild_get "$pkg" replaces)"
+	case " $prov " in
+		*" $orig=$ver "*) ;;
+		*) red "  $pkg: provides must contain $orig=$ver (got: $prov)"; rc=1; continue ;;
+	esac
+	case " $repl " in
+		*" $orig "*) ;;
+		*) red "  $pkg: replaces must contain $orig (got: $repl)"; rc=1; continue ;;
+	esac
+	green "  $pkg -> provides $orig=$ver"
+done
+
+if [ -n "$BASE" ]; then
+	title "Version bumps since $BASE"
+	for pkg in $(changed_aports "$BASE"); do
+		d="$(aport_dir "$pkg")" || continue
+		[ -n "$d" ] || continue
+		rel="${d#"$REPO"/}"
+		old="$(git -C "$REPO" show "$BASE:$rel/APKBUILD" 2>/dev/null | \
+			awk -F= '/^pkgver=/{v=$2} /^pkgrel=/{r=$2} END{if (v!="") print v "-r" r}')"
+		new="$(apkbuild_version "$pkg")"
+		if [ -z "$old" ]; then green "  $pkg: new package ($new)"
+		elif [ "$old" = "$new" ]; then
+			red "  $pkg: changed but still $new -- run scripts/bump $pkg"; rc=1
+		else green "  $pkg: $old -> $new"; fi
+	done
+fi
+
+if command -v apkbuild-lint >/dev/null 2>&1; then
+	title "apkbuild-lint"
+	for pkg in $(all_aports); do
+		d="$(aport_dir "$pkg")"
+		apkbuild-lint "$d/APKBUILD" || rc=1
+	done
+else
+	grey "apkbuild-lint not installed (apk add atools); skipped"
+fi
+exit $rc

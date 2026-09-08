@@ -1,0 +1,428 @@
+El ADSP lee por el SMMU: hay que darle la direccion con su SID
+
+## Que resuelve esto
+
+La contradiccion que dejo abierta el r73, y que era el nudo de todo el problema:
+
+    probar_mapeo (solo mapear)                 -> rc=0, handle valido, limpio
+    mapear + REGISTER_TOPOLOGIES (el DSP lee)  -> el movil se cuelga en seco
+
+Y a la vez la reproduccion de musica -q6asm- reserva memoria con el mismo API
+de DMA, se la mapea al DSP, **y el DSP la lee sin problema todos los dias**.
+
+Si al DSP le vale memoria corriente del kernel para la musica, la memoria no
+podia ser el problema. Lo era **como se le pide**. Y aparecen las dos
+diferencias, las dos en el mismo sitio.
+
+## La causa, leida del codigo que SI funciona
+
+El ADSP no direcciona memoria fisica: va por el `apps_smmu`. El device tree de
+este movil lo declara en el nodo de los DAI de q6asm:
+
+    q6asmdai: dais {
+            compatible = "qcom,q6asm-dais";
+            iommus = <&apps_smmu 0x1b21 0x0>;
+    };
+
+Y `q6asm-dai.c` hace **dos** cosas con eso:
+
+  1. Reserva el buffer **sobre ese device** (`q6asm-dai.c:643`, `:1195`). Como el
+     device tiene `iommus`, of_dma_configure() le pone dominio IOMMU y el API de
+     DMA devuelve una direccion **ya traducida en el contexto del ADSP**.
+
+  2. Mete el SID en los bits altos antes de darsela al DSP:
+
+         pdata->sid = args.args[0] & SID_MASK_DEFAULT;   // 0x1b21 & 0xF = 1
+         prtd->phys = dma_buffer.addr | (pdata->sid << 32);
+
+Nosotros no haciamos **ninguna de las dos**:
+
+  1. Reservabamos sobre el device APR. Y `apr.c` registra sus devices con
+     `device_register()` a pelo (`apr.c:474`) y **no llama nunca a
+     `of_dma_configure()`**. Nuestro device no tiene dominio IOMMU: la direccion
+     que sacabamos es fisica cruda, que en el contexto del ADSP no existe.
+
+  2. Mandabamos `upper_32_bits(phys)`, o sea **0**. Sin SID.
+
+Eso explica lo medido, punto por punto:
+
+  - **El mapeo va bien** porque el DSP solo apunta la direccion y devuelve un
+    asa. No toca la memoria, asi que no hay nada que traducir.
+  - **La lectura tumba el SoC** porque ahi si va al SMMU, con una direccion sin
+    traduccion y sin SID. Fallo del SMMU, y el subsistema se lleva el sistema
+    por delante.
+
+Es exactamente la firma que se describio en el relevo del 2026-08-11 sin saber
+todavia de donde salia.
+
+## Lo que hace el parche
+
+Lo mismo que q6asm, y nada mas:
+
+  - Reserva sobre el device de `qcom,q6asm-dais`, que **si** esta detras del
+    SMMU. Se busca por compatible; no hace falta tocar el device tree.
+  - Dobla el SID en los bits altos de la direccion, tanto en el mapeo
+    (`shm_addr_msw`) como en el propio registro (`payload_addr_msw`).
+  - Lee el SID del `iommus` del device tree, que es lo correcto, pero deja
+    forzarlo por si acaso.
+
+Dos parametros, los dos en caliente:
+
+    /sys/module/q6core/parameters/usar_dev_asm   0 = como antes (cuelga) / 1
+    /sys/module/q6core/parameters/mem_sid        -1 = del device tree, o 0..15
+
+## Como se prueba, y cuanto cuesta
+
+Primero lo que **no puede colgar el movil**, que es gratis:
+
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/probar_mapeo
+
+Ahora traza la direccion entera, el SID y el device que la reserva. Si el asa
+sale bien y la direccion lleva el SID en los bits altos, el camino esta puesto.
+
+Y **solo entonces**, avisando al usuario primero porque esto puede colgar el
+movil y hay que apagarlo a mano:
+
+    echo 1 > /sys/module/q6core/parameters/registro_por_memoria
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
+
+Si la teoria es correcta, ahi el DSP contesta **0** en vez de tumbar el sistema,
+y las 31 topologias de la calibracion autentica de surya quedan registradas.
+
+## Lo que este parche descarta de paso
+
+El siguiente paso que proponia el relevo era barrer `mapeo_token`. **No hace
+falta.** El token de la cabecera APR es una galleta que el DSP devuelve tal cual
+en la respuesta para casar peticion y respuesta; no interviene en la proteccion
+de memoria. Que q6asm lo rellene es contabilidad suya (sesion y direccion), no
+la razon de que a el le funcione. La razon es el SMMU.
+## Confirmado contra el codigo de Qualcomm, no deducido
+
+`msm_audio_ion.c` (downstream, techpack/audio/dsp) guarda el SID desplazado
+32 bits y lo dobla en la direccion con un OR, que es exactamente lo que hace
+q6core_dsp_addr() aqui:
+
+    msm_audio_ion_data.smmu_sid_bits = smmu_sid << MSM_AUDIO_SMMU_SID_OFFSET;
+    iova |= msm_audio_ion_data.smmu_sid_bits;      /* OFFSET = 32 */
+
+Y el registro de topologias downstream (`q6core_send_custom_topologies()`)
+mete ese SID en el msw de la direccion del payload:
+
+    reg_top.payload_addr_lsw = lower_32_bits(cal_block->cal_data.paddr);
+    reg_top.payload_addr_msw =
+        msm_audio_populate_upper_32_bits(cal_block->cal_data.paddr);
+
+    u32 msm_audio_populate_upper_32_bits(dma_addr_t pa)
+    {
+            if (sizeof(dma_addr_t) == sizeof(u32))
+                    return msm_audio_ion_get_smmu_sid_mode32();   /* el SID */
+            else
+                    return upper_32_bits(pa);   /* pa ya lleva el SID */
+    }
+
+Las dos ramas acaban con el SID en el msw. O sea que no es una interpretacion
+de lo que hace q6asm: es lo que hace Qualcomm para ESTE comando concreto.
+
+Un detalle mas de ahi: downstream pone `reg_top.hdr.token = 0`. Otra
+confirmacion de que barrer mapeo_token no llevaba a ninguna parte.
+
+## Un fallo de compilacion que se ha evitado a tiempo
+
+`of_platform.h` declara of_find_device_by_node() pero **no define**
+struct platform_device, y aqui se usa pdev->dev. Sin incluir
+<linux/platform_device.h> es un "dereferencing pointer to incomplete type".
+Comprobado que no entra por ninguna otra cabecera de las que ya incluye
+q6core.c. Se descubrio revisando, no gastando una compilacion.
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -9,6 +9,12 @@
+ #include <linux/sched.h>
+ #include <linux/of.h>
+ #include <linux/of_platform.h>
++/*
++ * of_platform.h declara of_find_device_by_node() pero NO define
++ * struct platform_device, y aqui se usa pdev->dev. Sin esto es un
++ * "dereferencing pointer to incomplete type" en la compilacion.
++ */
++#include <linux/platform_device.h>
+ #include <linux/jiffies.h>
+ #include <linux/firmware.h>
+ #include <linux/dma-mapping.h>
+@@ -353,8 +359,125 @@
+ module_param(mapeo_token, uint, 0644);
+ MODULE_PARM_DESC(mapeo_token, "token del paquete APR al mapear memoria");
+ 
+-static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)
++/*
++ * EL SID DEL SMMU, Y POR QUE EL MOVIL SE COLGABA
++ * =============================================
++ *
++ * Medido con el r73: mapear memoria y desmapearla va limpio, pero en cuanto el
++ * ADSP LEE esa memoria el SoC se resetea. Y a la vez la reproduccion (q6asm)
++ * hace lo mismo -reserva con el API de DMA, se la mapea al DSP- y el DSP la lee
++ * sin despeinarse. Esa contradiccion tenia que explicarse, y se explica.
++ *
++ * El ADSP no direcciona memoria fisica: va por el apps_smmu. En el device tree
++ * de este movil el nodo de los DAI de q6asm lo declara:
++ *
++ *     q6asmdai: dais {
++ *             compatible = "qcom,q6asm-dais";
++ *             iommus = <&apps_smmu 0x1b21 0x0>;
++ *     };
++ *
++ * Y q6asm-dai.c hace DOS cosas con eso (q6asm-dai.c:1309 y :651):
++ *
++ *   1. Reserva el buffer SOBRE ESE DEVICE. Como el device tiene "iommus", el
++ *      API de DMA le da una direccion YA TRADUCIDA por el apps_smmu, valida en
++ *      el contexto del ADSP.
++ *   2. Mete el SID en los bits altos de la direccion antes de darsela al DSP:
++ *
++ *          prtd->phys = dma_buffer.addr | (pdata->sid << 32);
++ *          pdata->sid = args.args[0] & 0xF;      // 0x1b21 & 0xF = 1
++ *
++ * Nosotros no haciamos NINGUNA de las dos:
++ *
++ *   1. Reservabamos sobre el device APR. Y apr.c registra sus devices con
++ *      device_register() a pelo (apr.c:474), SIN llamar nunca a
++ *      of_dma_configure(). O sea que nuestro device no tiene dominio IOMMU
++ *      ninguno: la direccion que sacabamos es fisica cruda, sin traduccion en
++ *      el contexto del ADSP.
++ *   2. Mandabamos upper_32_bits(phys), que es 0. Sin SID.
++ *
++ * Eso encaja exactamente con lo medido: el mapeo va bien porque el DSP solo
++ * apunta la direccion y devuelve un asa -no toca nada-, y la lectura tumba el
++ * sistema porque va al SMMU con una direccion que ahi no existe. Fallo de
++ * traduccion del SMMU, y el subsistema se lleva el SoC por delante.
++ *
++ * Asi que este parche hace lo mismo que q6asm: reserva sobre el device que SI
++ * esta detras del SMMU, y dobla el SID en los bits altos.
++ *
++ *   usar_dev_asm  0 = device APR (lo de antes, que cuelga) / 1 = el de q6asm
++ *   mem_sid       -1 = leerlo del device tree (lo correcto), o forzar 0..15
++ */
++static int usar_dev_asm = 1;
++module_param(usar_dev_asm, int, 0644);
++MODULE_PARM_DESC(usar_dev_asm,
++		 "0 = reservar sobre el device APR (cuelga el movil), 1 = sobre el de q6asm-dais");
++
++static int mem_sid = -1;
++module_param(mem_sid, int, 0644);
++MODULE_PARM_DESC(mem_sid, "SID del SMMU en los bits altos; -1 = leerlo del device tree");
++
++/*
++ * Devuelve el device sobre el que reservar, y por *sid el flujo del SMMU que
++ * hay que doblar en la direccion. Si algo no esta, cae al device APR con SID 0,
++ * que es el comportamiento viejo -y avisa, porque entonces cuelga.
++ *
++ * Coge una referencia al device; soltarla con q6core_dma_dev_put().
++ */
++static struct device *q6core_dma_dev(struct device *apr_dev, int *sid)
++{
++	struct of_phandle_args args;
++	struct platform_device *pdev;
++	struct device_node *np;
++
++	*sid = 0;
++
++	if (!usar_dev_asm)
++		goto sin_smmu;
++
++	np = of_find_compatible_node(NULL, NULL, "qcom,q6asm-dais");
++	if (!np) {
++		dev_warn(apr_dev, "sin nodo qcom,q6asm-dais en el device tree\n");
++		goto sin_smmu;
++	}
++
++	if (!of_parse_phandle_with_fixed_args(np, "iommus", 1, 0, &args))
++		*sid = args.args[0] & 0xF;
++	else
++		dev_warn(apr_dev, "qcom,q6asm-dais no declara iommus\n");
++
++	pdev = of_find_device_by_node(np);
++	of_node_put(np);
++	if (!pdev) {
++		dev_warn(apr_dev, "qcom,q6asm-dais no tiene device asociado\n");
++		goto sin_smmu;
++	}
++
++	if (mem_sid >= 0)
++		*sid = mem_sid;
++
++	return &pdev->dev;
++
++sin_smmu:
++	if (mem_sid >= 0)
++		*sid = mem_sid;
++	return apr_dev;
++}
++
++static void q6core_dma_dev_put(struct device *dma_dev, struct device *apr_dev)
+ {
++	if (dma_dev != apr_dev)
++		put_device(dma_dev);
++}
++
++/* La direccion tal y como la espera el ADSP: IOVA con el SID en los bits altos. */
++static u64 q6core_dsp_addr(dma_addr_t phys, int sid)
++{
++	return (u64)phys | ((u64)sid << 32);
++}
++
++static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size,
++			     int sid)
++{
++	u64 addr = q6core_dsp_addr(phys, sid);
+ 	struct avcs_cmd_shared_mem_map_regions *cmd;
+ 	struct avcs_shared_map_region_payload *region;
+ 	struct apr_pkt *pkt;
+@@ -378,8 +501,8 @@
+ 	cmd->num_regions = 1;
+ 	cmd->property_flag = 0;
+ 
+-	region->shm_addr_lsw = lower_32_bits(phys);
+-	region->shm_addr_msw = upper_32_bits(phys);
++	region->shm_addr_lsw = lower_32_bits(addr);
++	region->shm_addr_msw = upper_32_bits(addr);
+ 	region->mem_size_bytes = size;
+ 
+ 	core->mem_map_handle = 0;
+@@ -541,21 +664,32 @@
+ {
+ 	struct q6core *core = dev_get_drvdata(dev);
+ 	struct avcs_cmd_register_topologies *cmd;
++	struct device *dma_dev;
+ 	struct apr_pkt *pkt;
+ 	dma_addr_t phys;
+ 	void *buf;
++	u64 addr;
+ 	u32 map_size;
+-	int pkt_size, rc;
++	int pkt_size, rc, sid;
++
++	/*
++	 * Reservar sobre el device que esta detras del SMMU del ADSP, no sobre
++	 * el device APR. Ver el comentario largo de q6core_dma_dev().
++	 */
++	dma_dev = q6core_dma_dev(dev, &sid);
+ 
+ 	/*
+ 	 * El dispositivo APR viene sin mascara de DMA, y dma_alloc_attrs()
+ 	 * avisa (WARNING en kernel/dma/mapping.c) y devuelve NULL. El DSP
+-	 * direcciona en 32 bits para estas regiones.
++	 * direcciona en 32 bits para estas regiones. El device de q6asm-dais
++	 * ya viene configurado por of_dma_configure(), asi que no se le toca.
+ 	 */
+-	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
+-	if (rc) {
+-		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
+-		return rc;
++	if (dma_dev == dev) {
++		rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
++		if (rc) {
++			dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++			goto suelta_dev;
++		}
+ 	}
+ 
+ 	/*
+@@ -566,13 +700,19 @@
+ 	 */
+ 	map_size = ALIGN(size, SZ_4K);
+ 
+-	buf = dma_alloc_coherent(dev, map_size, &phys, GFP_KERNEL);
+-	if (!buf)
+-		return -ENOMEM;
++	buf = dma_alloc_coherent(dma_dev, map_size, &phys, GFP_KERNEL);
++	if (!buf) {
++		rc = -ENOMEM;
++		goto suelta_dev;
++	}
+ 
+ 	memcpy(buf, data, size);
+ 
+-	rc = q6core_map_memory(core, phys, map_size);
++	addr = q6core_dsp_addr(phys, sid);
++	dev_info(dev, "memoria para el DSP: %u bytes, iova %pad, sid %d, addr %#llx (device %s)\n",
++		 map_size, &phys, sid, addr, dev_name(dma_dev));
++
++	rc = q6core_map_memory(core, phys, map_size, sid);
+ 	if (rc) {
+ 		dev_err(dev, "no se pudo mapear la memoria del DSP: %d\n", rc);
+ 		goto libera;
+@@ -592,8 +732,8 @@
+ 	pkt->hdr.pkt_size = pkt_size;
+ 	pkt->hdr.opcode = AVCS_CMD_REGISTER_TOPOLOGIES;
+ 
+-	cmd->payload_addr_lsw = lower_32_bits(phys);
+-	cmd->payload_addr_msw = upper_32_bits(phys);
++	cmd->payload_addr_lsw = lower_32_bits(addr);
++	cmd->payload_addr_msw = upper_32_bits(addr);
+ 	cmd->mem_map_handle = core->mem_map_handle;
+ 	cmd->payload_size = size;
+ 
+@@ -606,7 +746,9 @@
+ desmapea:
+ 	q6core_unmap_memory(core);
+ libera:
+-	dma_free_coherent(dev, map_size, buf, phys);
++	dma_free_coherent(dma_dev, map_size, buf, phys);
++suelta_dev:
++	q6core_dma_dev_put(dma_dev, dev);
+ 	return rc < 0 ? rc : 0;
+ }
+ 
+@@ -847,24 +989,33 @@
+ 				  const char *buf, size_t count)
+ {
+ 	struct q6core *core = dev_get_drvdata(dev);
++	struct device *dma_dev;
+ 	dma_addr_t phys;
+ 	void *p;
+-	int rc;
++	int rc, sid;
+ 
+-	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
+-	if (rc) {
+-		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
+-		return rc;
++	dma_dev = q6core_dma_dev(dev, &sid);
++
++	if (dma_dev == dev) {
++		rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
++		if (rc) {
++			dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++			q6core_dma_dev_put(dma_dev, dev);
++			return rc;
++		}
+ 	}
+ 
+-	p = dma_alloc_coherent(dev, SZ_4K, &phys, GFP_KERNEL);
+-	if (!p)
++	p = dma_alloc_coherent(dma_dev, SZ_4K, &phys, GFP_KERNEL);
++	if (!p) {
++		q6core_dma_dev_put(dma_dev, dev);
+ 		return -ENOMEM;
++	}
+ 
+-	dev_info(dev, "probando SOLO el mapeo: 4 KiB en %pad, token %#x\n",
+-		 &phys, mapeo_token);
++	dev_info(dev, "probando SOLO el mapeo: 4 KiB, iova %pad, sid %d, addr %#llx, token %#x (device %s)\n",
++		 &phys, sid, q6core_dsp_addr(phys, sid), mapeo_token,
++		 dev_name(dma_dev));
+ 
+-	rc = q6core_map_memory(core, phys, SZ_4K);
++	rc = q6core_map_memory(core, phys, SZ_4K, sid);
+ 	dev_info(dev, "mapeo: rc=%d handle=%#x\n", rc, core->mem_map_handle);
+ 
+ 	if (!rc) {
+@@ -872,7 +1023,8 @@
+ 		dev_info(dev, "desmapeo hecho\n");
+ 	}
+ 
+-	dma_free_coherent(dev, SZ_4K, p, phys);
++	dma_free_coherent(dma_dev, SZ_4K, p, phys);
++	q6core_dma_dev_put(dma_dev, dev);
+ 	return count;
+ }
+ static DEVICE_ATTR_WO(probar_mapeo);

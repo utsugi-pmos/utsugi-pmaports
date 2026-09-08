@@ -1,0 +1,218 @@
+Barrer el marco del bloque, y aislar el mapeo del registro
+
+## Lo que se ha medido con el r72
+
+El registro pegado al paquete -el metodo del Pixel 3a- **lo rechaza el DSP**:
+
+    registrando topologias: 1052 bytes ... (adsp listo)
+    registro in-band: 1052 bytes de topologias, paquete de 1088
+    el DSP rechaza registrar las topologias: 2      <- ADSP_EBADPARAM
+
+Y lo rechaza **igual** con la calibracion autentica de surya (1052 bytes) que
+con la del Pixel 4a (1316 bytes). Se probo cambiando el fichero en caliente,
+una detras de otra.
+
+**Eso descarta el contenido como causa.** El fichero equivocado era un fallo
+real y esta corregido, pero no era el motivo del rechazo. Lo que queda es el
+**marco**: como se le presenta el bloque al DSP.
+
+## Lo que hace este parche
+
+### 1. El marco, ajustable sin recompilar
+
+El bloque vive en la ACDB precedido de un u32 con su tamano. El Pixel 3a salta
+ese u32 y manda el resto. Ahora se puede barrer:
+
+    /sys/module/q6core/parameters/topo_offset   bytes que se saltan   [4]
+    /sys/module/q6core/parameters/topo_delta    se suma al tamano     [0]
+
+Combinaciones con sentido: `4 0` (como el Pixel 3a, rechazado), `0 +4` (mandar
+tambien el u32 y contarlo), `0 0`, `4 -4`. Se prueban todas sin llamada y sin
+reiniciar.
+
+### 2. El token del mapeo
+
+    /sys/module/q6core/parameters/mapeo_token    [0]
+
+q6asm -que mapea memoria en este mismo movil sin despeinarse- rellena el token
+del paquete APR; nosotros lo dejabamos a cero. Es la ultima diferencia barata
+que quedaba y nunca se llego a probar.
+
+### 3. Un disparador que prueba SOLO el mapeo
+
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/probar_mapeo
+
+Reserva 4 KiB, los mapea, los desmapea y traza. Sin registrar nada detras.
+
+Existe para separar dos cosas que hasta ahora iban pegadas: **si lo que tumba
+el movil es el mapeo en si, o el comando de registro que venia despues.** Sin
+separarlas no se puede saber cual arreglar, y cada intento costaba un reinicio
+a ciegas.
+
+PELIGRO: si el mapeo es lo que tumba, esto reinicia el movil. Pero reiniciar
+cuesta 90 segundos y **ninguna llamada**, asi que sale a cuenta.
+
+## Por que esto importa mas de lo que parece
+
+Downstream de Qualcomm, `AVCS_CMD_REGISTER_TOPOLOGIES` va **siempre** por
+memoria compartida; nunca pegado al paquete. El parche del Pixel 3a lo manda
+pegado, pero **no mira la respuesta**: hace `return apr_send_pkt(...)` y no
+comprueba nada. O sea que podria estar siendo rechazado alli tambien sin que
+nadie se haya enterado.
+
+Si el barrido del marco no lo arregla, la conclusion es que este DSP exige
+memoria compartida, y entonces el problema a resolver ya no es el registro:
+es **por que el mapeo tumba el movil**. Para eso esta el punto 3.
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -341,6 +341,18 @@
+  * en memoria y pasarle un asa. Enviandolo en banda contesta ADSP_EBADPARAM (2),
+  * que es lo que pasaba con el parche tal cual venia de aguas arriba.
+  */
++/*
++ * Token de la cabecera APR al mapear memoria. q6asm -que mapea memoria en este
++ * mismo movil sin problemas- lo rellena; nosotros lo dejabamos a cero. Es la
++ * ultima diferencia barata que quedaba y nunca se probo.
++ *
++ * Se declara AQUI, y no con los demas parametros, porque q6core_map_memory()
++ * esta antes en el fichero y en C no se puede usar lo que aun no existe.
++ */
++static unsigned int mapeo_token;
++module_param(mapeo_token, uint, 0644);
++MODULE_PARM_DESC(mapeo_token, "token del paquete APR al mapear memoria");
++
+ static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)
+ {
+ 	struct avcs_cmd_shared_mem_map_regions *cmd;
+@@ -360,6 +372,7 @@
+ 					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+ 	pkt->hdr.pkt_size = pkt_size;
+ 	pkt->hdr.opcode = AVCS_CMD_SHARED_MEM_MAP_REGIONS;
++	pkt->hdr.token = mapeo_token;
+ 
+ 	cmd->mem_pool_id = ADSP_MEMORY_MAP_SHMEM8_4K_POOL;
+ 	cmd->num_regions = 1;
+@@ -451,6 +464,33 @@
+ MODULE_PARM_DESC(registro_por_memoria,
+ 		 "0 = pegado al paquete (como el Pixel 3a), 1 = memoria compartida (PELIGRO: reinicia el movil)");
+ 
++/*
++ * COMO SE ENMARCA EL BLOQUE, ajustable para poder barrer sin recompilar.
++ *
++ * El bloque de topologias vive en la ACDB precedido de un u32 con su tamano.
++ * El Pixel 3a salta ese u32 y manda el resto (offset 4, tamano tal cual), y es
++ * lo que haciamos. El DSP de este movil lo rechaza con ADSP_EBADPARAM (2), y
++ * lo rechaza IGUAL con la calibracion de surya y con la del Pixel 4a, o sea
++ * que el contenido no es la variable: lo es el marco.
++ *
++ *   topo_offset  bytes que se saltan del principio   [4]
++ *   topo_delta   se suma al tamano declarado         [0]
++ *
++ * Combinaciones que tiene sentido probar:
++ *   4  0   como el Pixel 3a  (rechazado)
++ *   0  4   mandar tambien el u32 de tamano, contandolo
++ *   0  0   empezar en el u32 pero sin contarlo
++ *   4 -4   por descarte
++ */
++static int topo_offset = 4;
++module_param(topo_offset, int, 0644);
++MODULE_PARM_DESC(topo_offset, "bytes que se saltan del principio del bloque");
++
++static int topo_delta;
++module_param(topo_delta, int, 0644);
++MODULE_PARM_DESC(topo_delta, "se suma al tamano declarado al DSP");
++
++
+ /* Como lo hace el parche del Pixel 3a: el bloque va dentro del paquete. */
+ static int q6core_register_topologies_inband(struct device *dev, u32 size,
+ 					     const void *data)
+@@ -756,10 +796,21 @@
+ 	}
+ 
+ 	size = *(const u32 *) (fw->data + topo_off);
+-	dev_info(dev, "registrando topologias: %u bytes desde %s (adsp %s)\n",
+-		 size, fw_name,
++
++	/* Marco ajustable, ver topo_offset / topo_delta. */
++	if (topo_offset < 0 || (u32)topo_offset > size ||
++	    (int)size + topo_delta <= 0) {
++		dev_err(dev, "marco invalido: offset %d delta %d sobre %u bytes\n",
++			topo_offset, topo_delta, size);
++		ret = -EINVAL;
++		goto release_fw;
++	}
++
++	dev_info(dev, "registrando topologias: %u bytes desde %s (marco %+d %+d, adsp %s)\n",
++		 size, fw_name, topo_offset, topo_delta,
+ 		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
+-	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);
++	ret = q6core_register_topologies(dev, size + topo_delta,
++					 fw->data + topo_off + topo_offset);
+ 	if (ret < 0)
+ 		goto release_fw;
+ 
+@@ -779,6 +830,53 @@
+ }
+ static DEVICE_ATTR_WO(registrar_topologias);
+ 
++/*
++ * Prueba SOLO el mapeo de memoria, 4 KiB, sin registrar nada detras.
++ *
++ *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/probar_mapeo
++ *
++ * Existe para separar dos cosas que hasta ahora iban juntas: si lo que tumba
++ * el movil es el mapeo en si, o el comando de registro que venia despues. Sin
++ * separarlas no se puede saber cual arreglar.
++ *
++ * PELIGRO: si el mapeo es lo que tumba, esto reinicia el movil. Pero reiniciar
++ * cuesta 90 segundos y no cuesta ninguna llamada, asi que sale a cuenta.
++ */
++static ssize_t probar_mapeo_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	struct q6core *core = dev_get_drvdata(dev);
++	dma_addr_t phys;
++	void *p;
++	int rc;
++
++	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
++	if (rc) {
++		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++		return rc;
++	}
++
++	p = dma_alloc_coherent(dev, SZ_4K, &phys, GFP_KERNEL);
++	if (!p)
++		return -ENOMEM;
++
++	dev_info(dev, "probando SOLO el mapeo: 4 KiB en %pad, token %#x\n",
++		 &phys, mapeo_token);
++
++	rc = q6core_map_memory(core, phys, SZ_4K);
++	dev_info(dev, "mapeo: rc=%d handle=%#x\n", rc, core->mem_map_handle);
++
++	if (!rc) {
++		q6core_unmap_memory(core);
++		dev_info(dev, "desmapeo hecho\n");
++	}
++
++	dma_free_coherent(dev, SZ_4K, p, phys);
++	return count;
++}
++static DEVICE_ATTR_WO(probar_mapeo);
++
+ static int q6core_probe(struct apr_device *adev)
+ {
+ 	g_core = kzalloc_obj(*g_core);
+@@ -812,6 +910,9 @@
+ 	if (device_create_file(&adev->dev, &dev_attr_registrar_topologias))
+ 		dev_warn(&adev->dev, "sin disparador de registro en sysfs\n");
+ 
++	if (device_create_file(&adev->dev, &dev_attr_probar_mapeo))
++		dev_warn(&adev->dev, "sin disparador de prueba de mapeo\n");
++
+ 	return 0;
+ }
+ 

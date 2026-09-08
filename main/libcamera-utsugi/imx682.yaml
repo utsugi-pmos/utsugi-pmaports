@@ -1,0 +1,62 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Ajuste de libcamera para el IMX682 trasero del surya.
+# Va en /usr/share/libcamera/ipa/simple/imx682.yaml
+#
+# SIN ESTO libcamera cae en uncalibrated.yaml, que no resta el pedestal ni
+# corrige color: la imagen sale lavada, con el negro gris y los colores
+# apagados. Es exactamente lo que se veia en la primera captura buena.
+#
+# EL NIVEL DE NEGRO, medido en este sensor y no copiado
+# -----------------------------------------------------
+# Con la tapa puesta -o mirando a oscuras- las capturas dan un suelo estable:
+#
+#     ganancia=0    minimo 58, mediana 68 en diez bits
+#     ganancia=978  el suelo no se mueve, lo que sube es la senal
+#
+# O sea el pedestal clasico de 64 en diez bits. libcamera lo cuenta sobre 16
+# bits, asi que 64 << 6 = 4096.
+#
+# LA MATRIZ DE COLOR, MEDIDA EN ESTE SENSOR
+# -----------------------------------------
+# Sin matriz, la imagen sale lavada: los filtros de color del sensor se solapan
+# entre si, asi que lo que llama "rojo" lleva bastante verde dentro. Medido en
+# la escena real antes de esto, la saturacion media era de 6 sobre 255.
+#
+# COMO SE MIDIO (camara/medir-la-matriz-de-color)
+# El monitor se pinta de un color liso a pantalla completa, el movil lo mira, y
+# se captura en crudo. Doce parches -cuatro neutros y ocho de color-, con la
+# exposicion y la ganancia FIJAS en 1600 y 800, elegidas midiendo el parche mas
+# claro para que llegue a 622 de 1023 sin saturar un solo pixel.
+#
+# Se resuelve por minimos cuadrados la matriz que lleva el sensor balanceado al
+# sRGB lineal, con la suma de cada fila forzada a 1 para que el gris siga
+# siendo gris.
+#
+# LO QUE ESTA MATRIZ NO ES: un monitor no es un patron de color, y ademas emite
+# con primarios estrechos de LED que no se parecen a la luz del dia. O sea que
+# esta calibrada para un espectro de pantalla. Es una matriz MEDIDA, no una de
+# laboratorio, y desde luego mejor que ninguna.
+#
+# COMPROBACIONES QUE PASO:
+#   - cada primario domina su canal (si no, la lectura del mosaico esta mal)
+#   - la respuesta del sensor a la luz es lineal: en la rampa de grises la
+#     relacion sensor/luz solo varia un 6% de punta a punta
+#   - aplicando la matriz a los propios parches, el peor error es 0,026 sobre
+#     1,0, y la mayoria estan entre 0,003 y 0,011
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+      blackLevel: 4096
+  - Awb:
+  - Ccm:
+      ccms:
+        - ct: 6500
+          ccm: [ 2.00441, -1.00382, -0.00059,
+                -0.41255,  1.93934, -0.52679,
+                -0.03423, -0.44489,  1.47912 ]
+  - Adjust:
+  - Agc:
+...

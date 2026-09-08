@@ -1,0 +1,21 @@
+# SPDX-License-Identifier: CC0-1.0
+#
+# Ajuste minimo de libcamera para el S5K3T2 frontal del surya.
+# Va en /usr/share/libcamera/ipa/simple/s5k3t2.yaml
+#
+# El nivel de negro es el pedestal de 64 en 10 bits, que libcamera cuenta sobre
+# 16 bits: 64 << 6 = 4096. Es el mismo que usa el s5k3l6xx de este directorio,
+# que es otro Samsung de la misma epoca.
+#
+# Sin fichero propio libcamera usa uncalibrated.yaml, que deja el pedestal sin
+# restar y da una imagen lavada y con el negro gris.
+%YAML 1.1
+---
+version: 1
+algorithms:
+  - BlackLevel:
+      blackLevel: 4096
+  - Awb:
+  - Adjust:
+  - Agc:
+...

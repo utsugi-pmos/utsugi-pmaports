@@ -1,0 +1,47 @@
+#!/bin/sh
+# Raise a package's version and refresh its checksums.
+#
+#   scripts/bump <pkg>...              pkgrel + 1
+#   scripts/bump --pkgver 1.1 <pkg>    set pkgver, reset pkgrel to 0
+#   scripts/bump --checksum <pkg>...   only recompute sha512sums
+#
+# Bumping is not optional: pmbootstrap skips a build whose pkgver-pkgrel already
+# exists in any index it knows, including the published one, and reports success.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+MODE=pkgrel
+case "${1:-}" in
+	--pkgver)   MODE=pkgver; shift; NEWVER="${1:?--pkgver needs a version}"; shift ;;
+	--checksum) MODE=checksum; shift ;;
+	"") die "nothing to bump. See the header of $0" ;;
+esac
+
+overlay
+for pkg in "$@"; do
+	d="$(aport_dir "$pkg")"
+	[ -n "$d" ] || die "unknown aport: $pkg"
+	case "$MODE" in
+	pkgrel)
+		old="$(sed -n 's/^pkgrel=//p' "$d/APKBUILD" | head -1)"
+		sed -i "0,/^pkgrel=/s//pkgrel=$((old + 1))/" "$d/APKBUILD"
+		grey "  $pkg: pkgrel $old -> $((old + 1))" ;;
+	pkgver)
+		sed -i "0,/^pkgver=/s//pkgver=$NEWVER/" "$d/APKBUILD"
+		sed -i "0,/^pkgrel=/s//pkgrel=0/" "$d/APKBUILD"
+		grey "  $pkg: pkgver -> $NEWVER, pkgrel -> 0" ;;
+	esac
+
+	# The checksums are recomputed in the throwaway checkout and copied BACK: this
+	# tree is the authoritative one, the checkout is disposable.
+	overlay
+	if pmb checksum "$pkg" >/dev/null 2>&1; then
+		src="$(find "$APORTS/utsugi" -type d -name "$pkg" | head -1)"
+		[ -n "$src" ] && cp "$src/APKBUILD" "$d/APKBUILD"
+		green "  $pkg: checksums up to date ($(apkbuild_version "$pkg"))"
+	else
+		red "  $pkg: could not recompute checksums"
+		exit 1
+	fi
+done

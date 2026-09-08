@@ -1,0 +1,197 @@
+El panel solo ofrecia 120 Hz, y puede hacer 60
+
+QUE PASA
+--------
+El panel del surya expone UN solo modo. No es cosa del compositor ni del
+device tree: esta clavado en el driver, que devuelve un unico
+`drm_display_mode` con `drm_connector_helper_get_modes_fixed()` -que por
+definicion registra exactamente uno-. Medido en el movil:
+
+    $ cat /sys/class/drm/card0/card0-DSI-1/modes
+    1080x2400
+
+    $ kscreen-doctor -o
+    Modes: 1:1080x2400@120.00*!      <- modo unico
+
+O sea que "bajar los hercios" no era un ajuste que faltara encontrar: no habia
+ningun modo que seleccionar.
+
+El driver lo genero `linux-mdss-dsi-panel-driver-generator` desde el device
+tree de vendor de Xiaomi, y solo se porto la timing de 120 Hz.
+
+COMO CAMBIA DE FPS ESTE PANEL: ALARGANDO EL PORCHE, NO BAJANDO EL RELOJ
+-----------------------------------------------------------------------
+Esto es lo que hay que entender, y lo que costo un intento fallido. El device
+tree de vendor (MiCode/Xiaomi_Kernel_OpenSource, rama surya-q-oss,
+arch/arm64/boot/dts/qcom/dsi-panel-nt36672c-tianma-fhd-video.dtsi) dice:
+
+    qcom,mdss-dsi-pan-enable-dynamic-fps;
+    qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
+    qcom,dsi-supported-dfps-list = <120 90 60 50 30>;
+
+`dfps_immediate_porch_mode_vfp`: el refresco se cambia moviendo el VERTICAL
+FRONT PORCH, con el reloj de pixel CONSTANTE. El panel espera siempre el mismo
+bit clock; lo que varia es cuanto blanking hay entre tramas.
+
+Por eso los dos modos de aqui comparten reloj, timing horizontal y bit clock
+del DSI, y solo cambia el porche vertical:
+
+    120 Hz   vfp   32   vtotal 2464   1205 * 2464 * 120 / 1000 = 356294 kHz
+     60 Hz   vfp 2496   vtotal 4928   1205 * 4928 *  60 / 1000 = 356294 kHz
+
+Identicos. Ademas la secuencia de inicializacion es la MISMA para todos los
+fps -el device tree solo trae un `qcom,mdss-dsi-on-command`-, asi que no hace
+falta ningun comando DSI nuevo.
+
+EL INTENTO FALLIDO, QUE MERECE QUEDAR ESCRITO
+---------------------------------------------
+La primera version de este parche hacia lo evidente: mismos porches y el reloj
+a la mitad (178147 kHz). El panel se llena de GLITCHES.
+
+Y lo hace en silencio, que es lo peligroso: TODO lo legible por una maquina
+decia que funcionaba.
+
+    kscreen-doctor      1080x2400@60.00, modo aplicado
+    wayland-info        refresh: 60.000 Hz
+    dmesg               ni un error de dpu, dsi, pll ni drm
+
+Se dio por bueno con eso, y solo se supo cuando una persona miro el panel.
+Los registros no son la pantalla.
+
+Dos hipotesis se probaron y las dos eran falsas:
+
+  1. "El PPS del DSC se manda una sola vez en prepare() y no se reenvia."
+     Falso: el PPS depende de hdisplay y de la geometria de slice, no del
+     reloj, asi que reenviarlo no habria cambiado nada.
+
+  2. "El PLL del DSI no se reprograma en un modeset en caliente."
+     Cierto que no se reprogramaba -medido: los relojes se quedaban en los
+     valores de 120 Hz mientras el DPU generaba 60 vblanks/s-, pero NO era la
+     causa. Forzando un ciclo del panel los tres relojes bajaban exactamente a
+     la mitad... y los glitches seguian igual.
+
+La causa era la de arriba: al panel no se le puede cambiar el reloj. Punto.
+
+COMPROBADO
+----------
+Con el porche largo la imagen sale LIMPIA. Verificado en el movil, y esta vez
+mirando la pantalla, que es lo que faltaba las dos veces anteriores:
+
+    modo      1080x2400@60.00 aplicado
+    bit_clk   860427759   <- EL MISMO que a 120 Hz: la señal de que se esta
+    pclk      143404627      usando el metodo del porche y no el del reloj
+    dmesg     ni un error de dpu/dsi/drm
+    pantalla  sin glitches
+
+El arranque tambien: 120 Hz va primero y lleva `DRM_MODE_TYPE_PREFERRED`, asi
+que es el que se usa si nadie toca nada. Comprobado arrancando con el kernel
+instalado (r195).
+
+Y aunque salga limpio, el ahorro sera modesto: la pantalla es LCD -el device
+tree cablea `backlight = <&pm6150l_wled>`, o sea retroiluminacion de LED
+blancos- y el backlight no depende del refresco. Ademas, con el metodo del
+porche el reloj del DSI tampoco baja, asi que el PHY consume igual. Lo que se
+ahorra es que el DPU y la GPU componen 60 tramas en vez de 120.
+
+--- a/drivers/gpu/drm/panel/panel-tianma-nt36672c.c
++++ b/drivers/gpu/drm/panel/panel-tianma-nt36672c.c
+@@ -334,25 +334,85 @@
+ 	return 0;
+ }
+ 
+-static const struct drm_display_mode nt36672c_tianma_mode = {
+-	.clock = (1080 + 73 + 12 + 40) * (2400 + 32 + 2 + 30) * 120 / 1000,
+-	.hdisplay = 1080,
+-	.hsync_start = 1080 + 73,
+-	.hsync_end = 1080 + 73 + 12,
+-	.htotal = 1080 + 73 + 12 + 40,
+-	.vdisplay = 2400,
+-	.vsync_start = 2400 + 32,
+-	.vsync_end = 2400 + 32 + 2,
+-	.vtotal = 2400 + 32 + 2 + 30,
+-	.width_mm = 70,
+-	.height_mm = 154,
+-	.type = DRM_MODE_TYPE_DRIVER,
++/*
++ * The vendor device tree ships 120/90/60/50/30 Hz for this panel; the generator
++ * only carried over the 120 Hz timing.
++ *
++ * The refresh rate is varied through the VERTICAL FRONT PORCH, with the pixel
++ * clock held constant. That is what the vendor tree asks for:
++ *
++ *     qcom,mdss-dsi-pan-enable-dynamic-fps;
++ *     qcom,mdss-dsi-pan-fps-update = "dfps_immediate_porch_mode_vfp";
++ *     qcom,dsi-supported-dfps-list = <120 90 60 50 30>;
++ *
++ * so every mode below keeps clock, horizontal timing and the DSI bit clock
++ * exactly as the panel already runs them, and only the front porch grows:
++ *
++ *     120 Hz   vfp   32   vtotal 2464   1205 * 2464 * 120 / 1000 = 356294 kHz
++ *      60 Hz   vfp 2496   vtotal 4928   1205 * 4928 *  60 / 1000 = 356294 kHz
++ *
++ * Halving the clock instead, which is the obvious-looking way to do it, does
++ * NOT work on this panel: it fills the screen with glitches while every
++ * machine-readable signal claims success. Measured, and the reason this file
++ * looks the way it does.
++ *
++ * DSC is unaffected either way: its parameters depend on hdisplay and the
++ * slice geometry (540x20, 8bpc), not on timing.
++ */
++#define NT36672C_TIANMA_MODE(vfp, hz) {					\
++	.clock = (1080 + 73 + 12 + 40) *				\
++		 (2400 + (vfp) + 2 + 30) * (hz) / 1000,			\
++	.hdisplay = 1080,						\
++	.hsync_start = 1080 + 73,					\
++	.hsync_end = 1080 + 73 + 12,					\
++	.htotal = 1080 + 73 + 12 + 40,					\
++	.vdisplay = 2400,						\
++	.vsync_start = 2400 + (vfp),					\
++	.vsync_end = 2400 + (vfp) + 2,					\
++	.vtotal = 2400 + (vfp) + 2 + 30,				\
++	.width_mm = 70,							\
++	.height_mm = 154,						\
++	.type = DRM_MODE_TYPE_DRIVER,					\
++}
++
++/*
++ * 120 Hz stays first and is the one flagged preferred below, so nothing about
++ * the default behaviour of this panel changes by adding the second mode.
++ */
++static const struct drm_display_mode nt36672c_tianma_modes[] = {
++	NT36672C_TIANMA_MODE(32, 120),
++	NT36672C_TIANMA_MODE(2496, 60),
+ };
+ 
+ static int nt36672c_tianma_get_modes(struct drm_panel *panel,
+ 				     struct drm_connector *connector)
+ {
+-	return drm_connector_helper_get_modes_fixed(connector, &nt36672c_tianma_mode);
++	struct drm_display_mode *mode;
++	unsigned int i;
++	int count = 0;
++
++	/*
++	 * Open-coded rather than drm_connector_helper_get_modes_fixed(), which
++	 * by definition registers exactly one mode.
++	 */
++	for (i = 0; i < ARRAY_SIZE(nt36672c_tianma_modes); i++) {
++		mode = drm_mode_duplicate(connector->dev,
++					  &nt36672c_tianma_modes[i]);
++		if (!mode)
++			break;
++
++		drm_mode_set_name(mode);
++		if (i == 0)
++			mode->type |= DRM_MODE_TYPE_PREFERRED;
++
++		drm_mode_probed_add(connector, mode);
++		count++;
++	}
++
++	connector->display_info.width_mm = nt36672c_tianma_modes[0].width_mm;
++	connector->display_info.height_mm = nt36672c_tianma_modes[0].height_mm;
++
++	return count;
+ }
+ 
+ static const struct drm_panel_funcs nt36672c_tianma_panel_funcs = {

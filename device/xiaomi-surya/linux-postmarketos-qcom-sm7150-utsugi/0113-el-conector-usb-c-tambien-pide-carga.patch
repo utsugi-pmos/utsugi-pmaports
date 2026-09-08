@@ -1,0 +1,38 @@
+From: Cidwel <cidwel@gmail.com>
+Subject: [PATCH] arm64: dts: qcom: sm7150-xiaomi: let the USB-C connector sink power
+
+Source-only, the phone powers a laptop over USB-C instead of charging from
+it, and drains its battery to UVLO overnight. Dual role with try-sink, the
+same ports as the sm8250 Xiaomi trees upstream. Verified on the surya by
+patching the installed DTB first: charger online, +985 mA, role swappable
+both ways from sysfs.
+---
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi	2026-09-05 11:55:25.151107734 +0200
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi	2026-09-05 11:55:25.159445773 +0200
+@@ -601,12 +601,25 @@
+ 	connector {
+ 		compatible = "usb-c-connector";
+ 
+-		power-role = "source";
++		/*
++		 * Dual, and asking for power first. As a source-only port this
++		 * phone won a PD negotiation against a laptop's USB-C port and
++		 * spent a night powering the laptop until the cell hit UVLO
++		 * (measured 2026-09-05: charger online=0, current_now -366 mA,
++		 * laptop side "ucsi-source-psy: Charging"). With this, the same
++		 * cable charges it at ~1 A, and the role can still be swapped
++		 * from /sys/class/typec/port0/power_role.
++		 */
++		power-role = "dual";
++		try-power-role = "sink";
+ 		data-role = "dual";
+ 		self-powered;
+ 
+ 		source-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_DUAL_ROLE |
+ 			       PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
++		sink-pdos = <PDO_FIXED(5000, 3000, PDO_FIXED_DUAL_ROLE |
++			     PDO_FIXED_USB_COMM | PDO_FIXED_DATA_SWAP)>;
++		op-sink-microwatt = <10000000>;
+ 
+ 		ports {
+ 			#address-cells = <1>;

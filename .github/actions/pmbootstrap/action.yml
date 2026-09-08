@@ -1,0 +1,87 @@
+name: Set up pmbootstrap
+description: pmbootstrap, a pinned pmaports checkout and the repository signing key
+
+inputs:
+  abuild-privkey:
+    description: private half of the repository signing key
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -eu
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          python3 git openssl rsync e2fsprogs dosfstools parted cryptsetup-bin util-linux xz-utils
+
+    - shell: bash
+      run: |
+        set -eu
+        # pmbootstrap refuses to run as root and needs passwordless sudo; the
+        # runner user has both.
+        git clone --depth 1 \
+          https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git "$HOME/src/pmbootstrap"
+
+    - shell: bash
+      run: |
+        set -eu
+        WORK=$HOME/.local/var/pmbootstrap-utsugi
+        mkdir -p "$WORK/config_abuild" "$WORK/config_apk_keys"
+        echo 8 > "$WORK/version"
+        # The pmaports checkout is pinned; nothing ever pulls it forward.
+        git clone --filter=blob:none \
+          https://gitlab.postmarketos.org/postmarketOS/pmaports.git "$WORK/pmaports"
+        git -C "$WORK/pmaports" checkout -q --detach "$(tr -d ' \n' < upstream.lock)"
+
+    - shell: bash
+      env:
+        ABUILD_PRIVKEY: ${{ inputs.abuild-privkey }}
+      run: |
+        set -eu
+        WORK=$HOME/.local/var/pmbootstrap-utsugi
+        KEY=$(basename keys/*.rsa.pub .pub)
+        printf '%s' "$ABUILD_PRIVKEY" > "$WORK/config_abuild/$KEY"
+        cp keys/*.rsa.pub "$WORK/config_abuild/"
+        cp keys/*.rsa.pub "$WORK/config_apk_keys/"
+        # abuild signs as the chroot's "pmos" user, uid 12345. A key readable
+        # only by the runner fails at the very last step of a build.
+        sudo chown 12345:12345 "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+        sudo chmod 600 "$WORK/config_abuild/$KEY"
+        printf 'PACKAGER_PRIVKEY="/home/pmos/.abuild/%s"\nPACKAGER="Dr. Utsugi <cidwel@gmail.com>"\n' \
+          "$KEY" > "$WORK/config_abuild/abuild.conf"
+
+    - shell: bash
+      run: |
+        set -eu
+        WORK=$HOME/.local/var/pmbootstrap-utsugi
+        mkdir -p .local
+        {
+          echo '[pmbootstrap]'
+          echo "aports = $WORK/pmaports"
+          echo "work = $WORK"
+          echo 'device = qcom-sm7150'
+          echo 'ui = plasma-mobile'
+          echo 'service_manager = systemd'
+          echo 'user = user'
+          echo 'hostname = surya'
+          echo 'ssh_keys = False'
+          echo 'build_pkgs_on_install = False'
+          echo
+          echo '[providers]'
+          echo
+          echo '[mirrors]'
+          # Only if something is already published: pmbootstrap aborts on a 404 index.
+          if curl -fsI https://pmaports.cidwel.com/main/aarch64/APKINDEX.tar.gz >/dev/null 2>&1; then
+            echo 'pmaports_custom = https://pmaports.cidwel.com'
+          fi
+        } > .local/pmbootstrap-release.cfg
+
+    - uses: actions/cache@v4
+      with:
+        path: |
+          ~/.local/var/pmbootstrap-utsugi/cache_ccache_aarch64
+          ~/.local/var/pmbootstrap-utsugi/cache_distfiles
+        key: pmb-${{ runner.arch }}-${{ hashFiles('upstream.lock') }}-${{ github.run_id }}
+        restore-keys: pmb-${{ runner.arch }}-

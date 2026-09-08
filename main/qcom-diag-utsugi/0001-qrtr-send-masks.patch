@@ -1,0 +1,36 @@
+From: cidwel <cidwel@gmail.com>
+Subject: [PATCH] peripheral-qrtr: enviar las mascaras al peripheral
+
+La ruta rpmsg llama a diag_cntl_send_masks() al encontrar un peripheral,
+pero la ruta QRTR no lo hace nunca. En plataformas Qualcomm con kernel
+mainline (que usan QRTR) el modem nunca recibe las mascaras y su canal
+de datos permanece mudo, aunque el saludo de caracteristicas se complete.
+--- a/router/peripheral-qrtr.c
++++ b/router/peripheral-qrtr.c
+@@ -95,6 +95,26 @@
+ 			connect(perif->cntl_fd, (struct sockaddr *)&sq, sizeof(sq));
+ 			perif->cntl_open = true;
+ 			watch_add_writeq(perif->cntl_fd, &perif->cntlq);
++
++			/*
++			 * Enviar las mascaras al peripheral recien encontrado,
++			 * igual que hace la ruta rpmsg. Sin esto el modem nunca
++			 * sabe que debe emitir y su canal de datos permanece
++			 * mudo aunque el saludo de caracteristicas se complete.
++			 *
++			 * Las tres hacen falta: send_masks() solo cubre los
++			 * mensajes F3. Los logs de RF y de capa 1 viajan como
++			 * paquetes de log, que necesitan su propia mascara por
++			 * equip_id, y los eventos la suya.
++			 */
++			{
++				unsigned int equip_id;
++
++				diag_cntl_send_masks(perif);
++				diag_cntl_send_event_mask(perif);
++				for (equip_id = 0; equip_id < MAX_EQUIP_ID; equip_id++)
++					diag_cntl_send_log_mask(perif, equip_id);
++			}
+ 		}
+ 
+ 		return diag_cntl_recv(perif, pkt.data, pkt.data_len);

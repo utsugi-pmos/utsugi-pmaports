@@ -1,0 +1,32 @@
+arm64: dts: qcom: sm7150: parent the GCC power domains to CX
+
+The USB controller (usb@a6f8800) and the UFS host vote required-opps NOM on
+their GCC GDSCs (USB30_PRIM_GDSC, UFS_PHY_GDSC), but the GCC node carries no
+power-domains property, so those GDSCs are not subdomains of the rpmhpd CX
+domain and the votes never reach CX. Measured on the POCO X3 NFC (surya),
+2026-09-08: pm_genpd_summary shows usb30_prim_gdsc at state 256 as an orphan
+while CX only lists the camcc/dispcc/videocc GDSCs as children.
+
+In practice CX was held at NOM only by the Bluetooth UART running at
+3.2 Mbaud (qup OPP 128 MHz -> NOM). Anything that lowers that vote (bluetoothd
+powering the adapter off, rfkill) drops CX to the display's SVS_L1 while the
+USB controller keeps running its 200 MHz master clock, and the SoC freezes
+without a trace until the watchdog resets it. Reproduced with the console UART
+as a substitute NOM vote: with CX pinned, 6 Bluetooth power cycles survive;
+dropping the pin with Bluetooth off kills the SoC immediately.
+
+Do what sc7180 does and put GCC under CX so the GDSC performance states
+propagate (gdsc_register() adds every GDSC as a subdomain of the controller's
+own power domain).
+
+--- a/arch/arm64/boot/dts/qcom/sm7150.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150.dtsi
+@@ -926,6 +926,8 @@
+ 				 <&rpmhcc RPMH_CXO_CLK_A>,
+ 				 <&sleep_clk>;
+ 
++			power-domains = <&rpmhpd RPMHPD_CX>;
++
+ 			#clock-cells = <1>;
+ 			#reset-cells = <1>;
+ 			#power-domain-cells = <1>;

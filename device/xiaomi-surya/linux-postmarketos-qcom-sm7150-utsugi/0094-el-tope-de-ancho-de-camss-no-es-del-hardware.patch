@@ -1,0 +1,129 @@
+El tope de 8191 pixeles de ancho de CAMSS es del generador de patron, no del camino de captura
+
+La trasera tiene un modo de 9248x6944 -los 64 Mpx nativos del IMX682- y la
+tuberia se negaba a arrancar:
+
+    v4l2_subdev_link_validate_default: width does not match
+                                       (source 9248, sink 8191)
+    link was "imx682 12-001a":0 -> "msm_csiphy0":0
+    Failed to start media pipeline: -32
+
+8191 es 2^13-1, y ese limite de trece bits SI existe... pero en otro sitio. Es
+el del GENERADOR DE PATRON DE PRUEBAS del CSID, que programa el ancho en un
+campo de trece bits y ademas ya se enmascara el solo:
+
+    camss-csid-gen2.c:
+        val |= (input_format->width & 0x1fff) << TPG_DT_n_CFG_0_FRAME_WIDTH;
+
+En el camino REAL por RDI el ancho no se le programa a ningun registro: el
+maestro de escritura del VFE recibe
+
+    camss-vfe-480.c:
+        #define WM_IMAGE_CFG_0_DEFAULT_WIDTH  (0xFFFF)
+        writel_relaxed(WM_IMAGE_CFG_0_DEFAULT_WIDTH,
+                       vfe->base + VFE_BUS_WM_IMAGE_CFG_0(wm));
+
+o sea el maximo de un campo de dieciseis bits, sin mirar el formato. El RDI es
+un volcado de bytes y no necesita saber el ancho.
+
+Aun asi el 8191 esta copiado a pelo como tope global en camss-video.c,
+camss-csiphy.c, camss-csid.c y camss-vfe.c, donde bloquea sensores validos. El
+IMX682 no es raro: cualquier sensor de mas de 8191 pixeles de ancho -y hay
+muchos de 48 y 64 Mpx- choca con esto.
+
+Se sube a 16383. Cubre de sobra los 9248 del IMX682 y deja el producto ancho por
+alto lejos de desbordar los 32 bits en los calculos de tamano de imagen. No se
+toca CAMSS_FRAME_MAX_HEIGHT_PIX, que es del camino con procesado y tiene su
+propio limite.
+
+COMO SE COMPRUEBA
+-----------------
+Los otros cuatro modos de la trasera ya capturan y no deben cambiar. El de
+9248x6944 pasa de "Failed to start media pipeline: -32" a entregar paquetes.
+Si el limite fuera de verdad del hardware, el modo grande arrancaria pero
+daria basura o cero paquetes, que se distingue perfectamente.
+--- a/drivers/media/platform/qcom/camss/camss-video.c
++++ b/drivers/media/platform/qcom/camss/camss-video.c
+@@ -20,9 +20,30 @@
+ #include "camss.h"
+ 
+ #define CAMSS_FRAME_MIN_WIDTH		1
+-#define CAMSS_FRAME_MAX_WIDTH		8191
++/*
++ * 8191 es 2^13-1, y ese limite de trece bits NO es del camino de captura: es
++ * del GENERADOR DE PATRON del CSID, que programa el ancho en un campo de trece
++ * bits y ya se enmascara solo:
++ *
++ *   camss-csid-gen2.c:  val |= (input_format->width & 0x1fff) << ...FRAME_WIDTH;
++ *
++ * En el camino real por RDI el ancho no se le programa a nadie: el maestro de
++ * escritura del VFE recibe WM_IMAGE_CFG_0_DEFAULT_WIDTH = 0xFFFF sin mirar el
++ * formato. Aun asi el 8191 se copio como tope global en camss-video, csiphy,
++ * csid y vfe, y ahi bloquea sensores perfectamente validos.
++ *
++ * El sintoma en el surya, con el modo de 64 Mpx de la trasera:
++ *
++ *   v4l2_subdev_link_validate_default: width does not match
++ *                                      (source 9248, sink 8191)
++ *   Failed to start media pipeline: -32
++ *
++ * Se sube a 16383, que cubre de sobra los 9248 del IMX682 y deja el producto
++ * ancho x alto lejos de desbordar los 32 bits en los calculos de tamano.
++ */
++#define CAMSS_FRAME_MAX_WIDTH		16383
+ #define CAMSS_FRAME_MIN_HEIGHT		1
+-#define CAMSS_FRAME_MAX_HEIGHT_RDI	8191
++#define CAMSS_FRAME_MAX_HEIGHT_RDI	16383
+ #define CAMSS_FRAME_MAX_HEIGHT_PIX	4096
+ 
+ /* -----------------------------------------------------------------------------
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.c
+@@ -382,8 +382,8 @@
+ 		if (i >= csiphy->res->formats->nformats)
+ 			fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+-		fmt->height = clamp_t(u32, fmt->height, 1, 8191);
++		fmt->width = clamp_t(u32, fmt->width, 1, 16383);
++		fmt->height = clamp_t(u32, fmt->height, 1, 16383);
+ 
+ 		fmt->field = V4L2_FIELD_NONE;
+ 		fmt->colorspace = V4L2_COLORSPACE_SRGB;
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -875,8 +875,8 @@
+ 		if (i >= csid->res->formats->nformats)
+ 			fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+-		fmt->height = clamp_t(u32, fmt->height, 1, 8191);
++		fmt->width = clamp_t(u32, fmt->width, 1, 16383);
++		fmt->height = clamp_t(u32, fmt->height, 1, 16383);
+ 
+ 		fmt->field = V4L2_FIELD_NONE;
+ 		fmt->colorspace = V4L2_COLORSPACE_SRGB;
+@@ -905,8 +905,8 @@
+ 			if (i >= csid->res->formats->nformats)
+ 				fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-			fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+-			fmt->height = clamp_t(u32, fmt->height, 1, 8191);
++			fmt->width = clamp_t(u32, fmt->width, 1, 16383);
++			fmt->height = clamp_t(u32, fmt->height, 1, 16383);
+ 
+ 			fmt->field = V4L2_FIELD_NONE;
+ 		}
+--- a/drivers/media/platform/qcom/camss/camss-vfe.c
++++ b/drivers/media/platform/qcom/camss/camss-vfe.c
+@@ -1356,8 +1356,8 @@
+ 		if (i >= line->nformats)
+ 			fmt->code = MEDIA_BUS_FMT_UYVY8_1X16;
+ 
+-		fmt->width = clamp_t(u32, fmt->width, 1, 8191);
+-		fmt->height = clamp_t(u32, fmt->height, 1, 8191);
++		fmt->width = clamp_t(u32, fmt->width, 1, 16383);
++		fmt->height = clamp_t(u32, fmt->height, 1, 16383);
+ 
+ 		fmt->field = V4L2_FIELD_NONE;
+ 		fmt->colorspace = V4L2_COLORSPACE_SRGB;

@@ -1,0 +1,111 @@
+El sensor salia del reset practicamente sin reloj
+
+QUE PASA
+--------
+s5k3t2_power_on() encendia el reloj y soltaba el reset en la instruccion
+siguiente:
+
+    clk_prepare_enable(mclk);
+    gpiod_set_value_cansleep(reset_gpio, 0);   <-- sin esperar nada
+    usleep_range(10 ms, 15 ms);
+
+O sea que el sensor salia del reset habiendo recibido practicamente cero ciclos
+de reloj.
+
+LA SECUENCIA DEL FABRICANTE, SACADA DEL PROPIO MOVIL
+----------------------------------------------------
+El fichero de fabrica de esta camara
+(com.qti.sensormodule.j20c_ofilm_s5k3t2_front.bin) trae el bloque powerSetting,
+en grupos de tres campos {tipo, valor, retardo_ms}:
+
+    STANDBY  0            1 ms
+    VDIG     encender     1 ms
+    VIO      encender     1 ms
+    MCLK     19,2 MHz    15 ms    <-- QUINCE milisegundos de reloj
+    RESET    soltar       5 ms
+
+Quince milisegundos a 19,2 MHz son unos 288.000 ciclos antes de soltar el reset.
+
+(El formato del bloque no estaba descifrado: son grupos de TRES u64, no de
+cuatro ni de cinco. Con cuatro o con cinco salen valores absurdos como un tipo
+de secuencia que vale 19200000.)
+
+POR QUE ENCAJA CON LO MEDIDO
+----------------------------
+Un sensor que sale del reset sin reloj estable arranca igual su nucleo digital:
+contesta por I2C, traga las 244 escrituras de firmware -releidas una a una, 244
+de 244 coinciden- y su contador de fotogramas avanza a 30 por segundo. Pero la
+maquina de estados que inicializa el PHY MIPI puede quedarse a medias, y
+entonces transmite algo que el receptor no sabe enganchar.
+
+Que es exactamente el cuadro: el CSIPHY oye los cinco carriles salir de reposo,
+la actividad sigue al ritmo de fotogramas, y al CSID no le llega ni un
+sincronismo de inicio.
+
+Es ademas la misma clase de fallo que bloqueo el primer fotograma con CAMSS en
+el Xiaomi Mi Note 2, donde la solucion fue anadir un retardo tras soltar el
+reset.
+
+Los dos retardos van como parametros de modulo en 0644 para poder barrerlos sin
+recompilar.
+--- a/drivers/media/i2c/s5k3t2.c
++++ b/drivers/media/i2c/s5k3t2.c
+@@ -118,6 +118,16 @@
+ MODULE_PARM_DESC(i2c_addr,
+ 	"Direccion I2C de 7 bits del sensor. -1 (por defecto) = buscarla.");
+ 
++static int retardo_reloj_us = 15000;
++module_param(retardo_reloj_us, int, 0644);
++MODULE_PARM_DESC(retardo_reloj_us,
++	"Microsegundos de reloj antes de soltar el reset. El fabricante espera 15000.");
++
++static int retardo_reset_us = 5000;
++module_param(retardo_reset_us, int, 0644);
++MODULE_PARM_DESC(retardo_reset_us,
++	"Microsegundos tras soltar el reset. El fabricante espera 5000.");
++
+ static int mipi_switch = -1;
+ module_param(mipi_switch, int, 0444);
+ MODULE_PARM_DESC(mipi_switch,
+@@ -1153,12 +1163,40 @@
+ 	if (ret)
+ 		return ret;
+ 
++	usleep_range(1 * USEC_PER_MSEC, 2 * USEC_PER_MSEC);
++
+ 	ret = clk_prepare_enable(s5k3t2->mclk);
+ 	if (ret)
+ 		goto disable_regulators;
+ 
++	/*
++	 * EL RELOJ TIENE QUE LLEVAR UN RATO CORRIENDO ANTES DE SOLTAR EL RESET.
++	 *
++	 * Esto estaba mal y es la clase de fallo que no da la cara: el sensor
++	 * salia del reset practicamente sin haber recibido un ciclo de reloj.
++	 * Su nucleo digital arranca igual -por eso contesta por I2C, traga las
++	 * 244 escrituras de firmware y su contador de fotogramas avanza-, pero
++	 * la maquina de estados que inicializa el PHY MIPI puede quedarse a
++	 * medias, y entonces transmite algo que el receptor no sabe enganchar.
++	 *
++	 * La secuencia del fabricante esta en el propio fichero de fabrica del
++	 * movil, en el bloque powerSetting, en grupos de {tipo, valor, retardo}:
++	 *
++	 *     STANDBY  0            1 ms
++	 *     VDIG     encender     1 ms
++	 *     VIO      encender     1 ms
++	 *     MCLK     19,2 MHz    15 ms   <-- quince milisegundos de reloj
++	 *     RESET    soltar       5 ms
++	 *
++	 * Quince milisegundos a 19,2 MHz son unos 288.000 ciclos. Nosotros le
++	 * damos cero.
++	 *
++	 * Los dos retardos van como parametros para poder barrerlos en caliente.
++	 */
++	usleep_range(retardo_reloj_us, retardo_reloj_us + 1000);
++
+ 	gpiod_set_value_cansleep(s5k3t2->reset_gpio, 0);
+-	usleep_range(10 * USEC_PER_MSEC, 15 * USEC_PER_MSEC);
++	usleep_range(retardo_reset_us, retardo_reset_us + 1000);
+ 
+ 	return 0;
+ 

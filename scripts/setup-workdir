@@ -1,0 +1,115 @@
+#!/bin/sh
+# One-off preparation of the release build environment. Safe to re-run.
+#
+# Creates a pmbootstrap work directory SEPARATE from the user's own, a throwaway
+# pmaports checkout pinned to upstream.lock, and the repository signing key.
+#
+# Nothing here touches ~/.local/var/pmbootstrap: the daily work dir keeps its own
+# chroots, its own packages and its throwaway pmos@local signing key.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+UPSTREAM_CLONE="${UPSTREAM_CLONE:-$HOME/.local/var/pmbootstrap/cache_git/pmaports}"
+USER_WORK="${USER_WORK:-$HOME/.local/var/pmbootstrap}"
+PACKAGER="${PACKAGER:-Dr. Utsugi <cidwel@gmail.com>}"
+
+title "Work directory: $WORK"
+mkdir -p "$WORK/config_abuild" "$WORK/config_apk_keys" "$WORK/cache_git"
+# pmbootstrap refuses to touch a work dir without a matching version stamp.
+[ -f "$WORK/version" ] || echo 8 > "$WORK/version"
+
+# Share the two caches that are expensive and safe to share: downloaded tarballs
+# and the compiler cache. Without the ccache the kernel goes from ~7 minutes to
+# the better part of an hour.
+for c in cache_distfiles cache_ccache_aarch64; do
+	if [ -d "$USER_WORK/$c" ] && [ ! -e "$WORK/$c" ]; then
+		ln -s "$USER_WORK/$c" "$WORK/$c"
+		grey "  shared $c with $USER_WORK"
+	fi
+done
+
+title "pmaports checkout"
+[ -f "$REPO/upstream.lock" ] || die "no upstream.lock in $REPO"
+LOCK="$(tr -d ' \n' < "$REPO/upstream.lock")"
+if [ ! -d "$APORTS/.git" ]; then
+	[ -d "$UPSTREAM_CLONE/.git" ] || die "no pmaports clone at $UPSTREAM_CLONE"
+	# --local hardlinks the objects and writes NOTHING into the source clone, so
+	# the user's own pmbootstrap keeps working exactly as before.
+	git clone --local --no-checkout "$UPSTREAM_CLONE" "$APORTS"
+fi
+# pmbootstrap refuses to work with a pmaports checkout whose origin is not the
+# official URL, and --local leaves origin pointing at the source clone. Nothing
+# is ever fetched from it: the checkout stays pinned to upstream.lock.
+git -C "$APORTS" remote set-url origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+git -C "$APORTS" checkout -q --detach "$LOCK"
+grey "  $APORTS at $(git -C "$APORTS" rev-parse --short HEAD)"
+
+title "Signing key"
+KEY="$(basename "$(ls "$REPO"/keys/*.rsa.pub 2>/dev/null | head -1)" .pub 2>/dev/null || true)"
+if [ -z "$KEY" ] || [ ! -f "$REPO/keys/$KEY.pub" ]; then
+	# abuild keys are plain RSA-4096; abuild-keygen does exactly this, so there is
+	# no need for a container just to make one.
+	KEY="utsugi-pmaports-$(printf '%08x' "$(date +%s)").rsa"
+	mkdir -p "$REPO/keys" "$HOME/.abuild"
+	openssl genrsa -out "$HOME/.abuild/$KEY" 4096 2>/dev/null
+	chmod 600 "$HOME/.abuild/$KEY"
+	openssl rsa -in "$HOME/.abuild/$KEY" -pubout -out "$REPO/keys/$KEY.pub" 2>/dev/null
+	green "  generated $KEY"
+	red   "  PRIVATE HALF: $HOME/.abuild/$KEY -- never commit it; back it up."
+	red   "  The name is frozen from the first signed package on: apk stores it"
+	red   "  inside every package and looks for exactly that file in /etc/apk/keys."
+else
+	grey "  reusing $KEY"
+fi
+[ -f "$HOME/.abuild/$KEY" ] || die "the private half $HOME/.abuild/$KEY is missing"
+
+# sudo, because the copies are owned by the chroot user (see below) and a plain
+# install(1) cannot replace them on a re-run.
+sudo install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
+sudo install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
+install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_apk_keys/$KEY.pub"
+# abuild signs as the chroot's "pmos" user, which is uid 12345, not ours. A key
+# readable only by the host user fails at the very last step of the build, after
+# everything has already compiled: "failed to sign ... Permission denied".
+sudo chown 12345:12345 "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+# Written before the first build on purpose: pmbootstrap only generates its own
+# throwaway pmos@local key when this file does not exist.
+cat > "$WORK/config_abuild/abuild.conf" <<CONF
+PACKAGER_PRIVKEY="/home/pmos/.abuild/$KEY"
+PACKAGER="$PACKAGER"
+CONF
+grey "  key installed into config_abuild and config_apk_keys"
+
+title "pmbootstrap config"
+mkdir -p "$(dirname "$PMB_CFG")"
+cat > "$PMB_CFG" <<CONF
+[pmbootstrap]
+aports = $APORTS
+work = $WORK
+device = qcom-sm7150
+ui = plasma-mobile
+service_manager = systemd
+user = user
+hostname = surya
+timezone = Europe/Madrid
+locale = es_ES.UTF-8
+ssh_keys = False
+sudo_timer = True
+auto_zap_misconfigured_chroots = yes
+build_pkgs_on_install = False
+
+[providers]
+
+[mirrors]
+CONF
+# The custom mirror is only added once something has been published: pmbootstrap
+# aborts on a 404 index, so pointing at an empty repository breaks every command.
+if curl -fsI "$REPO_URL/$CHANNEL_DIR/$ARCH/APKINDEX.tar.gz" >/dev/null 2>&1; then
+	echo "pmaports_custom = $REPO_URL" >> "$PMB_CFG"
+	grey "  pmaports_custom = $REPO_URL (index is live)"
+else
+	grey "  pmaports_custom NOT set: nothing published at $REPO_URL yet."
+	grey "  scripts/publish adds it once the first index is up."
+fi
+green "Ready. Next: scripts/build --all"

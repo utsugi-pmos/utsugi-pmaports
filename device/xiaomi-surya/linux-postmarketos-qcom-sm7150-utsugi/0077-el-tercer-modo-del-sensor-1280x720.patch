@@ -1,0 +1,129 @@
+El tercer modo del sensor, 1280x720, que no se habia portado
+
+El fichero de fabrica trae TRES modos y solo se habian portado dos. El que
+faltaba es el mas suave de los tres para el enlace:
+
+    5184x3880   op_pre=3 mult=140 0x0312=0   ->  896 MHz
+    2592x1940   op_pre=3 mult=187 0x0312=2   -> 1196,8 MHz
+    1280x720    op_pre=2 mult=125 0x0312=2   -> 1200 MHz, con una quinta parte
+                                                de los pixeles y de las lineas
+
+Se pone el primero mientras se investiga por que no llega imagen: es el punto de
+trabajo que menos le pide al receptor, y probar un punto distinto es de lo poco
+que queda sin medir despues de haber contrastado registro a registro el sensor,
+el CSIPHY y el CSID contra el kernel Android del propio movil.
+
+La tabla sale del bloque de fabrica con el mismo lector y el mismo formato que
+las otras dos: direcciones en u64[2::10] del regSetting, valores en los
+registerData que siguen. Las otras dos estan verificadas contra fabrica (66 de
+66 la del modo, 244 de 244 la de inicializacion releida de la RAM del sensor).
+--- a/drivers/media/i2c/s5k3t2.c
++++ b/drivers/media/i2c/s5k3t2.c
+@@ -616,9 +616,107 @@
+ 	{ CCI_REG16(0x6f12), 0x38c8 },
+ };
+ 
++/*
++ * El tercer modo del fichero de fabrica, que no se habia portado. Es el punto
++ * de trabajo mas suave de los tres: menos pixeles, menos lineas y el PLL de
++ * salida mas lento.
++ *
++ *     5184x3880   op_pre=3 mult=140 0x0312=0   ->  896 MHz
++ *     2592x1940   op_pre=3 mult=187 0x0312=2   -> 1196,8 MHz
++ *     1280x720    op_pre=2 mult=125 0x0312=2   -> 1200 MHz, pero con una
++ *                                                 quinta parte de los datos
++ *
++ * Sacado del bloque de fabrica con el mismo lector que los otros dos, y con el
++ * mismo formato: direcciones en u64[2::10] del regSetting, valores en los
++ * registerData que siguen.
++ */
++static const struct cci_reg_sequence s5k3t2_mode_1280x720[] = {
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0136), 0x1300 },
++	{ CCI_REG16(0x013e), 0x00c8 },
++	{ CCI_REG16(0x0304), 0x0003 },
++	{ CCI_REG16(0x0306), 0x00b9 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e0e },
++	{ CCI_REG16(0x6f12), 0x0104 },
++	{ CCI_REG16(0x6f12), 0x0000 },
++	{ CCI_REG16(0x602a), 0x1078 },
++	{ CCI_REG16(0x6f12), 0x04a6 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x030c), 0x0000 },
++	{ CCI_REG16(0x0302), 0x0001 },
++	{ CCI_REG16(0x0300), 0x0007 },
++	{ CCI_REG16(0x030e), 0x0002 },
++	{ CCI_REG16(0x0310), 0x007d },
++	{ CCI_REG16(0x0312), 0x0002 },
++	{ CCI_REG16(0x0308), 0x0008 },
++	{ CCI_REG16(0x030a), 0x0001 },
++	{ CCI_REG16(0x0344), 0x0028 },
++	{ CCI_REG16(0x0346), 0x01fc },
++	{ CCI_REG16(0x0348), 0x1427 },
++	{ CCI_REG16(0x034a), 0x0d3b },
++	{ CCI_REG16(0x034c), 0x0500 },
++	{ CCI_REG16(0x034e), 0x02d0 },
++	{ CCI_REG16(0x0350), 0x0000 },
++	{ CCI_REG16(0x0352), 0x0000 },
++	{ CCI_REG16(0x0900), 0x0124 },
++	{ CCI_REG16(0x0404), 0x2000 },
++	{ CCI_REG16(0x0380), 0x0002 },
++	{ CCI_REG16(0x0382), 0x0002 },
++	{ CCI_REG16(0x0384), 0x0002 },
++	{ CCI_REG16(0x0386), 0x0006 },
++	{ CCI_REG16(0x0342), 0x1620 },
++	{ CCI_REG16(0x0340), 0x03e0 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x010c), 0x0000 },
++	{ CCI_REG16(0x0114), 0x0300 },
++	{ CCI_REG16(0x0116), 0x3000 },
++	{ CCI_REG16(0x011a), 0x0001 },
++	{ CCI_REG16(0x0118), 0x0002 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x0e92 },
++	{ CCI_REG16(0x6f12), 0xffff },
++	{ CCI_REG16(0x602a), 0x165a },
++	{ CCI_REG16(0x6f12), 0x0020 },
++	{ CCI_REG16(0x6028), 0x4000 },
++	{ CCI_REG16(0x0b04), 0x0001 },
++	{ CCI_REG16(0x0b06), 0x0101 },
++	{ CCI_REG16(0x0fea), 0x04a0 },
++	{ CCI_REG16(0x6028), 0x2000 },
++	{ CCI_REG16(0x602a), 0x3c98 },
++	{ CCI_REG16(0x6f12), 0x0296 },
++	{ CCI_REG16(0x6f12), 0x0515 },
++	{ CCI_REG16(0x602a), 0x1da0 },
++	{ CCI_REG16(0x6f12), 0x0110 },
++	{ CCI_REG16(0x602a), 0x10ac },
++	{ CCI_REG16(0x6f12), 0x0014 },
++	{ CCI_REG16(0x602a), 0x1110 },
++	{ CCI_REG16(0x6f12), 0x001d },
++	{ CCI_REG16(0x6f12), 0x004d },
++	{ CCI_REG16(0x602a), 0x13e8 },
++	{ CCI_REG16(0x6f12), 0x080f },
++	{ CCI_REG16(0x602a), 0x13f8 },
++	{ CCI_REG16(0x6f12), 0x38c8 },
++};
++
+ static const struct s5k3t2_mode s5k3t2_supported_modes[] = {
+ 	{
+ 		/*
++		 * Va primero mientras se investiga por que no llega imagen:
++		 * es el modo que menos le pide al enlace.
++		 */
++		.width = 1280,
++		.height = 720,
++		.hts = 5664,
++		.vts = 992,
++		.exposure = 512,
++		.reg_list = {
++			.regs = s5k3t2_mode_1280x720,
++			.num_regs = ARRAY_SIZE(s5k3t2_mode_1280x720),
++		},
++	},
++	{
++		/*
+ 		 * El modo combinado. Va primero a proposito: es el que ya se
+ 		 * ha visto capturar en este SoC, y 5 MP son un tamano que el
+ 		 * revelado por software puede seguir. Los 20 MP de abajo

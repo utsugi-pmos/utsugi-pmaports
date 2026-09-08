@@ -1,0 +1,69 @@
+name: packages
+
+# Build what changed and republish the repository.
+#
+# Native aarch64 runners: free for public repositories, and they remove the
+# whole cross-compilation problem (crossdirect losing liblto_plugin.so) because
+# nothing is cross-compiled any more.
+on:
+  push:
+    branches: [main]
+    paths: ['main/**', 'device/**', 'upstream.lock', 'scripts/**']
+  workflow_dispatch:
+    inputs:
+      packages:
+        description: 'space separated aports, or "all"'
+        default: all
+
+concurrency:
+  group: publish            # publish rewrites the whole gh-pages branch
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 300
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - uses: ./.github/actions/pmbootstrap
+        with:
+          abuild-privkey: ${{ secrets.ABUILD_PRIVKEY }}
+      - name: build
+        run: |
+          if [ '${{ github.event_name }}' = workflow_dispatch ]; then
+            case '${{ inputs.packages }}' in
+              all) scripts/build --all ;;
+              *)   scripts/build ${{ inputs.packages }} ;;
+            esac
+          else
+            scripts/build --changed '${{ github.event.before }}'
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: apks
+          path: ~/.local/var/pmbootstrap-utsugi/packages/edge/aarch64/*.apk
+          retention-days: 14
+
+  publish:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with: { name: apks, path: apks }
+      - name: sign and push
+        env:
+          ABUILD_PRIVKEY: ${{ secrets.ABUILD_PRIVKEY }}
+        run: |
+          mkdir -p ~/.local/var/pmbootstrap-utsugi/config_abuild
+          KEY=$(basename keys/*.rsa.pub .pub)
+          printf '%s' "$ABUILD_PRIVKEY" > ~/.local/var/pmbootstrap-utsugi/config_abuild/"$KEY"
+          chmod 600 ~/.local/var/pmbootstrap-utsugi/config_abuild/"$KEY"
+          git config --global user.email cidwel@gmail.com
+          git config --global user.name 'Dr. Utsugi'
+          GH_REMOTE="https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" \
+            scripts/publish --from apks --push

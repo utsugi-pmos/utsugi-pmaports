@@ -1,0 +1,97 @@
+DIAGNOSTICO: leer los contadores de hardware del receptor CSI-2
+
+POR QUE
+-------
+Toda la conclusion de esta investigacion -"al CSID no le llega ni un simbolo"-
+descansa en UN solo instrumento: los bits de CSI2_RX_IRQ_STATUS. Esta validado
+con un control positivo (el generador de patron del CSID marca SOT y EOT en los
+cuatro carriles), pero sigue siendo un solo instrumento.
+
+El mapa de registros del CSID de Qualcomm (cam_ife_csid170.h) declara contadores
+de hardware que mainline no lee NUNCA:
+
+    0x160   csid_csi2_rx_total_pkts_rcvd    total de paquetes recibidos
+    0x168   csid_csi2_rx_total_crc_err      total de errores de CRC
+    0x130   csid_csi2_rx_captured_long_pkt_0
+    0x134   csid_csi2_rx_captured_long_pkt_1
+    0x3e0   csid_rdi_byte_cntr_ping         bytes contados por el RDI0
+
+Son un camino INDEPENDIENTE para la misma pregunta:
+
+  contador de paquetes distinto de cero -> si llegan, y el fallo esta mas abajo;
+                                           toda la investigacion habria estado
+                                           mirando al sitio equivocado
+  contador a cero                       -> lo confirma por segunda via
+
+Y si llegan paquetes pero con CRC malo, el contador de CRC lo dice y eso apunta
+directamente a orden o polaridad de carriles.
+
+Se leen en el camino de parada, junto al estado de interrupciones que ya se leia
+ahi, y se exponen como parametros de modulo para poder consultarlos sin depender
+del registro del kernel.
+
+Esto NO arregla nada: es para mirar, y sobre todo para no fiarse de un solo
+instrumento.
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.785071748 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.805631597 +0200
+@@ -49,6 +49,23 @@
+  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
+  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  */
++static unsigned int diag_pkts;
++module_param(diag_pkts, uint, 0644);
++MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
++
++static unsigned int diag_crc;
++module_param(diag_crc, uint, 0644);
++MODULE_PARM_DESC(diag_crc, "Paquetes con CRC malo (contador de hardware, 0x168).");
++
++static unsigned int diag_pkt_hdr0;
++module_param(diag_pkt_hdr0, uint, 0644);
++static unsigned int diag_pkt_hdr1;
++module_param(diag_pkt_hdr1, uint, 0644);
++
++static unsigned int diag_bytes_rdi0;
++module_param(diag_bytes_rdi0, uint, 0644);
++MODULE_PARM_DESC(diag_bytes_rdi0, "Bytes contados por el RDI0 (0x3e0).");
++
+ static int cgc_en_reset = 1;
+ module_param(cgc_en_reset, int, 0644);
+ MODULE_PARM_DESC(cgc_en_reset,
+@@ -422,6 +439,36 @@
+ 				dev_info(csid->camss->dev,
+ 					 "csid%d al parar: rx=0x%08x rdin%d=0x%08x\n",
+ 					 csid->id, rx, i, rdi);
++
++				/*
++				 * LOS CONTADORES DE HARDWARE.
++				 *
++				 * El mapa de registros del CSID de Qualcomm
++				 * (cam_ife_csid170.h) declara contadores que
++				 * mainline no lee NUNCA:
++				 *
++				 *   0x160  total de paquetes recibidos
++				 *   0x168  total de errores de CRC
++				 *   0x130  cabecera del ultimo paquete largo
++				 *   0x134  idem, segunda palabra
++				 *   0x3e0  bytes contados por el RDI0
++				 *
++				 * Son un instrumento INDEPENDIENTE de los bits
++				 * de interrupcion: si el contador de paquetes
++				 * no es cero, es que si llegan y el fallo esta
++				 * mas abajo. Y si es cero, lo confirma por un
++				 * segundo camino.
++				 */
++				diag_pkts = readl_relaxed(csid->base + 0x160);
++				diag_crc = readl_relaxed(csid->base + 0x168);
++				diag_pkt_hdr0 = readl_relaxed(csid->base + 0x130);
++				diag_pkt_hdr1 = readl_relaxed(csid->base + 0x134);
++				diag_bytes_rdi0 = readl_relaxed(csid->base + 0x3e0);
++				dev_info(csid->camss->dev,
++					 "csid%d contadores: paquetes=%u crc_malo=%u cabecera=0x%08x/0x%08x bytes_rdi0=%u\n",
++					 csid->id, diag_pkts, diag_crc,
++					 diag_pkt_hdr0, diag_pkt_hdr1,
++					 diag_bytes_rdi0);
+ 			}
+ 
+ 			__csid_configure_rdi_stream(csid, enable, i);

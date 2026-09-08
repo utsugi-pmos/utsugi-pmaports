@@ -1,0 +1,158 @@
+Anadir microfono, altavoz, auricular y rutas de llamada al perfil UCM de surya.
+
+El perfil definia el altavoz pero SIN secuencia de encendido, y no definia
+captura en absoluto. Consecuencias:
+
+- Los dos amplificadores tas2562 arrancan con el volumen a cero, asi que la
+  reproduccion no se oia aunque el flujo corriese. Habia que ejecutar a mano
+  un script (audio-salida altavoz); ahora lo hace el propio perfil.
+- PipeWire y PulseAudio no exponian ninguna fuente de captura, asi que ninguna
+  aplicacion podia grabar aunque el kernel si capturase por ALSA directo.
+
+La secuencia del microfono sale del mixer_paths_wcd9375.xml del arbol de
+dispositivo de surya en LineageOS, donde "handset-mic" usa ADC1 con
+TX SMIC MUX0 = ADC0.
+
+Verificado emitiendo un tono de 997 Hz pulsado y grabando con parecord: la
+energia en ese bin sube hasta 5100 veces sobre los vecinos y sigue exactamente
+el patron emitido.
+
+Detalles que hay que respetar:
+
+- El frontend de captura tiene que ser MultiMedia3. MultiMedia1 es
+  bidireccional y al grabar por el, q6asm intenta abrir tambien un flujo de
+  escritura y falla.
+- Los DMICn Switch tienen que quedarse apagados: encendidos meten un segundo
+  puerto SoundWire en el mismo flujo y degradan la captura.
+- Los prefijos del amplificador estan al reves de lo que sugiere el device
+  tree: "Left" es el altavoz de abajo y "Right" el auricular de arriba.
+- Nunca poner 110 en el volumen del amplificador: en este kernel el maximo
+  escribe un coeficiente cero y deja el amplificador mudo.
+
+--- a/ucm2/Xiaomi/surya/HiFi.conf	2026-05-13 01:14:07.000000000 +0200
++++ b/ucm2/Xiaomi/surya/HiFi.conf	2026-08-10 18:48:15.485526588 +0200
+@@ -5,9 +5,19 @@
+ 	EnableSequence [
+ 		# SPEAKER AND EARPIECE PLAYBACK
+ 		cset "name='TERT_MI2S_RX Audio Mixer MultiMedia1' 1"
++
++		# Audio de llamada. El DSP puentea el modem con estos dos
++		# backends cuando q6voiced abre la sesion de voz; mientras no
++		# hay llamada no hacen nada, asi que se pueden dejar puestos.
++		#   salida: la voz sale por TERT_MI2S_RX a los tas2562
++		#   entrada: el microfono entra por TX_CODEC_DMA_TX_3
++		cset "name='TERT_MI2S_RX Voice Mixer VoiceMMode1' 1"
++		cset "name='VoiceMMode1 Capture Mixer TX_CODEC_DMA_TX_3' 1"
+ 	]
+ 
+ 	DisableSequence [
++		cset "name='VoiceMMode1 Capture Mixer TX_CODEC_DMA_TX_3' 0"
++		cset "name='TERT_MI2S_RX Voice Mixer VoiceMMode1' 0"
+ 		cset "name='TERT_MI2S_RX Audio Mixer MultiMedia1' 0"
+ 	]
+ 
+@@ -16,12 +26,104 @@
+ 	}
+ }
+ 
++# El volumen de los tas2562 NO se toca desde aqui, a proposito.
++#
++# El control ALSA "Digital Volume Control" no sirve en este kernel: escribe en
++# el chip un coeficiente que no corresponde con el valor pedido. Medido el
++# 2026-08-10 poniendo 100 desde el UCM, el hardware quedaba en 0x197a967f
++# (unos -14 dB), que no se oye. Y peor: esa escritura pisaba el valor bueno
++# que el servicio audio-volumen ya habia puesto por I2C al arrancar.
++#
++# Lo gobierna audio-salida/audio-volumen, que escriben por I2C en el orden que
++# el chip espera. Aqui solo queda el enrutado.
++#
++# Cuidado con dos cosas, verificadas por oido el 2026-08-05:
++#   - Los prefijos estan al reves de lo que sugiere el device tree:
++#     "Left" (9-004d) es el ALTAVOZ de abajo y "Right" (9-004c) el AURICULAR.
++#   - NUNCA poner 110: en este kernel el maximo escribe un coeficiente cero y
++#     deja el amplificador mudo. El tope util es 109.
++# El valor se pone a 0 antes del bueno porque el driver cachea y no reescribe
++# si coincide con lo que ya tiene.
++
+ SectionDevice."Speaker" {
+ 	Comment "Speaker playback"
+ 
++	# Los dos comparten el mismo PCM y solo puede sonar uno. Sin declararlo,
++	# el servidor de audio se queda con uno solo y el otro no aparece como
++	# puerto seleccionable.
++	ConflictingDevice [
++		"Earpiece"
++	]
++
+ 	Value {
+ 		PlaybackPriority 200
+ 		PlaybackPCM "hw:${CardId},0"
+ 		PlaybackChannels 1
+ 	}
+ }
++
++SectionDevice."Earpiece" {
++	Comment "Earpiece playback"
++
++	ConflictingDevice [
++		"Speaker"
++	]
++
++	Value {
++		PlaybackPriority 100
++		PlaybackPCM "hw:${CardId},0"
++		PlaybackChannels 1
++	}
++}
++
++SectionDevice."Mic" {
++	Comment "Bottom microphone"
++
++	EnableSequence [
++		# El frontend de captura es MultiMedia3; MultiMedia1 es
++		# bidireccional y al grabar por el, q6asm intenta abrir tambien
++		# un flujo de escritura y falla.
++		cset "name='MultiMedia3 Mixer TX_CODEC_DMA_TX_3' 1"
++
++		# Decimador 0 <- SoundWire, canal ADC0 (= ADC1 del codec, que
++		# es el microfono principal segun el mixer_paths de Xiaomi).
++		cset "name='TX_AIF1_CAP Mixer DEC0' 1"
++		cset "name='TX DEC0 MUX' SWR_MIC"
++		cset "name='TX SMIC MUX0' ADC0"
++
++		# Los DMICn Switch tienen que quedarse apagados: encendidos
++		# meten un segundo puerto SoundWire en el mismo flujo y
++		# degradan la captura.
++		cset "name='DMIC0 Switch' 0"
++		cset "name='DMIC1 Switch' 0"
++		cset "name='DMIC2 Switch' 0"
++		cset "name='DMIC3 Switch' 0"
++
++		# Ganancia analogica al maximo (mejor relacion senal/ruido que
++		# subir la digital) y la digital lo justo para que la grabacion
++		# se oiga: 94 son +10 dB sobre la escala del control, que va de
++		# -84 dB a +40 dB en pasos de 1 dB.
++		cset "name='ADC1 Switch' 1"
++		cset "name='ADC1_MIXER Switch' 1"
++		cset "name='ADC1 Volume' 20"
++		cset "name='TX_DEC0 Volume' 104"
++	]
++
++	DisableSequence [
++		cset "name='ADC1_MIXER Switch' 0"
++		cset "name='ADC1 Switch' 0"
++		cset "name='TX SMIC MUX0' ZERO"
++		cset "name='TX_AIF1_CAP Mixer DEC0' 0"
++		cset "name='MultiMedia3 Mixer TX_CODEC_DMA_TX_3' 0"
++	]
++
++	Value {
++		CapturePriority 200
++		# OJO: el numero de PCM depende del ORDEN de los enlaces en el device
++		# tree. Al anadir el enlace de reproduccion del codec (los cascos)
++		# MultiMedia3 paso de 2 a 3 y VoiceMMode1 de 4 a 5, y la tarjeta
++		# dejo de abrirse (sink auto_null). Comprobar con /proc/asound/pcm.
++		CapturePCM "hw:${CardId},3"
++		CaptureChannels 1
++	}
++}

@@ -1,0 +1,80 @@
+Poder cambiar el cancelador de eco sin recompilar
+
+La sesion de voz se creaba SIEMPRE con:
+
+    vocproc_mode  = VSS_IVOCPROC_VOCPROC_MODE_EC_INT_MIXING
+    ec_ref_port_id = VSS_IVOCPROC_PORT_ID_NONE
+
+o sea, con mezcla interna de eco y SIN puerto de referencia, y sin forma de
+cambiarlo. Un cancelador de eco sin referencia puede comerse la voz entera, y
+eso encaja exactamente con el sintoma: se oye al otro extremo y a nosotros no
+se nos oye.
+
+Ahora son parametros de modulo, cambiables en caliente:
+
+    /sys/module/q6cvp/parameters/vocproc_mode
+    /sys/module/q6cvp/parameters/ec_ref_port
+
+POR QUE ESTO IMPORTA MAS QUE EL CAMBIO EN SI: cada hipotesis costaba compilar,
+instalar, reiniciar y UNA LLAMADA del usuario. Con esto, y recreando la sesion
+a mitad de llamada (ver el script prueba-topologias), se barren varias
+configuraciones en UNA sola llamada. Es lo que estaba frenando el avance.
+
+Valores utiles:
+
+    vocproc_mode  0x00010F7C (69500)  mezcla interna  [por defecto]
+                  0x00010F7D (69501)  mezcla externa
+    ec_ref_port   0xFFFF     (65535)  ninguno         [por defecto]
+                  0x1004     (4100)   TERT_MI2S_RX, la salida de la llamada
+
+diff -ruN a/sound/soc/qcom/qdsp6/q6cvp.c b/sound/soc/qcom/qdsp6/q6cvp.c
+--- a/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 14:29:08.131708561 +0200
++++ b/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 14:28:41.899091779 +0200
+@@ -26,6 +26,25 @@
+ 
+ #define VSS_ICOMMON_CAL_NETWORK_ID_NONE			0x0001135E
+ 
++/*
++ * AJUSTABLES EN CALIENTE, para poder barrer configuraciones sin recompilar:
++ *
++ *   /sys/module/q6cvp/parameters/vocproc_mode
++ *   /sys/module/q6cvp/parameters/ec_ref_port
++ *
++ * La sesion se creaba SIEMPRE con mezcla interna de eco y sin puerto de
++ * referencia. Un cancelador de eco sin referencia puede comerse la voz
++ * entera, que es justo el sintoma: se oye al otro extremo y a nosotros no.
++ * Con esto se puede probar la otra combinacion dentro de una misma llamada.
++ */
++static unsigned int vocproc_mode = VSS_IVOCPROC_VOCPROC_MODE_EC_INT_MIXING;
++module_param(vocproc_mode, uint, 0644);
++MODULE_PARM_DESC(vocproc_mode, "modo del vocproc (0x10F7C interno, 0x10F7D externo)");
++
++static unsigned int ec_ref_port = VSS_IVOCPROC_PORT_ID_NONE;
++module_param(ec_ref_port, uint, 0644);
++MODULE_PARM_DESC(ec_ref_port, "puerto AFE de referencia de eco (0xFFFF = ninguno)");
++
+ #define VSS_IVOLUME_CMD_MUTE_V2				0x0001138B
+ #define VSS_IVOLUME_DIRECTION_RX			0
+ #define VSS_IVOLUME_DIRECTION_TX			1
+@@ -191,8 +210,8 @@
+ 	cmd.tx_port_id = tx_port;
+ 	cmd.rx_port_id = rx_port;
+ 	cmd.profile_id = VSS_ICOMMON_CAL_NETWORK_ID_NONE;
+-	cmd.vocproc_mode = VSS_IVOCPROC_VOCPROC_MODE_EC_INT_MIXING;
+-	cmd.ec_ref_port_id = VSS_IVOCPROC_PORT_ID_NONE;
++	cmd.vocproc_mode = vocproc_mode;
++	cmd.ec_ref_port_id = ec_ref_port;
+ 
+ 	return q6voice_session_create(Q6VOICE_SERVICE_CVP, path, &cmd.hdr);
+ }
+@@ -218,8 +237,8 @@
+ 	cmd.tx_port_id = tx_port;
+ 	cmd.rx_port_id = rx_port;
+ 	cmd.profile_id = VSS_ICOMMON_CAL_NETWORK_ID_NONE;
+-	cmd.vocproc_mode = VSS_IVOCPROC_VOCPROC_MODE_EC_INT_MIXING;
+-	cmd.ec_ref_port_id = VSS_IVOCPROC_PORT_ID_NONE;
++	cmd.vocproc_mode = vocproc_mode;
++	cmd.ec_ref_port_id = ec_ref_port;
+ 
+ 	return q6voice_session_create(Q6VOICE_SERVICE_CVP, path, &cmd.hdr);
+ }

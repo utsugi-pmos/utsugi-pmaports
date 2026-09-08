@@ -1,0 +1,542 @@
+From: Cidwel <cidwel@gmail.com>
+Subject: [PATCH] power: reset: qcom-pon: make a power-off power off
+
+On the Xiaomi POCO X3 NFC (PM6150) the firmware leaves PS_HOLD_RESET_CTL at
+HARD_RESET and its PSCI SYSTEM_OFF does not touch it, so every power-off
+requested by Linux comes back as a fresh boot. Measured on 2026-09-05 with
+no cable attached: POFF_REASON1 = PS_HOLD, PON_REASON1 = HARD_RESET.
+
+Three things, all measured to be needed or needed to measure:
+ - arm SHUTDOWN in the PMIC before a power-off, HARD_RESET before a restart,
+   as the downstream qpnp-power-on driver does;
+ - a ps_hold_type sysfs knob to exercise that write while alive, because a
+   power-off leaves no trace here (the DDR goes with it);
+ - optionally (scm_ps_hold=1) drop PS_HOLD through the firmware ourselves,
+   before PSCI gets a turn, with the downstream SCM_SVC_PWR call and
+   qcom_scm_io_writel as fallback. Reading the register from the AP hangs
+   the SoC, so the firmware is the only route.
+---
+diff -ruN a/drivers/firmware/qcom/qcom_scm.c b/drivers/firmware/qcom/qcom_scm.c
+--- a/drivers/firmware/qcom/qcom_scm.c	2026-09-05 12:52:48.568314192 +0200
++++ b/drivers/firmware/qcom/qcom_scm.c	2026-09-05 13:10:18.101819181 +0200
+@@ -1172,6 +1172,40 @@
+ EXPORT_SYMBOL_GPL(qcom_scm_io_writel);
+ 
+ /**
++ * qcom_scm_deassert_ps_hold() - ask the firmware to drop PS_HOLD
++ *
++ * SCM_SVC_PWR / IO_DEASSERT_PS_HOLD, the call the downstream msm-poweroff
++ * driver makes before touching the register itself. On SoCs where the
++ * PS_HOLD block is behind an XPU (reading 0x0c264000 from the AP hangs the
++ * POCO X3 NFC outright) this is the only way to drop the pin from Linux.
++ * Returns -ENODEV when the firmware does not offer the call.
++ */
++bool qcom_scm_deassert_ps_hold_available(void)
++{
++	return __scm && __qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PWR,
++						     QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold_available);
++
++int qcom_scm_deassert_ps_hold(void)
++{
++	struct qcom_scm_desc desc = {
++		.svc = QCOM_SCM_SVC_PWR,
++		.cmd = QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD,
++		.arginfo = QCOM_SCM_ARGS(1),
++		.args[0] = 0,
++		.owner = ARM_SMCCC_OWNER_SIP,
++	};
++
++	if (!__scm || !__qcom_scm_is_call_available(__scm->dev, QCOM_SCM_SVC_PWR,
++						   QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD))
++		return -ENODEV;
++
++	return qcom_scm_call_atomic(__scm->dev, &desc, NULL);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_deassert_ps_hold);
++
++/**
+  * qcom_scm_restore_sec_cfg_available() - Check if secure environment
+  * supports restore security config interface.
+  *
+diff -ruN a/drivers/firmware/qcom/qcom_scm.h b/drivers/firmware/qcom/qcom_scm.h
+--- a/drivers/firmware/qcom/qcom_scm.h	2026-09-05 12:53:14.694339702 +0200
++++ b/drivers/firmware/qcom/qcom_scm.h	2026-09-05 12:53:14.703269924 +0200
+@@ -111,6 +111,10 @@
+ #define QCOM_SCM_IO_READ		0x01
+ #define QCOM_SCM_IO_WRITE		0x02
+ 
++/* The power service, as the downstream msm-poweroff driver names it. */
++#define QCOM_SCM_SVC_PWR		0x09
++#define QCOM_SCM_PWR_IO_DEASSERT_PS_HOLD	0x02
++
+ #define QCOM_SCM_SVC_INFO		0x06
+ #define QCOM_SCM_INFO_IS_CALL_AVAIL	0x01
+ 
+diff -ruN a/drivers/power/reset/qcom-pon.c b/drivers/power/reset/qcom-pon.c
+--- a/drivers/power/reset/qcom-pon.c	2026-09-05 11:52:30.877806793 +0200
++++ b/drivers/power/reset/qcom-pon.c	2026-09-05 18:08:20.806556748 +0200
+@@ -11,9 +11,100 @@
+ #include <linux/reboot.h>
+ #include <linux/reboot-mode.h>
+ #include <linux/regmap.h>
++#include <linux/firmware/qcom/qcom_scm.h>
+ 
+ #define PON_SOFT_RB_SPARE		0x8f
+ 
++/*
++ * What the PMIC does when PS_HOLD drops. The firmware of this phone (Xiaomi
++ * POCO X3 NFC, PM6150) leaves it at HARD_RESET and its PSCI SYSTEM_OFF does
++ * not change it, so a power-off from Linux was measured to come back as a
++ * fresh boot: POFF_REASON1 = PS_HOLD, PON_REASON1 = HARD_RESET, with no cable
++ * attached. The downstream kernel programs this register itself before every
++ * power-off (qpnp_pon_system_pwr_off); mainline has to do the same.
++ */
++#define PON_PS_HOLD_RST_CTL		0x5a
++#define PON_PS_HOLD_RST_CTL2		0x5b
++#define PON_PS_HOLD_TYPE_MASK		GENMASK(3, 0)
++#define PON_PS_HOLD_TYPE_WARM_RESET	0x1
++#define PON_PS_HOLD_TYPE_SHUTDOWN	0x4
++#define PON_PS_HOLD_TYPE_HARD_RESET	0x7
++#define PON_PS_HOLD_RESET_EN		BIT(7)
++
++/*
++ * Arming SHUTDOWN in the PMIC was not enough on the POCO X3 NFC: r235 still
++ * came back with PON_REASON1 = HARD_RESET. Either the write never lands or
++ * PSCI SYSTEM_OFF undoes it. So, optionally, drop PS_HOLD ourselves through
++ * the firmware, the way the downstream driver does, BEFORE PSCI gets a turn.
++ * Off by default until it is measured to work:
++ *     echo 1 > /sys/module/qcom_pon/parameters/scm_ps_hold
++ */
++static bool scm_ps_hold;
++module_param(scm_ps_hold, bool, 0644);
++MODULE_PARM_DESC(scm_ps_hold, "Drop PS_HOLD via SCM on power-off instead of PSCI SYSTEM_OFF");
++
++/*
++ * The PMIC's own watchdog, armed for SHUTDOWN and never fed: the PMIC cuts
++ * the power by itself two seconds later, with no PS_HOLD and no firmware in
++ * the loop. It is the same engine a ten-second press of the power key uses
++ * (KPDPWR S2 reset), driven from software. Registers as in pm8916_wdt.c.
++ *     echo 1 > /sys/module/qcom_pon/parameters/pmic_wd_off
++ */
++static bool pmic_wd_off;
++module_param(pmic_wd_off, bool, 0644);
++MODULE_PARM_DESC(pmic_wd_off, "Power off through the PMIC watchdog instead of PSCI SYSTEM_OFF");
++
++#define PON_WD_RESET_S1_TIMER		0x54
++#define PON_WD_RESET_S2_TIMER		0x55
++#define PON_WD_RESET_S2_CTL		0x56
++#define PON_WD_RESET_S2_CTL2		0x57
++#define PON_WD_RESET_PET		0x58
++#define PON_WD_S2_RESET_EN		BIT(7)
++#define PON_WD_PET			BIT(0)
++
++/*
++ * The type the watchdog is armed with. Measured on the POCO X3 NFC:
++ *   0x4 SHUTDOWN       stays off, with or without cable -- but leaves the
++ *                      watchdog armed for the next boot (see pmic_wd_secs);
++ *   0x8 DVDD_SHUTDOWN  resets the PMIC to factory settings and then POWERS
++ *                      BACK ON by itself (PON_REASON1 = HARD_RESET), cable
++ *                      or no cable. A reboot, not a power-off.
++ */
++static unsigned int pmic_wd_type = 0x4;
++module_param(pmic_wd_type, uint, 0644);
++
++/*
++ * S1 and S2 timers, in seconds each; the bite comes after S1 + S2. They are
++ * the price of SHUTDOWN staying armed: the same count runs on the NEXT boot,
++ * from PMIC power-on until this driver probes and disarms it (~15-20 s on
++ * this phone). 30 + 30 leaves a comfortable margin and doubles as a boot
++ * watchdog -- a boot that hangs at the logo gets cut after a minute instead
++ * of sitting there forever. The cost: a power-off takes a minute to be real
++ * (the screen is already off), and a fastboot session right after a
++ * power-off dies after a minute too, unless Linux was booted in between.
++ * Escape hatch, measured: Volume-down + Power for 30 s resets the PMIC.
++ */
++static unsigned int pmic_wd_secs = 30;
++module_param(pmic_wd_secs, uint, 0644);
++
++/*
++ * A breadcrumb that survives a hard reset: XVDD_RB_SPARE keeps its value as
++ * long as the battery is in. Read it back at 0x88e after the phone comes
++ * back to learn how far the power-off handler got, because nothing else
++ * (journal, pstore, console) survives a power cycle on this phone.
++ */
++#define PON_XVDD_RB_SPARE		0x8e
++#define TRACE_ENTERED			0xa1
++#define TRACE_WD_ARMED			0xa2
++#define TRACE_WD_WAITED			0xa3
++#define TRACE_SCM_DONE			0xa4
++#define TRACE_LEFT_TO_PSCI		0xa5
++#define TRACE_ERR(ret)			(0xe0 | ((-(ret)) & 0x1f))
++
++/* The PS_HOLD register of the sm6150/sm7150 family (downstream restart@c264000). */
++static unsigned long ps_hold_addr = 0x0c264000;
++module_param(ps_hold_addr, ulong, 0644);
++
+ #define GEN1_REASON_SHIFT		2
+ #define GEN2_REASON_SHIFT		1
+ 
+@@ -25,6 +116,7 @@
+ 	u32 baseaddr;
+ 	struct reboot_mode_driver reboot_mode;
+ 	long reason_shift;
++	struct notifier_block reboot_nb;
+ };
+ 
+ static int qcom_pon_reboot_mode_write(struct reboot_mode_driver *reboot,
+@@ -44,6 +136,262 @@
+ 	return ret;
+ }
+ 
++static int qcom_pon_set_ps_hold_type(struct qcom_pon *pon, unsigned int type)
++{
++	int ret;
++
++	/* Disable, wait for the change to settle, program the type, re-enable:
++	 * the sequence the downstream driver uses. */
++	ret = regmap_update_bits(pon->regmap, pon->baseaddr + PON_PS_HOLD_RST_CTL2,
++				 PON_PS_HOLD_RESET_EN, 0);
++	if (ret)
++		return ret;
++
++	usleep_range(300, 400);
++
++	ret = regmap_update_bits(pon->regmap, pon->baseaddr + PON_PS_HOLD_RST_CTL,
++				 PON_PS_HOLD_TYPE_MASK, type);
++	if (ret)
++		return ret;
++
++	return regmap_update_bits(pon->regmap, pon->baseaddr + PON_PS_HOLD_RST_CTL2,
++				  PON_PS_HOLD_RESET_EN, PON_PS_HOLD_RESET_EN);
++}
++
++static int qcom_pon_wd_power_off(struct qcom_pon *pon, unsigned int type)
++{
++	struct regmap *map = pon->regmap;
++	u32 base = pon->baseaddr;
++	int ret;
++
++	/* Disabled while it is configured, as pm8916_wdt does. */
++	ret = regmap_update_bits(map, base + PON_WD_RESET_S2_CTL2, PON_WD_S2_RESET_EN, 0);
++	if (ret)
++		return ret;
++	ret = regmap_write(map, base + PON_WD_RESET_S1_TIMER,
++			   clamp(pmic_wd_secs, 1U, 127U));
++	if (ret)
++		return ret;
++	ret = regmap_write(map, base + PON_WD_RESET_S2_TIMER,
++			   clamp(pmic_wd_secs, 1U, 127U));
++	if (ret)
++		return ret;
++	ret = regmap_write(map, base + PON_WD_RESET_S2_CTL, type);
++	if (ret)
++		return ret;
++	ret = regmap_update_bits(map, base + PON_WD_RESET_S2_CTL2,
++				 PON_WD_S2_RESET_EN, PON_WD_S2_RESET_EN);
++	if (ret)
++		return ret;
++	/* One pet starts the count; nobody pets it again. */
++	return regmap_write(map, base + PON_WD_RESET_PET, PON_WD_PET);
++}
++
++static void qcom_pon_trace(struct qcom_pon *pon, unsigned int mark)
++{
++	regmap_write(pon->regmap, pon->baseaddr + PON_XVDD_RB_SPARE, mark);
++}
++
++static ssize_t trace_show(struct device *dev, struct device_attribute *attr, char *buf)
++{
++	struct qcom_pon *pon = dev_get_drvdata(dev);
++	unsigned int v = 0;
++	int ret = regmap_read(pon->regmap, pon->baseaddr + PON_XVDD_RB_SPARE, &v);
++
++	return ret ? ret : sysfs_emit(buf, "0x%02x\n", v);
++}
++/* Fire the PMIC watchdog NOW with pmic_wd_type: a live test of the engine. */
++static ssize_t pmic_wd_fire_store(struct device *dev, struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	struct qcom_pon *pon = dev_get_drvdata(dev);
++	int ret;
++
++	if (!sysfs_streq(buf, "fire"))
++		return -EINVAL;
++	qcom_pon_trace(pon, TRACE_ENTERED);
++	ret = qcom_pon_wd_power_off(pon, pmic_wd_type);
++	qcom_pon_trace(pon, ret ? TRACE_ERR(ret) : TRACE_WD_ARMED);
++	return ret ? ret : count;
++}
++static DEVICE_ATTR_RO(trace);
++static DEVICE_ATTR_WO(pmic_wd_fire);
++
++/*
++ * The power-off itself, from the reboot notifier chain. Measured on the
++ * POCO X3 NFC (2026-09-05): neither the POWER_OFF_PREPARE nor the POWER_OFF
++ * sys-off handlers of this driver ever reached the PMIC -- they run after
++ * device_shutdown(), when the SPMI path is already down -- while the reboot
++ * notifiers run before it, in process context, with userspace gone and the
++ * filesystems unmounted. That is where pm8941-pwrkey programs PS_HOLD, and
++ * where the PMIC watchdog gets armed here: SHUTDOWN, S1 + S2 seconds, and a
++ * wait for the bite. When it works this never returns; when it does not,
++ * the shutdown carries on to PSCI and the phone reboots as before.
++ * RebootWatchdogSec in systemd must be longer than the wait.
++ */
++static int qcom_pon_reboot_notify(struct notifier_block *nb, unsigned long code,
++				  void *unused)
++{
++	struct qcom_pon *pon = container_of(nb, struct qcom_pon, reboot_nb);
++	unsigned int secs = clamp(pmic_wd_secs, 1U, 127U);
++	int ret;
++
++	if (code != SYS_POWER_OFF && code != SYS_HALT)
++		return NOTIFY_DONE;
++	if (!pmic_wd_off)
++		return NOTIFY_DONE;
++
++	qcom_pon_trace(pon, TRACE_ENTERED);
++	ret = qcom_pon_wd_power_off(pon, pmic_wd_type);
++	qcom_pon_trace(pon, ret ? TRACE_ERR(ret) : TRACE_WD_ARMED);
++	if (ret) {
++		dev_err(pon->dev, "cannot arm the PMIC watchdog for power-off: %d\n", ret);
++		return NOTIFY_DONE;
++	}
++	dev_emerg(pon->dev, "PMIC watchdog armed: power cut in %u s\n", 2 * secs);
++	msleep((2 * secs + 5) * 1000);
++	qcom_pon_trace(pon, TRACE_WD_WAITED);
++	dev_emerg(pon->dev, "still here after the PMIC watchdog, leaving it to PSCI\n");
++
++	return NOTIFY_DONE;
++}
++
++static int qcom_pon_power_off_prepare(struct sys_off_data *data)
++{
++	struct qcom_pon *pon = data->cb_data;
++	int ret;
++
++	ret = qcom_pon_set_ps_hold_type(pon, PON_PS_HOLD_TYPE_SHUTDOWN);
++	if (ret)
++		dev_err(pon->dev, "failed to arm PS_HOLD for shutdown: %d\n", ret);
++	else
++		dev_info(pon->dev, "PS_HOLD armed for shutdown\n");
++
++	return NOTIFY_DONE;
++}
++
++static int qcom_pon_restart_prepare(struct sys_off_data *data)
++{
++	struct qcom_pon *pon = data->cb_data;
++	int ret;
++
++	/* Undo the above if a power-off was armed and then turned into a
++	 * reboot; otherwise the reboot would power the phone off instead. */
++	ret = qcom_pon_set_ps_hold_type(pon, PON_PS_HOLD_TYPE_HARD_RESET);
++	if (ret)
++		dev_err(pon->dev, "failed to arm PS_HOLD for reset: %d\n", ret);
++
++	return NOTIFY_DONE;
++}
++
++/*
++ * A knob to exercise the write path while the system is alive: a power-off
++ * handler leaves no trace (the DDR is gone with it), so "did the write
++ * succeed" is otherwise unanswerable on this phone. Read 0x85a from the
++ * regmap debugfs after writing here.
++ */
++static ssize_t ps_hold_type_store(struct device *dev,
++				  struct device_attribute *attr,
++				  const char *buf, size_t count)
++{
++	struct qcom_pon *pon = dev_get_drvdata(dev);
++	unsigned int type;
++	int ret;
++
++	if (sysfs_streq(buf, "shutdown"))
++		type = PON_PS_HOLD_TYPE_SHUTDOWN;
++	else if (sysfs_streq(buf, "hard-reset"))
++		type = PON_PS_HOLD_TYPE_HARD_RESET;
++	else if (sysfs_streq(buf, "warm-reset"))
++		/* Keeps the DDR: a watchdog bite then leaves its console in ramoops. */
++		type = PON_PS_HOLD_TYPE_WARM_RESET;
++	else
++		return -EINVAL;
++
++	ret = qcom_pon_set_ps_hold_type(pon, type);
++	return ret ? ret : count;
++}
++
++static ssize_t ps_hold_type_show(struct device *dev,
++				 struct device_attribute *attr, char *buf)
++{
++	struct qcom_pon *pon = dev_get_drvdata(dev);
++	unsigned int ctl, ctl2;
++	int ret;
++
++	ret = regmap_read(pon->regmap, pon->baseaddr + PON_PS_HOLD_RST_CTL, &ctl);
++	if (ret)
++		return ret;
++	ret = regmap_read(pon->regmap, pon->baseaddr + PON_PS_HOLD_RST_CTL2, &ctl2);
++	if (ret)
++		return ret;
++
++	return sysfs_emit(buf, "0x%02x %s\n", ctl & PON_PS_HOLD_TYPE_MASK,
++			  (ctl2 & PON_PS_HOLD_RESET_EN) ? "enabled" : "disabled");
++}
++static DEVICE_ATTR_RW(ps_hold_type);
++
++/* Read PS_HOLD through the firmware: tells whether TZ lets us near it at all. */
++static ssize_t ps_hold_scm_show(struct device *dev,
++				struct device_attribute *attr, char *buf)
++{
++	unsigned int val = 0;
++	int ret;
++
++	ret = qcom_scm_io_readl(ps_hold_addr, &val);
++	if (ret)
++		return sysfs_emit(buf, "io_readl(0x%lx) failed: %d\n", ps_hold_addr, ret);
++	return sysfs_emit(buf, "0x%08x\n", val);
++}
++static DEVICE_ATTR_RO(ps_hold_scm);
++
++/* Does this firmware offer SCM_SVC_PWR / IO_DEASSERT_PS_HOLD at all? */
++static ssize_t ps_hold_scm_avail_show(struct device *dev,
++				      struct device_attribute *attr, char *buf)
++{
++	return sysfs_emit(buf, "%s\n",
++			  qcom_scm_deassert_ps_hold_available() ? "available" : "not available");
++}
++static DEVICE_ATTR_RO(ps_hold_scm_avail);
++
++/*
++ * Does the firmware let us WRITE the PS_HOLD register? Writing 1 keeps the
++ * pin asserted, so this is harmless; what matters is the return code.
++ */
++static ssize_t ps_hold_scm_write1_show(struct device *dev,
++				       struct device_attribute *attr, char *buf)
++{
++	int ret = qcom_scm_io_writel(ps_hold_addr, 1);
++
++	return sysfs_emit(buf, "io_writel(0x%lx, 1) = %d\n", ps_hold_addr, ret);
++}
++static DEVICE_ATTR_RO(ps_hold_scm_write1);
++
++static int qcom_pon_power_off(struct sys_off_data *data)
++{
++	struct qcom_pon *pon = data->cb_data;
++	int ret;
++
++	if (!scm_ps_hold) {
++		qcom_pon_trace(pon, TRACE_LEFT_TO_PSCI);
++		return NOTIFY_DONE;
++	}
++
++	qcom_pon_set_ps_hold_type(pon, PON_PS_HOLD_TYPE_SHUTDOWN);
++
++	ret = qcom_scm_deassert_ps_hold();
++	if (ret) {
++		pr_emerg("qcom-pon: deassert call failed (%d), trying io_writel\n", ret);
++		ret = qcom_scm_io_writel(ps_hold_addr, 0);
++	}
++	if (!ret)
++		mdelay(10000);
++	qcom_pon_trace(pon, ret ? TRACE_ERR(ret) : TRACE_SCM_DONE);
++	pr_emerg("qcom-pon: still here after dropping PS_HOLD (%d), leaving it to PSCI\n", ret);
++
++	return NOTIFY_DONE;
++}
++
+ static int qcom_pon_probe(struct platform_device *pdev)
+ {
+ 	struct qcom_pon *pon;
+@@ -82,6 +430,78 @@
+ 
+ 	platform_set_drvdata(pdev, pon);
+ 
++	/*
++	 * Disarm the PMIC watchdog, and do it first. If the last power-off
++	 * went through it, it is still counting right now, and the phone is
++	 * cut when it reaches S1 + S2. This is the other half of using it.
++	 */
++	{
++		unsigned int ctl2 = 0;
++
++		regmap_read(pon->regmap, pon->baseaddr + PON_WD_RESET_S2_CTL2, &ctl2);
++		error = regmap_update_bits(pon->regmap, pon->baseaddr + PON_WD_RESET_S2_CTL2,
++					   PON_WD_S2_RESET_EN, 0);
++		if (error)
++			dev_err(&pdev->dev, "cannot disarm the PMIC watchdog: %d\n", error);
++		else if (ctl2 & PON_WD_S2_RESET_EN)
++			dev_info(&pdev->dev, "PMIC watchdog was armed (last power-off went through it); disarmed\n");
++	}
++
++	error = device_create_file(&pdev->dev, &dev_attr_ps_hold_type);
++	if (error)
++		return error;
++	error = device_create_file(&pdev->dev, &dev_attr_ps_hold_scm);
++	if (error)
++		return error;
++	error = device_create_file(&pdev->dev, &dev_attr_ps_hold_scm_avail);
++	if (error)
++		return error;
++	error = device_create_file(&pdev->dev, &dev_attr_ps_hold_scm_write1);
++	if (error)
++		return error;
++	error = device_create_file(&pdev->dev, &dev_attr_trace);
++	if (error)
++		return error;
++	error = device_create_file(&pdev->dev, &dev_attr_pmic_wd_fire);
++	if (error)
++		return error;
++
++	/* Before PSCI's own power-off handler (SYS_OFF_PRIO_FIRMWARE). */
++	error = devm_register_sys_off_handler(&pdev->dev,
++					      SYS_OFF_MODE_POWER_OFF,
++					      SYS_OFF_PRIO_FIRMWARE + 3,
++					      qcom_pon_power_off, pon);
++	if (error)
++		return error;
++
++	pon->reboot_nb.notifier_call = qcom_pon_reboot_notify;
++	/*
++	 * After every default-priority reboot notifier, and in particular after
++	 * the watchdog core's, which stops the SoC watchdog (qcom_wdt is
++	 * stop-on-reboot). Measured: with this at priority 0 the phone was reset
++	 * by PS_HOLD ~28 s into the wait when the power-off came from within
++	 * a systemd shutdown -- the SoC watchdog, still running, with nobody
++	 * left to feed it. Sleeping 60 s next to a live watchdog is not a plan.
++	 */
++	pon->reboot_nb.priority = -100;
++	error = devm_register_reboot_notifier(&pdev->dev, &pon->reboot_nb);
++	if (error)
++		return error;
++
++	error = devm_register_sys_off_handler(&pdev->dev,
++					      SYS_OFF_MODE_POWER_OFF_PREPARE,
++					      SYS_OFF_PRIO_DEFAULT,
++					      qcom_pon_power_off_prepare, pon);
++	if (error)
++		return error;
++
++	error = devm_register_sys_off_handler(&pdev->dev,
++					      SYS_OFF_MODE_RESTART_PREPARE,
++					      SYS_OFF_PRIO_DEFAULT,
++					      qcom_pon_restart_prepare, pon);
++	if (error)
++		return error;
++
+ 	return devm_of_platform_populate(&pdev->dev);
+ }
+ 
+diff -ruN a/include/linux/firmware/qcom/qcom_scm.h b/include/linux/firmware/qcom/qcom_scm.h
+--- a/include/linux/firmware/qcom/qcom_scm.h	2026-09-05 12:52:48.569184962 +0200
++++ b/include/linux/firmware/qcom/qcom_scm.h	2026-09-05 13:10:18.101891989 +0200
+@@ -96,6 +96,8 @@
+ 
+ int qcom_scm_io_readl(phys_addr_t addr, unsigned int *val);
+ int qcom_scm_io_writel(phys_addr_t addr, unsigned int val);
++int qcom_scm_deassert_ps_hold(void);
++bool qcom_scm_deassert_ps_hold_available(void);
+ 
+ bool qcom_scm_restore_sec_cfg_available(void);
+ int qcom_scm_restore_sec_cfg(u32 device_id, u32 spare);

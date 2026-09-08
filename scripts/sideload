@@ -1,0 +1,85 @@
+#!/bin/sh
+# Put freshly built packages on the phone without publishing anything.
+#
+#   scripts/sideload <pkg>...                 build if needed, copy, apk add
+#   scripts/sideload --kernel surya           the kernel, with the guards below
+#   scripts/sideload --host 172.16.42.1 ...   another address (default below)
+#
+# The first run should pass --install-key: it copies THIS repository's public key
+# to the phone, after which nothing needs --allow-untrusted ever again.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+HOST="${HOST:-172.16.42.1}"
+PHONE_USER="${PHONE_USER:-cidwel}"
+KERNEL=""
+INSTALL_KEY=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--host) HOST="$2"; shift 2 ;;
+		--user) PHONE_USER="$2"; shift 2 ;;
+		--install-key) INSTALL_KEY="--install-key"; shift ;;
+		--kernel) KERNEL="${2:?--kernel needs a device}"; shift 2 ;;
+		*) break ;;
+	esac
+done
+
+ssh_phone() { ssh -o ConnectTimeout=10 "$PHONE_USER@$HOST" "$@"; }
+
+if [ -n "$KERNEL" ]; then
+	case "$KERNEL" in
+		surya) PKG=linux-postmarketos-qcom-sm7150-utsugi ;;
+		vayu)  PKG=linux-postmarketos-qcom-sm8150-utsugi ;;
+		*) die "unknown device: $KERNEL" ;;
+	esac
+	VER="$(apkbuild_version "$PKG")"
+	APK="$PKGS/$PKG-$VER.apk"
+	[ -f "$APK" ] || die "not built: $APK (scripts/build --kernel $KERNEL)"
+
+	cat <<'WARN'
+
+  A kernel that does not boot on the surya is not a failed install, it is a
+  reboot loop: the watchdog fires 20 s after PID 1 and there is no screen left
+  to fix it from. The boot partition holds U-Boot, not the kernel, so fastboot
+  cannot put the old one back without wiping the phone.
+
+  Have the way back in ARMED BEFORE rebooting:
+
+      systemd-run --user --unit=rescue \
+          ~/projects/vayu-postmarketos/surya/boot/rescue-over-usb
+      journalctl --user -u rescue -f
+
+WARN
+	printf 'Is the rescue path armed? [y/N] '
+	read -r answer
+	case "$answer" in y|Y|yes) ;; *) die "aborted" ;; esac
+
+	# apk treats an identical version as already satisfied: it writes nothing,
+	# says OK, boot-deploy runs over the old content and you are left convinced
+	# you installed something. Only a pkgrel bump makes it real.
+	INSTALLED="$(ssh_phone "apk list -I 2>/dev/null | sed -n 's/^$PKG-\([^ ]*\) .*/\1/p'" | tr -d '\r' || true)"
+	[ "$INSTALLED" != "$VER" ] || die "the phone already has $PKG-$VER: bump pkgrel and rebuild"
+	title "kernel: ${INSTALLED:-none} -> $VER"
+
+	scp -o ConnectTimeout=10 "$APK" "$PHONE_USER@$HOST:/tmp/kernel.apk"
+	ssh_phone 'sudo apk add /tmp/kernel.apk 2>&1 | tail -20'
+	ssh_phone 'apk list -I 2>/dev/null | grep "^linux-postmarketos"; ls -l /boot/vmlinuz'
+	ssh_phone 'sync; sleep 3; sync'
+	cat <<WARN
+
+  Installed. The reboot goes SEPARATELY, on purpose: chaining it catches the
+  package halfway through writing the modules.
+
+      ssh $PHONE_USER@$HOST 'sudo systemctl reboot'
+
+  Afterwards 'uname -r' must show #$(( $(echo "$VER" | sed 's/.*-r//') + 1 )):
+  the kernel stamps pkgrel + 1, so it is never the pkgrel itself.
+WARN
+	exit 0
+fi
+
+[ $# -gt 0 ] || die "nothing to sideload. See the header of $0"
+setup_sudo
+overlay
+pmb sideload --host "$HOST" --user "$PHONE_USER" $INSTALL_KEY "$@"

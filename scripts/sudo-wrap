@@ -1,0 +1,4 @@
+#!/bin/sh
+# pmbootstrap runs this instead of sudo (PMB_SUDO). It only adds -A, so sudo
+# goes through SUDO_ASKPASS rather than demanding a terminal.
+exec sudo -A "$@"

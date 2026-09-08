@@ -1,0 +1,63 @@
+C-PHY: los trios van en los bits IMPARES, no en 0x07
+
+El parche 0089 quito el bit del carril de reloj y dejo ctrl5 = 0x07 para tres
+trios. Medido en el movil: ctrl5 = 0x07, lane_mask = 0x07, y cero paquetes.
+
+Estaba mal. El driver del fabricante calcula la habilitacion de trios asi
+(cam_csiphy_core.c, rama csiphy_3phase):
+
+    lane_mask = csiphy_dev->csiphy_info.lane_mask & LANE_MASK_3PH;
+    mask = lane_mask;
+    while (mask != 0) {
+            temp = (i << 1) + 1;
+            lane_enable |= ((mask & 0x1) << temp);
+            mask >>= 1;
+            i++;
+    }
+
+o sea el bit 2i+1 por cada trio. Para tres trios: bits 1, 3 y 5 -> 0x2A.
+
+Contrastelo con la rama de D-PHY del mismo fichero:
+
+    lane_enable |= 0x1 << (i<<1);        /* bits PARES, 2i */
+    ... y 0x80 para el carril de reloj
+
+LOS TRIOS VAN INTERCALADOS entre las posiciones de los carriles de D-PHY, no
+en las mismas. 0x07 pone los bits 0, 1 y 2, que en D-PHY son "carril 0" y dos
+posiciones que en C-PHY no significan nada.
+
+Encontrado leyendo el codigo del fabricante, sin gastar un ciclo de
+compilacion. En la misma vuelta se descartaron por lectura otras dos pistas:
+
+  - cam_csiphy_cphy_data_rate_config() es no-operativo a 2,6 Gbps: su primer
+    escalon escribe los mismos valores que la tabla base.
+  - el conmutador MIPI multiplexa el CSIPHY1 entre la FRONTAL y el gran
+    angular; la trasera esta en el CSIPHY0 y no pasa por ahi. Lo decia un
+    comentario mio en el propio driver del S5K3T2.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+@@ -1514,9 +1514,23 @@
+ 	 * fases. Lo correcto para tres trios es 0x07.
+ 	 */
+ 	if (cfg->cphy) {
++		/*
++		 * Los trios NO ocupan las mismas posiciones que los carriles
++		 * de D-PHY: van INTERCALADOS entre ellas. Qualcomm lo calcula
++		 * asi, con temp = (i << 1) + 1:
++		 *
++		 *     while (mask != 0) {
++		 *             temp = (i << 1) + 1;
++		 *             lane_enable |= ((mask & 0x1) << temp);
++		 *             mask >>= 1; i++;
++		 *     }
++		 *
++		 * o sea bits IMPARES 2i+1, mientras que D-PHY usa los PARES
++		 * 2i mas el 7 del reloj. Para tres trios sale 0x2A, no 0x07.
++		 */
+ 		val = 0;
+ 		for (i = 0; i < c->num_data; i++)
+-			val |= BIT(c->data[i].pos);
++			val |= BIT(c->data[i].pos * 2 + 1);
+ 	} else {
+ 		val = CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;
+ 		for (i = 0; i < c->num_data; i++)

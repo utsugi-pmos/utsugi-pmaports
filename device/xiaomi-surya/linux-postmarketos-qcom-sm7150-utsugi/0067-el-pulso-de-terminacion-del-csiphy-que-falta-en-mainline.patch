@@ -1,0 +1,91 @@
+El pulso de terminacion del CSIPHY que mainline no escribe nunca
+
+QUE FALTA
+---------
+En la secuencia comun del CSIPHY, el fabricante escribe CINCO registros antes
+de recorrer la tabla de carriles:
+
+    CTRLn(5)  @ 0x0814 = mascara de carriles | CLK_ENABLE
+    CTRLn(6)  @ 0x0818 = 0x01    COMMON_PWRDN_B
+    CTRLn(7)  @ 0x081C = 0x52    (0x02 en las versiones viejas)
+    CTRLn(0)  @ 0x0800 = 0x02    encendido del nucleo del PHY
+    CTRLn(33) @ 0x0884 = 0x01    PULSO DE TERMINACION
+
+Mainline escribe los tres primeros y luego pisa CTRLn(0) con 0x00, y el
+0x0884 NO LO ESCRIBE NUNCA. Sin el, el PHY se queda pinzado a nivel superior:
+el sensor transmite, el PHY oye los carriles, y al CSID no le llega ni un
+sincronismo de inicio.
+
+DE DONDE SALE
+-------------
+De https://github.com/asidko/qcom-camss-mainline, que lo encontro en un SM7125
+(Atoll, CSIPHY v1.2.2), hermano de este SoC. Describe el fallo palabra por
+palabra:
+
+    "sensor s_stream(1) + escrituras CCI + reguladores completan, pero el
+     contador de IRQ del CSID0 se queda a cero durante un STREAMON de varios
+     segundos y el fichero de captura son 0 bytes"
+
+Que es exactamente lo medido aqui durante toda la investigacion.
+
+En la v1.2.1 (lane_regs_sm8250) estos terminadores van repetidos DENTRO de la
+tabla de carriles; en la v1.2 y la v1.2.2 van una sola vez en el bloque comun,
+que es justo el trozo que mainline escribe a mano y donde se quedaron fuera.
+
+Nuestra lane_regs_sm7150 si escribe 0x0800 = 0x02, cinco veces, una por carril
+-por eso el 0060 ya cubria esa mitad-. El 0x0884 no aparece ni una sola vez.
+
+Va detras de un parametro en 0644 para poder confirmar la atribucion sin
+recompilar.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 01:10:47.338745677 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 01:11:11.798443774 +0200
+@@ -1080,6 +1080,11 @@
+  * reiniciar, que en este movil cuesta caro: se cuelga uno de cada cuatro
+  * arranques.
+  */
++static int pulso_terminacion = 1;
++module_param(pulso_terminacion, int, 0644);
++MODULE_PARM_DESC(pulso_terminacion,
++	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
++
+ static int releer_registros;
+ module_param(releer_registros, int, 0644);
+ MODULE_PARM_DESC(releer_registros,
+@@ -1369,6 +1374,37 @@
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
+ 	}
+ 
++	/*
++	 * EL PULSO DE TERMINACION QUE FALTABA.
++	 *
++	 * CTRLn(33), o sea 0x0884, vale 0x01 en la secuencia comun del
++	 * fabricante y mainline NO LO ESCRIBE NUNCA. Sin el, el PHY se queda
++	 * pinzado a nivel superior: el sensor transmite, el PHY oye los
++	 * carriles, y al CSID no le llega ni un sincronismo de inicio.
++	 *
++	 * Es exactamente el fallo que se veia aqui, y lo describe igual quien
++	 * lo encontro en un SM7125 (Atoll, CSIPHY v1.2.2), que es el hermano de
++	 * este SoC:
++	 *
++	 *   "sensor s_stream(1) + escrituras CCI + reguladores completan, pero
++	 *    el contador de IRQ del CSID0 se queda a cero durante un STREAMON de
++	 *    varios segundos y el fichero de captura son 0 bytes"
++	 *
++	 * En la v1.2.1 (lane_regs_sm8250) estos terminadores van repetidos
++	 * dentro de la tabla de carriles; en la v1.2 y la v1.2.2 van una sola
++	 * vez en el bloque comun, que es justo el trozo que mainline escribe a
++	 * mano y donde se quedaron fuera.
++	 *
++	 * Nuestra lane_regs_sm7150 escribe 0x0800 = 0x02 cinco veces (una por
++	 * carril), asi que ese ya estaba; 0x0884 no aparece ni una vez.
++	 *
++	 * Ajustable en caliente para poder confirmar la atribucion sin
++	 * recompilar.
++	 */
++	if (pulso_terminacion)
++		writel_relaxed(0x01, csiphy->base +
++			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 33));
++
+ 	if (csiphy_is_gen2(csiphy->camss->res->version))
+ 		csiphy_gen2_config_lanes(csiphy, settle_cnt);
+ 	else

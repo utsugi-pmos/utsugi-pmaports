@@ -1,0 +1,150 @@
+# MapLibre para Qt6, que es lo unico que le falta al de Alpine.
+#
+# POR QUE ESTA RECETA EXISTE
+# --------------------------
+# Para que el mapa se DIBUJE sin cobertura. El conector 'osm' de QtLocation solo
+# pinta imagenes traidas de la red: sin ella queda lo que haya en la cache de lo
+# ya visitado -- medido en este movil, 9 MB, frente a los 2,2 GB de datos de
+# enrutado. Es decir, la aplicacion sabia ir a sitios que no podia ensenyar.
+#
+# MapLibre dibuja a partir de teselas VECTORIALES, que si caben en disco y ya se
+# distribuyen por region en el mismo catalogo del que bajamos las de rutas.
+#
+# El paquete de Alpine no sirve tal cual: esta compilado contra Qt5, y esta
+# aplicacion es Qt6. Qt lo encuentra y lo rechaza, con este mensaje exacto --
+#
+#   The plugin '/usr/plugins/geoservices/libqtgeoservices_maplibre.so' uses
+#   incompatible Qt library. (5.15.0) [release]
+#
+# -- que solo aparece con QT_DEBUG_PLUGINS=1. Sin esa variable el sintoma es
+# unicamente que 'maplibre' no sale en la lista de conectores, con el fichero
+# .so instalado y visible con 'ls'.
+#
+# Y no es cosa de upstream: la version 3.0.0 soporta las dos. Es la receta de
+# Alpine la que fija QT_VERSION_MAJOR=5 a mano, con este comentario al lado de
+# las dependencias: "It searches for Qt6 dependencies but it actually uses Qt5".
+# Aqui se cambia ese 5 por un 6 y se ponen las dependencias de Qt6.
+#
+# Lo demas se deja igual que en la receta original, a proposito: cuanto menos se
+# separe de ella, menos hay que rehacer cuando Alpine la actualice.
+maintainer="Bart Ribbers <bribbers@disroot.org>"
+pkgname=maplibre-native-qt6
+_name=maplibre-native-qt
+pkgver=3.0.0
+pkgrel=3
+# El nombre cambia para no pelearse con el de Alpine: son el mismo codigo
+# compilado contra Qt distinto, y tener los dos instalados a la vez es
+# legitimo -- Pure Maps es Qt5 y sigue queriendo el suyo.
+pkgdesc="Open-source alternative to Mapbox GL Native"
+url="https://maplibre.org/"
+arch="all"
+license="BSD-2-Clause"
+makedepends="
+	cmake
+	icu-dev
+	qt6-qtbase-dev
+	qt6-qtlocation-dev
+	qt6-qtpositioning-dev
+	qt6-qtdeclarative-dev
+	rapidjson-dev
+	samurai
+	"
+# Sin subpaquete -dev: nadie compila contra esto, solo lo carga Qt en tiempo de
+# ejecucion, y un -dev que no sirve a nadie es una descarga mas que mantener.
+#
+# 'sonameprefix' es lo que evita la pelea con el paquete de Alpine. Sin el, los
+# dos DECLARAN dar 'so:libQMapLibre.so.3' y apk se niega a tener los dos:
+#
+#   maplibre-native-qt-3.0.0-r3:
+#     conflicts: maplibre-native-qt6-3.0.0-r3[so:libQMapLibre.so.3=3.0.0]
+#     satisfies: mapbox-gl-qml-3.0.0-r0[so:libQMapLibre.so.3]
+#
+# Y ese 'satisfies' es lo que importa: quien depende de esa biblioteca es Pure
+# Maps. Instalar la nuestra encima le quitaria la suya, compilada contra Qt5, y
+# se quedaria sin mapa. Con el prefijo, la nuestra se declara como
+# 'maplibre-native-qt6:so:libQMapLibre.so.3' y no le responde a nadie mas.
+sonameprefix="$pkgname:"
+source="https://dev.alpinelinux.org/archive/$_name/$_name-$pkgver.tar.xz
+	0001-maplibre-native-qt-Fix-build-with-GCC-15.patch
+	"
+options="!check" # No tests
+builddir="$srcdir/$_name"
+
+
+_disturl="dev.alpinelinux.org:/archive/$_name/"
+
+snapshot() {
+	clean
+	deps
+	mkdir -p "$srcdir" && cd "$srcdir"
+	git clone https://github.com/maplibre/maplibre-native-qt -b v$pkgver --recursive
+	tar cv $_name | xz -T0 -9 -vv - > $SRCDEST/$_name-$pkgver.tar.xz
+	rsync --progress -La $SRCDEST/$_name-$pkgver.tar.xz $_disturl
+}
+
+prepare() {
+	default_prepare
+
+	# We prefer to build with our system version
+	rm -r vendor/maplibre-native/vendor/mapbox-base/extras/rapidjson
+
+	# El modulo PRIVADO de QtLocation hay que pedirlo aparte, y con Qt5 no hacia
+	# falta. Por eso este parche no existe en la receta de Alpine: alli se
+	# compila contra Qt5, donde 'Location' ya arrastraba lo privado.
+	#
+	# En Qt6 son componentes distintos, asi que 'find_package(... Location)' deja
+	# 'Qt6::LocationPrivate' sin definir y cmake se para antes de compilar nada:
+	#
+	#   Target "MLNQtLocation" links to: Qt6::LocationPrivate
+	#   but the target was not found.
+	#
+	# El componente SI esta en Alpine -- /usr/lib/cmake/Qt6LocationPrivate existe
+	# en el chroot de compilacion --, solo que nadie lo pedia.
+	sed -i 's/COMPONENTS Location REQUIRED)/COMPONENTS Location LocationPrivate REQUIRED)/' \
+		CMakeLists.txt
+	grep -q "LocationPrivate" CMakeLists.txt || {
+		echo "el parche del componente privado no aplico" >&2
+		return 1
+	}
+}
+
+build() {
+	# Qt6 marca QFile::open() con [[nodiscard]] y Qt5 no. El codigo de MapLibre
+	# ignora ese retorno en un sitio -- src/core/style/source_style_change.cpp --
+	# y como el proyecto compila con -Werror, eso para la compilacion entera:
+	#
+	#   error: ignoring return value of 'virtual bool QFile::open(...)',
+	#   declared with attribute 'nodiscard' [-Werror=unused-result]
+	#
+	# Es un aviso legitimo, pero no es nuestro codigo y no toca corregirlo aqui:
+	# se degrada a aviso. Que ese fichero no compruebe si el estilo abrio
+	# significa, como mucho, que un estilo ilegible se dibuja vacio en vez de dar
+	# error -- que es lo que pasa hoy con Qt5, donde nadie lo avisa siquiera.
+	export CXXFLAGS="$CXXFLAGS -Wno-error=unused-result"
+	# EN SU PROPIO RINCON, no en /usr. Los ficheros se llaman igual que los del
+	# paquete de Qt5 -- /usr/lib/libQMapLibre.so.3 los dos -- asi que instalar en
+	# el sitio de siempre no seria convivir: seria pisarle la biblioteca a Pure
+	# Maps y dejarlo sin mapa.
+	#
+	# Con prefijo propio los dos arboles no se tocan y cada aplicacion carga el
+	# suyo. El precio es que hay que decirle a Qt donde mirar, y eso se hace en
+	# main.cpp con addLibraryPath() y addImportPath().
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=None \
+		-DCMAKE_INSTALL_PREFIX=/usr/lib/poconav \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DBUILD_SHARED_LIBS=TRUE \
+		-DQT_VERSION_MAJOR=6 \
+		-DCMAKE_BUILD_WITH_INSTALL_RPATH=ON \
+		-DCMAKE_INSTALL_RPATH=/usr/lib/poconav/lib
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+sha512sums="
+c71b480900f7a54ac5dc902492c7256b89063770c0bdaddead23e2d8d0442171507f75aa109c8903306f35b5c52a7a71a72570458c2b949147670a1bcb265006  maplibre-native-qt-3.0.0.tar.xz
+b19a112b2362fed0c3c5cb1592220c8478659dc17074fc9fc55e89bc30edea6f93dc335167bd4432b207b9c91f9a800f0a44cb71927fac677c6bce63b9256c73  0001-maplibre-native-qt-Fix-build-with-GCC-15.patch
+"

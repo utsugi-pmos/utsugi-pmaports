@@ -1,0 +1,47 @@
+La frecuencia de muestreo del microfono llegaba al DSP como cero
+
+q6cvp_send_media_format rellenaba media_format_info y terminaba llamando a
+q6dsp_map_channels() con los campos de channel_info. Los dos son miembros de
+la MISMA union (vss_icommon_param_data), asi que comparten memoria:
+
+    media_format_info:  port_id@0  num_channels@4  bits_per_sample@6
+                        sample_rate@8  channel_mapping@12
+    channel_info:       num_channels@0  bits_per_sample@4  channel_mapping@8
+
+De ahi salian dos destrozos en la ultima linea de la funcion:
+
+  - Como numero de canales se le pasaba channel_info.num_channels, que en el
+    desplazamiento 0 es en realidad media_format_info.port_id: 0xb037, o sea
+    45111 canales. q6dsp_map_channels devuelve -EINVAL con eso y no escribe
+    ningun mapa.
+
+  - Como destino se le pasaba channel_info.channel_mapping, desplazamiento 8,
+    que es donde acaba de guardarse sample_rate. Y lo primero que hace
+    q6dsp_map_channels es memset(ch_map, 0, PCM_MAX_NUM_CHANNEL), asi que
+    borraba los 48000 recien puestos.
+
+Resultado: al DSP se le declaraba el punto final de transmision con frecuencia
+de muestreo 0 y el mapa de canales en blanco. La sesion se crea sin un solo
+error --todos los comandos de CVP responden ok-- y la voz del microfono no
+llega nunca al modem. Es exactamente el sintoma que teniamos: se oye al otro
+extremo pero a nosotros no se nos oye.
+
+La recepcion sobrevivia porque el DSP ya conoce la configuracion del puerto de
+salida por el AFE y no depende de este parametro para reproducir.
+
+Encontrado el 2026-08-10, despues de comprobar con la sesion de voz trazada que
+el puerto del microfono si llegaba a RUNNING durante toda la llamada.
+
+--- a/sound/soc/qcom/qdsp6/q6cvp.c
++++ b/sound/soc/qcom/qdsp6/q6cvp.c
+@@ -1,8 +1,8 @@
+ 	cmd.param_data.media_format_info.bits_per_sample = 16;
+ 	cmd.param_data.media_format_info.sample_rate = 48000;
+
+-	q6dsp_map_channels(cmd.param_data.channel_info.channel_mapping,
+-			   cmd.param_data.channel_info.num_channels);
++	q6dsp_map_channels(cmd.param_data.media_format_info.channel_mapping,
++			   cmd.param_data.media_format_info.num_channels);
+
+ 	return q6voice_common_send(cvp, &cmd.hdr);
+ }

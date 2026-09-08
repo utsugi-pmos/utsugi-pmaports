@@ -1,0 +1,37 @@
+From: Cidwel <cidwel@gmail.com>
+Subject: [PATCH] power: supply: qcom_qg: distrust an S2 average above the design window too
+
+Patch 0104 falls back to the last ADC sample when the hardware average reads
+below the design minimum after a cold boot. Measured on 2026-09-05 the
+average can also read garbage ABOVE it: 6.38 V on a 4.4 V cell, 17 s into a
+cold boot, which this driver turned into a confident 100 % while the cell
+was at 3.74 V. Fall back on that side as well, only to a sample that is
+itself plausible.
+---
+--- a/drivers/power/supply/qcom_qg.c	2026-09-05 11:54:04.027155678 +0200
++++ b/drivers/power/supply/qcom_qg.c	2026-09-05 11:54:38.652862831 +0200
+@@ -108,11 +108,22 @@
+ 	 * vale desde el primer momento. Es mas ruidosa que el promedio, y por
+ 	 * eso solo se usa cuando el promedio no dice nada creible.
+ 	 */
+-	if (voltage_now < voltage_min) {
++	/*
++	 * And "no lo se" is not "full" either. Measured on 2026-09-05, 17 s
++	 * after a cold boot: the S2 average read 6.38 V on a 4.4 V cell, so
++	 * this reported 100 % while the instantaneous ADC said 3.74 V (34 %).
++	 * Seven minutes later the average had settled at 3.73 V. So the
++	 * average is distrusted on BOTH sides of the design window, with a
++	 * margin above the maximum because a charging cell legitimately sits
++	 * a little over it.
++	 */
++	if (voltage_now < voltage_min || voltage_now > voltage_max + 100000) {
+ 		int ultimo;
+ 
+ 		if (!qcom_qg_get_voltage(chip, QG_LAST_ADC_V_DATA0_REG,
+-					 &ultimo) && ultimo > voltage_now)
++					 &ultimo) &&
++		    ultimo >= voltage_min - 300000 &&
++		    ultimo <= voltage_max + 100000)
+ 			voltage_now = ultimo;
+ 	}
+ 

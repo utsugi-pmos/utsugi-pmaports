@@ -1,0 +1,107 @@
+#!/bin/sh
+# Build the apk repository (index + signature) and, with --push, put it on the
+# gh-pages branch that GitHub Pages serves.
+#
+#   scripts/publish              assemble and sign the site under $WORK/site
+#   scripts/publish --push       ...and force-push it to gh-pages
+#
+# The site is assembled from scratch every time: the live site is downloaded,
+# the freshly built packages are added, and only the HIGHEST version of each
+# package survives. Pages has a 1 GB soft limit and the kernel alone is 26 MB per
+# build, so keeping history here is not an option; the history lives in git and
+# in the image releases.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+PUSH=0
+FROM=""
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--push) PUSH=1; shift ;;
+		--from) FROM="$2"; shift 2 ;;   # a directory of .apk files, used by CI
+		*) die "unknown option: $1" ;;
+	esac
+done
+[ -z "$FROM" ] || PKGS="$FROM"
+KEY="$(keyname)"
+SITE="$WORK/site"
+DIR="$SITE/$CHANNEL_DIR/$ARCH"
+
+title "Collecting packages"
+rm -rf "$SITE"; mkdir -p "$DIR" "$SITE/keys"
+
+# Which files belong to us: each aport's own name plus its subpackages, at the
+# version the APKBUILD currently declares. Globbing '<pkg>-*' would be wrong
+# (it would catch other packages) and publishing everything in the packages
+# directory would be worse: pmbootstrap also builds upstream dependencies there,
+# and shipping those under their upstream names would shadow real packages.
+n=0; missing=0
+for pkg in $(all_aports); do
+	ver="$(apkbuild_version "$pkg")"
+	subs="$(apkbuild_get "$pkg" subpackages | tr ' \n' '  ')"
+	for name in "$pkg" $(echo "$subs" | tr ' ' '\n' | sed 's/:.*//' | grep -v '^$'); do
+		f="$PKGS/$name-$ver.apk"
+		if [ -f "$f" ]; then cp "$f" "$DIR/"; n=$((n + 1))
+		else grey "  not built: $name-$ver.apk"; missing=$((missing + 1)); fi
+	done
+done
+green "  $n packages, $missing not built"
+[ "$n" -gt 0 ] || die "nothing to publish"
+
+title "Index and signature"
+# apk and abuild come from a throwaway Alpine container: exactly the tools
+# pmbootstrap uses inside its own chroot, without needing one here.
+docker run --rm \
+	-v "$DIR:/r" -v "$WORK/config_abuild:/k:ro" \
+	-e KEY="$KEY" -e UID="$(id -u)" -e GID="$(id -g)" \
+	-v "$REPO/keys:/pub:ro" \
+	alpine:edge sh -ec '
+		apk add -q abuild
+		# apk index refuses to read a package it does not trust, so the public
+		# half has to be in the container too. It only reads; the signing uses
+		# the private key mounted at /k.
+		cp /pub/*.rsa.pub /etc/apk/keys/
+		cd /r
+		apk index --rewrite-arch aarch64 \
+			-d "utsugi-pmaports $(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+			-o APKINDEX.tar.gz_ ./*.apk
+		abuild-sign -k "/k/$KEY" APKINDEX.tar.gz_
+		mv APKINDEX.tar.gz_ APKINDEX.tar.gz
+		chown -R "$UID:$GID" /r
+	'
+# The first member of a signed index is the signature, named after the key.
+first="$(tar -tzf "$DIR/APKINDEX.tar.gz" | head -1)"
+[ "$first" = ".SIGN.RSA.$KEY.pub" ] || die "index is not signed by $KEY (first member: $first)"
+green "  signed by $KEY"
+
+cp "$REPO"/keys/*.rsa.pub "$SITE/keys/"
+touch "$SITE/.nojekyll"                      # without it GitHub runs Jekyll over the tree
+# A domain we control, so a future GitHub account rename cannot break the URL
+# that every installed phone carries in /etc/apk/repositories.
+echo "${REPO_URL#https://}" > "$SITE/CNAME"
+git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$SITE/VERSION"
+cat > "$SITE/index.html" <<HTML
+<!doctype html><meta charset=utf-8><title>utsugi-pmaports</title>
+<h1>utsugi-pmaports</h1>
+<p>postmarketOS packages for the Xiaomi POCO X3 NFC (surya) and POCO X3 Pro (vayu).</p>
+<pre>sudo wget -qO /etc/apk/keys/$KEY.pub $REPO_URL/keys/$KEY.pub
+echo $REPO_URL/$CHANNEL_DIR | sudo tee -a /etc/apk/repositories
+sudo apk update &amp;&amp; sudo apk add utsugi-surya-full</pre>
+<p><a href="https://github.com/jjolmo/utsugi-pmaports">Source and documentation</a></p>
+HTML
+green "  site ready: $SITE ($(du -sh "$SITE" | cut -f1))"
+
+if [ "$PUSH" = 1 ]; then
+	title "Publishing to gh-pages"
+	cd "$SITE"
+	git init -q -b gh-pages
+	git add -A
+	git -c user.email=cidwel@gmail.com -c user.name="Dr. Utsugi" \
+		commit -qm "publish $(cat VERSION)"
+	# One orphan commit, force-pushed: the branch is a snapshot, not a history.
+	git push --force "$GH_REMOTE" gh-pages
+	green "  pushed to $GH_REMOTE"
+else
+	grey "  not pushed (pass --push)"
+fi

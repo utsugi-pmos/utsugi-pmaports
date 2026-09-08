@@ -1,0 +1,52 @@
+From: Cidwel Highwind <cidwel@gmail.com>
+Date: Fri, 28 Aug 2026 14:20:00 +0200
+Subject: [PATCH] Honour claims that arrived before the sensor was found
+
+The client hash tables are created in bus_acquired_handler(), deliberately
+"before DBus is fully exposed", so a Claim can land before name_acquired_handler
+has run find_sensors(). handle_generic_method_call() records that claim, finds
+driver_type_exists() false, answers OK and starts nothing -- and nothing ever
+looks at the table again. The client then waits for readings that never arrive.
+
+The hotplug path in sensor_changes() gets this right for a device appearing
+later; only the initial discovery misses it. The D-Bus documentation shipped
+with the project promises the working behaviour: that you may claim before an
+accelerometer is present and will get data once it shows up.
+
+Seen on a POCO X3 NFC running KWin, which claims the accelerometer 16 ms before
+it is found:
+
+    14:12:27.124243  Handling driver refcounting method 'ClaimAccelerometer'
+    14:12:27.140022  Found device ... of type accelerometer at SSC accelerometer
+
+Screen rotation then stayed dead -- zero samples in six seconds -- until
+something made KWin release and re-claim, such as blanking the screen and waking
+it, which produced 176 samples over the same interval.
+---
+--- a/src/iio-sensor-proxy.c	2026-08-28 14:13:53.341401461 +0200
++++ b/src/iio-sensor-proxy.c	2026-08-28 14:13:22.072837113 +0200
+@@ -810,6 +810,24 @@
+ 		}
+ 
+ 		DEVICE_FOR_TYPE(i) = sensor_device;
++
++		/* A client can claim a sensor before find_sensors() has found
++		 * it: the hash tables are deliberately created before the bus
++		 * name is taken, so the Claim is recorded and answered OK even
++		 * though there was nothing to start yet. Nothing revisited that
++		 * table afterwards, so the client waited for readings that
++		 * never came.
++		 *
++		 * Seen on a POCO X3 NFC with KWin, which claims 16 ms before
++		 * the accelerometer is found; rotation then stayed dead until
++		 * something made KWin release and re-claim, such as blanking
++		 * the screen and waking it. */
++		if (g_hash_table_size (data->clients[i]) > 0) {
++			g_debug ("Honouring %u claim(s) that arrived before the %s device was found",
++				 g_hash_table_size (data->clients[i]),
++				 driver_type_to_str (i));
++			driver_set_polling (sensor_device, TRUE);
++		}
+ 	}
+ 
+ 	if (!any_sensors_left (data))

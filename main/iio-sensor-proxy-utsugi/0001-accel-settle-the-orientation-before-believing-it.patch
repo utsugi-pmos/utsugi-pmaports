@@ -1,0 +1,225 @@
+From: Cidwel Highwind <cidwel@gmail.com>
+Date: Fri, 28 Aug 2026 14:05:00 +0200
+Subject: [PATCH] accel: settle a new orientation before believing it
+
+orientation_calc() runs on every sample, and accel_changed_func() emits as
+soon as one crosses the threshold. A single sample rotates the screen.
+
+That is fine while the device is still, but not while it is moving: the
+accelerometer then reads the hand rather than gravity. Measured on a POCO X3
+NFC (SM7150, SSC driver, samples arriving at 50 Hz), flicking the handset to
+landscape and straight back:
+
+    normal  -> left-up   ( 15, -5,  0)  |a| = 15.8 m/s^2
+    left-up -> right-up  ( -3,  0,  0)  |a| =  3.0 m/s^2
+
+The magnitude swings between 2.2 and 20.2 m/s^2 inside one second, and the
+screen visits the *opposite* landscape for 79 ms on the way. Setting the phone
+down on a table produces the same thing: four orientation changes in 640 ms.
+
+So require a candidate orientation to hold for a while before emitting it.
+
+Doing that needs one change in orientation_calc() first. It has three ways to
+return the previous orientation: the reading genuinely voted to stay, the
+device is flat, or both angles are past their threshold and it is sitting on
+the common border. Only the first is a vote. A debouncing caller that treats
+the other two as votes restarts its clock constantly -- a handset held near 45
+degrees spends most of its samples on the common border, and on the trace above
+the longest uninterrupted run of real votes there was 140 ms, so any window
+past that swallowed rotations the user had asked for. Hence
+orientation_calc_full(), which reports whether a choice was actually made;
+orientation_calc() keeps its signature and behaviour for existing callers.
+
+With that in place, replaying two recorded traces shows every window between
+100 ms and 600 ms removing all the spurious rotations while keeping all the
+legitimate ones, so the constant is a comfort choice. 400 ms is roughly what
+stock handsets use.
+
+Quantisation is *not* what causes this. The readings are truncated to integers
+(AccelReadings is int, and (int) 9.81 == 9), but 67 seconds of holding the
+device still across four attitudes -- one of them 2 degrees from the threshold
+-- produced no spurious rotation at all.
+---
+--- a/src/orientation.h	2026-08-28 13:34:06.888178648 +0200
++++ b/src/orientation.h	2026-08-28 14:03:39.720207452 +0200
+@@ -47,6 +47,20 @@
+ 				      int           z,
+ 				      AccelScale    scale);
+ 
++/* As orientation_calc(), but also reports whether the reading actually picked
++ * an orientation. When it did not -- because the device lies flat, or because
++ * both angles are past their threshold and it is on the common border -- prev
++ * is returned and *decided is set to FALSE.
++ *
++ * A caller that debounces over time needs the difference: "no opinion" must
++ * not be counted as "this reading voted to stay where we are". */
++OrientationUp  orientation_calc_full (OrientationUp prev,
++				      int           x,
++				      int           y,
++				      int           z,
++				      AccelScale    scale,
++				      gboolean     *decided);
++
+ Tilt  tilt_calc (Tilt   prev,
+ 	         int        in_x,
+ 	         int        in_y,
+--- a/src/orientation.c	2026-08-28 13:34:06.888165363 +0200
++++ b/src/orientation.c	2026-08-28 14:03:58.057416209 +0200
+@@ -129,11 +129,23 @@
+                   int in_x, int in_y, int in_z,
+                   AccelScale scale)
+ {
++        return orientation_calc_full (prev, in_x, in_y, in_z, scale, NULL);
++}
++
++OrientationUp
++orientation_calc_full (OrientationUp prev,
++                       int in_x, int in_y, int in_z,
++                       AccelScale scale,
++                       gboolean *decided)
++{
+         OrientationUp ret = prev;
+         int x, y, z;
+         int portrait_rotation;
+         int landscape_rotation;
+ 
++        if (decided)
++                *decided = FALSE;
++
+         /* this code expects 1G ~= 256 */
+         x = SCALE(x);
+         y = SCALE(y);
+@@ -148,6 +160,8 @@
+ 
+         /* Portrait check */
+         if (abs(portrait_rotation) > THRESHOLD_PORTRAIT) {
++                if (decided)
++                        *decided = TRUE;
+                 ret = (portrait_rotation > 0) ? ORIENTATION_LEFT_UP : ORIENTATION_RIGHT_UP;
+ 
+                 /* Some threshold to switching between portrait modes */
+@@ -160,6 +174,9 @@
+         } else {
+                 /* Landscape check */
+                 if (abs(landscape_rotation) > THRESHOLD_LANDSCAPE) {
++                        if (decided)
++                                *decided = TRUE;
++
+                         ret = (landscape_rotation > 0) ? ORIENTATION_BOTTOM_UP : ORIENTATION_NORMAL;
+ 
+                         /* Some threshold to switching between landscape modes */
+--- a/src/iio-sensor-proxy.c	2026-08-28 13:34:06.888077919 +0200
++++ b/src/iio-sensor-proxy.c	2026-08-28 14:04:28.967768100 +0200
+@@ -34,6 +34,31 @@
+ 
+ #define NUM_SENSOR_TYPES DRIVER_TYPE_PROXIMITY + 1
+ 
++/* How long a new orientation has to hold before it is believed.
++ *
++ * Without this, a single sample that crosses the threshold rotates the screen,
++ * and a phone flicked between portrait and landscape reports the *opposite*
++ * landscape for 79 ms on the way. Measured on a POCO X3 NFC: while the handset
++ * is moving, the accelerometer reads the hand, not gravity -- the magnitude of
++ * the vector swings between 2.2 and 20.2 m/s^2 within one second, and the angle
++ * derived from it is noise.
++ *
++ * The window is only usable together with orientation_calc_full() below. When
++ * a reading forms no opinion -- the device is flat, or both angles are past
++ * their threshold and it sits on the common border -- the candidate's clock has
++ * to keep running rather than restart, because a handset held near 45 degrees
++ * spends most of its samples in exactly that state. Counting "no opinion" as a
++ * vote to stay put starves the timer: measured on that handset, the longest
++ * uninterrupted run of votes while held near the diagonal was 140 ms, so
++ * anything above that swallowed rotations the user had asked for.
++ *
++ * With that fixed, replaying two recorded traces through orientation_calc()
++ * shows every window from 100 ms to 600 ms removing all the spurious rotations
++ * and keeping all the legitimate ones, so the value is a comfort choice rather
++ * than a correctness one. 400 ms is roughly what stock handsets use.
++ */
++#define ORIENTATION_SETTLE_US (400 * G_TIME_SPAN_MILLISECOND)
++
+ typedef struct {
+ 	GMainLoop *loop;
+ 	GUdevClient *client;
+@@ -56,6 +81,11 @@
+ 	OrientationUp previous_orientation;
+ 	Tilt          previous_tilt;
+ 
++	/* Orientation settle timer: the candidate orientation and the moment it
++	 * first appeared. pending_since == 0 means there is no candidate. */
++	OrientationUp pending_orientation;
++	gint64        pending_since;
++
+ 	/* Light */
+ 	gdouble previous_level;
+ 	gboolean uses_lux;
+@@ -258,6 +288,7 @@
+                 } else {
+ 			data->previous_orientation = ORIENTATION_UNDEFINED;
+ 			data->previous_tilt = TILT_UNDEFINED;
++			data->pending_since = 0;
+ 		}
+ 	}
+ 
+@@ -852,6 +883,7 @@
+ 	SensorData *data = user_data;
+ 	AccelReadings *readings = (AccelReadings *) readings_data;
+ 	OrientationUp orientation;
++	gboolean decided;
+ 	Tilt tilt;
+ 
+ 	//FIXME handle errors
+@@ -859,19 +891,39 @@
+ 		 readings->accel_x, readings->accel_y, readings->accel_z,
+ 		 readings->scale.x, readings->scale.y, readings->scale.z);
+ 
+-	orientation = orientation_calc (data->previous_orientation,
+-					readings->accel_x, readings->accel_y, readings->accel_z,
+-					readings->scale);
+-
+-	if (data->previous_orientation != orientation) {
+-		OrientationUp tmp;
+-
+-		tmp = data->previous_orientation;
+-		data->previous_orientation = orientation;
+-		send_dbus_event (data, PROP_ACCELEROMETER_ORIENTATION);
+-		g_debug ("Emitted orientation changed: from %s to %s",
+-			 orientation_to_string (tmp),
+-			 orientation_to_string (data->previous_orientation));
++	orientation = orientation_calc_full (data->previous_orientation,
++					     readings->accel_x, readings->accel_y, readings->accel_z,
++					     readings->scale, &decided);
++
++	if (!decided) {
++		/* This reading picked nothing. Leave any candidate's clock
++		 * running: near the diagonal most readings land here, and
++		 * restarting on each of them means the timer never fills. */
++	} else if (data->previous_orientation != orientation) {
++		gint64 now = g_get_monotonic_time ();
++
++		if (data->pending_since == 0 ||
++		    data->pending_orientation != orientation) {
++			/* A new candidate. Start its clock. */
++			data->pending_orientation = orientation;
++			data->pending_since = now;
++			g_debug ("Orientation candidate %s, waiting for it to settle",
++				 orientation_to_string (orientation));
++		} else if (now - data->pending_since >= ORIENTATION_SETTLE_US) {
++			OrientationUp tmp;
++
++			tmp = data->previous_orientation;
++			data->previous_orientation = orientation;
++			data->pending_since = 0;
++			send_dbus_event (data, PROP_ACCELEROMETER_ORIENTATION);
++			g_debug ("Emitted orientation changed: from %s to %s",
++				 orientation_to_string (tmp),
++				 orientation_to_string (data->previous_orientation));
++		}
++	} else {
++		/* A reading that actively voted for where we already are:
++		 * the candidate is dead. */
++		data->pending_since = 0;
+ 	}
+ 
+ 	tilt = tilt_calc (data->previous_tilt,

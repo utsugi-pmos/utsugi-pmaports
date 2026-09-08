@@ -1,0 +1,355 @@
+huella: a mainline driver for the Goodix Milan fingerprint sensor
+
+Ports Xiaomi's gf3208/gf_spi.c + platform.c to mainline, in the pure-TEE model
+the reference driver uses on this board: no SPI here, the trusted app does every
+transfer in the secure world. The driver only brings the hardware up and exposes
+/dev/goodix_fp with the ioctls the HAL drives.
+
+Moved from the legacy GPIO and clock names to the device tree and the descriptor
+API: reset and IRQ come from the DT (the measured GPIO 90 and 89), the SE clock
+of spi6 is optional. The empty ioctls of the reference (power, authenticate,
+chip-info) stay empty; INIT and GET_FW_INFO return the zero byte the HAL expects.
+
+Not yet wired to the build config -- it comes up as a node under tlmm on surya.
+The header measurement work behind this is in tasks/020.
+
+
+--- /dev/null
++++ b/drivers/soc/qcom/goodix-fp.c
+@@ -0,0 +1,290 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Goodix Milan (GF3208) fingerprint driver, ported to mainline.
++ *
++ * WHAT IT IS AND IS NOT
++ * ---------------------
++ * This is the pure-TEE model: the driver does NO SPI. Every transfer with the
++ * sensor happens inside the trusted app in the secure world. The driver's whole
++ * job is to bring the hardware up -- power (a no-op on this board), the SPI
++ * controller's clocks, the reset line and the interrupt -- and to expose the
++ * ioctls the HAL drives (/dev/goodix_fp). It is a straight port of Xiaomi's
++ * gf3208/gf_spi.c + platform.c, moved from the legacy GPIO/clk names to the
++ * device tree and the descriptor API that mainline uses.
++ *
++ * The reset and IRQ lines and the SE clock are the ones already measured on
++ * this phone: GPIO 90 reset, 89 interrupt, spi6's GCC_QUPV3_WRAP1_S0_CLK.
++ */
++#include <linux/module.h>
++#include <linux/platform_device.h>
++#include <linux/of.h>
++#include <linux/gpio/consumer.h>
++#include <linux/interrupt.h>
++#include <linux/delay.h>
++#include <linux/clk.h>
++#include <linux/regulator/consumer.h>
++#include <linux/fs.h>
++#include <linux/cdev.h>
++#include <linux/uaccess.h>
++
++#define GF_DEV_NAME	"goodix_fp"
++#define GF_IOC_MAGIC	'g'
++#define GF_IOC_INIT		_IOR(GF_IOC_MAGIC, 0, u8)
++#define GF_IOC_EXIT		_IO(GF_IOC_MAGIC, 1)
++#define GF_IOC_RESET		_IO(GF_IOC_MAGIC, 2)
++#define GF_IOC_ENABLE_IRQ	_IO(GF_IOC_MAGIC, 3)
++#define GF_IOC_DISABLE_IRQ	_IO(GF_IOC_MAGIC, 4)
++#define GF_IOC_ENABLE_SPI_CLK	_IOW(GF_IOC_MAGIC, 5, u32)
++#define GF_IOC_DISABLE_SPI_CLK	_IO(GF_IOC_MAGIC, 6)
++#define GF_IOC_ENABLE_POWER	_IO(GF_IOC_MAGIC, 7)
++#define GF_IOC_DISABLE_POWER	_IO(GF_IOC_MAGIC, 8)
++#define GF_IOC_ENTER_SLEEP_MODE	_IO(GF_IOC_MAGIC, 10)
++#define GF_IOC_GET_FW_INFO	_IOR(GF_IOC_MAGIC, 11, u8)
++#define GF_IOC_REMOVE		_IO(GF_IOC_MAGIC, 12)
++#define GF_IOC_CHIP_INFO	_IOW(GF_IOC_MAGIC, 13, struct gf_ioc_chip_info)
++#define GF_IOC_AUTHENTICATE_START _IO(GF_IOC_MAGIC, 15)
++#define GF_IOC_AUTHENTICATE_END	_IO(GF_IOC_MAGIC, 16)
++
++struct gf_ioc_chip_info {
++	u8 vendor_id;
++	u8 mode;
++	u8 operation;
++	u8 reserved[5];
++};
++
++struct gf_dev {
++	struct device *dev;
++	dev_t devt;
++	struct cdev cdev;
++	struct class *class;
++	struct gpio_desc *reset;
++	struct gpio_desc *irq_gpio;
++	int irq;
++	bool irq_enabled;
++	struct clk *core_clk;	/* the SE clock of spi6 */
++	bool clk_enabled;
++	struct regulator *vdd, *vddio;	/* pm6150l l7 (3.0V) + l8 (1.8V) */
++};
++
++static struct gf_dev *gf;
++
++/* The reference driver's gf_hw_reset: out 0, 3 ms, out 1, settle. */
++static void gf_hw_reset(struct gf_dev *g, unsigned int settle_ms)
++{
++	if (!g->reset)
++		return;
++	gpiod_direction_output(g->reset, 0);
++	mdelay(3);
++	gpiod_set_value(g->reset, 1);
++	mdelay(settle_ms);
++}
++
++static int gf_clk_enable(struct gf_dev *g)
++{
++	int ret;
++
++	if (g->clk_enabled || !g->core_clk)
++		return 0;
++	ret = clk_prepare_enable(g->core_clk);
++	if (ret)
++		return ret;
++	g->clk_enabled = true;
++	return 0;
++}
++
++static void gf_clk_disable(struct gf_dev *g)
++{
++	if (!g->clk_enabled || !g->core_clk)
++		return;
++	clk_disable_unprepare(g->core_clk);
++	g->clk_enabled = false;
++}
++
++static irqreturn_t gf_irq(int irq, void *dev)
++{
++	/* The HAL reads the event over netlink; here we only ack it. */
++	return IRQ_HANDLED;
++}
++
++static long gf_ioctl(struct file *f, unsigned int cmd, unsigned long arg)
++{
++	struct gf_dev *g = f->private_data;
++	u8 zero = 0;
++
++	if (_IOC_TYPE(cmd) != GF_IOC_MAGIC)
++		return -EINVAL;
++
++	switch (cmd) {
++	case GF_IOC_INIT:
++	case GF_IOC_GET_FW_INFO:
++		if (copy_to_user((void __user *)arg, &zero, sizeof(zero)))
++			return -EFAULT;
++		break;
++	case GF_IOC_RESET:
++		gf_hw_reset(g, 3);
++		break;
++	case GF_IOC_ENABLE_IRQ:
++		if (!g->irq_enabled) {
++			enable_irq(g->irq);
++			g->irq_enabled = true;
++		}
++		break;
++	case GF_IOC_DISABLE_IRQ:
++		if (g->irq_enabled) {
++			disable_irq(g->irq);
++			g->irq_enabled = false;
++		}
++		break;
++	case GF_IOC_ENABLE_SPI_CLK:
++		return gf_clk_enable(g);
++	case GF_IOC_DISABLE_SPI_CLK:
++		gf_clk_disable(g);
++		break;
++	case GF_IOC_ENABLE_POWER:
++	case GF_IOC_DISABLE_POWER:
++	case GF_IOC_ENTER_SLEEP_MODE:
++	case GF_IOC_AUTHENTICATE_START:
++	case GF_IOC_AUTHENTICATE_END:
++	case GF_IOC_EXIT:
++	case GF_IOC_REMOVE:
++	case GF_IOC_CHIP_INFO:
++		/* Empty in the reference driver on this board. */
++		break;
++	default:
++		return -EINVAL;
++	}
++	return 0;
++}
++
++static int gf_open(struct inode *inode, struct file *f)
++{
++	f->private_data = gf;
++	return 0;
++}
++
++static int gf_release(struct inode *inode, struct file *f)
++{
++	return 0;
++}
++
++static const struct file_operations gf_fops = {
++	.owner = THIS_MODULE,
++	.unlocked_ioctl = gf_ioctl,
++	.compat_ioctl = gf_ioctl,
++	.open = gf_open,
++	.release = gf_release,
++};
++
++static int gf_probe(struct platform_device *pdev)
++{
++	struct gf_dev *g;
++	int ret;
++
++	g = devm_kzalloc(&pdev->dev, sizeof(*g), GFP_KERNEL);
++	if (!g)
++		return -ENOMEM;
++	g->dev = &pdev->dev;
++	platform_set_drvdata(pdev, g);
++
++	g->reset = devm_gpiod_get(&pdev->dev, "reset", GPIOD_OUT_LOW);
++	if (IS_ERR(g->reset))
++		return dev_err_probe(&pdev->dev, PTR_ERR(g->reset),
++				     "reset gpio\n");
++
++	g->irq_gpio = devm_gpiod_get(&pdev->dev, "irq", GPIOD_IN);
++	if (IS_ERR(g->irq_gpio))
++		return dev_err_probe(&pdev->dev, PTR_ERR(g->irq_gpio),
++				     "irq gpio\n");
++
++	/* Optional: the SE clock. Its absence is not fatal for bring-up. */
++	g->core_clk = devm_clk_get_optional(&pdev->dev, "se");
++	if (IS_ERR(g->core_clk))
++		return dev_err_probe(&pdev->dev, PTR_ERR(g->core_clk), "clk\n");
++
++	/* The sensor's rails: pm6150l l7 (3.0V analog) + l8 (1.8V io). The TA
++	 * reads the chip id over SPI in TrustZone, and that read returns nothing
++	 * unless these are up -- measured: without them detect comes back empty. */
++	g->vdd = devm_regulator_get(&pdev->dev, "vdd");
++	if (IS_ERR(g->vdd))
++		return dev_err_probe(&pdev->dev, PTR_ERR(g->vdd), "vdd\n");
++	g->vddio = devm_regulator_get(&pdev->dev, "vddio");
++	if (IS_ERR(g->vddio))
++		return dev_err_probe(&pdev->dev, PTR_ERR(g->vddio), "vddio\n");
++	ret = regulator_enable(g->vdd);
++	if (ret)
++		return ret;
++	ret = regulator_enable(g->vddio);
++	if (ret)
++		return ret;
++
++	g->irq = gpiod_to_irq(g->irq_gpio);
++	if (g->irq < 0)
++		return g->irq;
++	ret = devm_request_irq(&pdev->dev, g->irq, gf_irq,
++			       IRQF_TRIGGER_RISING | IRQF_NO_AUTOEN,
++			       GF_DEV_NAME, g);
++	if (ret)
++		return ret;
++
++	ret = alloc_chrdev_region(&g->devt, 0, 1, GF_DEV_NAME);
++	if (ret)
++		return ret;
++	cdev_init(&g->cdev, &gf_fops);
++	ret = cdev_add(&g->cdev, g->devt, 1);
++	if (ret)
++		goto err_region;
++
++	g->class = class_create(GF_DEV_NAME);
++	if (IS_ERR(g->class)) {
++		ret = PTR_ERR(g->class);
++		goto err_cdev;
++	}
++	if (IS_ERR(device_create(g->class, NULL, g->devt, g, GF_DEV_NAME))) {
++		ret = -ENODEV;
++		goto err_class;
++	}
++
++	gf = g;
++	gf_hw_reset(g, 10);
++	dev_info(&pdev->dev, "goodix_fp ready (reset+irq+clk)\n");
++	return 0;
++
++err_class:
++	class_destroy(g->class);
++err_cdev:
++	cdev_del(&g->cdev);
++err_region:
++	unregister_chrdev_region(g->devt, 1);
++	return ret;
++}
++
++static void gf_remove(struct platform_device *pdev)
++{
++	struct gf_dev *g = platform_get_drvdata(pdev);
++
++	device_destroy(g->class, g->devt);
++	class_destroy(g->class);
++	cdev_del(&g->cdev);
++	unregister_chrdev_region(g->devt, 1);
++	gf_clk_disable(g);
++	gf = NULL;
++}
++
++static const struct of_device_id gf_of_match[] = {
++	{ .compatible = "goodix,fingerprint" },
++	{ }
++};
++MODULE_DEVICE_TABLE(of, gf_of_match);
++
++static struct platform_driver gf_driver = {
++	.driver = {
++		.name = GF_DEV_NAME,
++		.of_match_table = gf_of_match,
++	},
++	.probe = gf_probe,
++	.remove = gf_remove,
++};
++module_platform_driver(gf_driver);
++
++MODULE_DESCRIPTION("Goodix Milan fingerprint bring-up (TEE model)");
++MODULE_LICENSE("GPL");
+--- a/drivers/soc/qcom/Makefile
++++ b/drivers/soc/qcom/Makefile
+@@ -42,3 +42,4 @@
+ 
+ # Diagnostico temporal de la huella: ver tarea 020. Quitar al cerrarla.
+ obj-y += sonda-ta.o
++obj-y += goodix-fp.o
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -464,3 +464,36 @@
+ &wifi {
+ 	qcom,ath10k-calibration-variant = "xiaomi_surya";
+ };
++
++&tlmm {
++	fp_reset_default: fp-reset-default-state {
++		pins = "gpio90";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-disable;
++	};
++
++	fp_irq_default: fp-irq-default-state {
++		pins = "gpio89";
++		function = "gpio";
++		drive-strength = <2>;
++		bias-pull-down;
++	};
++};
++
++/ {
++	fingerprint {
++		compatible = "goodix,fingerprint";
++		pinctrl-names = "default";
++		pinctrl-0 = <&fp_reset_default>, <&fp_irq_default>;
++
++		reset-gpios = <&tlmm 90 GPIO_ACTIVE_HIGH>;
++		irq-gpios = <&tlmm 89 GPIO_ACTIVE_HIGH>;
++
++		vdd-supply = <&vreg_l7c_3p0>;
++		vddio-supply = <&vreg_l8c_1p8>;
++
++		clocks = <&gcc GCC_QUPV3_WRAP1_S0_CLK>;
++		clock-names = "se";
++	};
++};

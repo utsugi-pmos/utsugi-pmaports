@@ -1,0 +1,155 @@
+# Valhalla CON enlaces de Python, que es lo unico que le falta al de Alpine.
+#
+# POR QUE ESTA RECETA EXISTE
+# --------------------------
+# PocoNav tiene que poder calcular rutas SIN depender de osmscout-server. Hoy
+# depende, y eso no es independencia: es haber cambiado un servidor remoto por
+# uno local ajeno.
+#
+# 'libvalhalla.so' ya esta en el movil -- osmscout-server no hace nada magico,
+# solo la enlaza. El problema es COMO llegar a ella desde PocoNav:
+#
+#   valhalla_service   el servidor HTTP propio de Valhalla. NO se puede: exige
+#                      'prime_server', que Alpine no empaqueta. Por eso la
+#                      receta original lleva -DENABLE_SERVICES=OFF.
+#   cabeceras C++      'valhalla-dev' de Alpine esta VACIO -- comprobado con
+#                      'apk info -L': cero ficheros. Sin ellas no se puede
+#                      compilar nada contra la biblioteca.
+#   enlaces de Python  SI se puede: 'py3-pybind11' esta en los repositorios.
+#
+# Asi que se enciende esa unica opcion. Con ella, PocoNav arranca su propio
+# servidor de rutas en Python y no necesita a nadie mas.
+#
+# Los servicios siguen apagados: no hay 'prime_server' y no hacen falta.
+#
+# ENABLE_DATA_TOOLS SI hay que encenderlo, aunque no se usen las herramientas.
+# Medido: con ella apagada los enlaces de Python compilan pero NO enlazan --
+#
+#   ImportError: Error relocating _valhalla.abi3.so:
+#   valhalla::mjolnir::compute_tileset_build_id: symbol not found
+#
+# El modulo llama a 'mjolnir', que es la biblioteca de teselas, y esa solo se
+# construye con DATA_TOOLS. No es opcional para lo que queremos.
+#
+# Los enlaces usan 'nanobind', que viene dentro del propio arbol de Valhalla, no
+# pybind11. 'py3-pybind11' se deja en makedepends por si alguna version lo
+# vuelve a pedir, pero hoy no se toca.
+maintainer="Bart Ribbers <bribbers@disroot.org>"
+_orig=valhalla
+pkgname=$_orig-utsugi
+pkgver=3.8.3
+pkgrel=1
+# FORK of valhalla. Same files as upstream, so it claims upstream's name with a
+# versioned provides and a replaces: apk then refuses to have both installed and
+# every package that depends on "valhalla" is satisfied by this one.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="Open Source Routing Engine for OpenStreetMap (with Python bindings)"
+url="https://valhalla.readthedocs.io/"
+# riscv64 blocked by luajit
+arch="all !riscv64"
+license="MIT"
+depends_dev="
+	boost-dev
+	curl-dev
+	gtest-dev
+	libspatialite-dev
+	luajit-dev
+	lz4-dev
+	protobuf-dev
+	python3-dev
+	rapidjson-dev
+	sqlite-dev
+	zeromq-dev
+	zlib-dev
+	"
+# geos, openssl y expat solo los pide el bloque de DATA_TOOLS, que Alpine tiene
+# apagado. Por eso no estan en la receta original.
+makedepends="$depends_dev
+	cmake
+	samurai
+	py3-pybind11
+	geos-dev
+	openssl-dev
+	expat-dev
+	"
+checkdepends="bash"
+subpackages="$pkgname-dev $pkgname-doc py3-$pkgname:_py3"
+source="https://dev.alpinelinux.org/archive/valhalla/valhalla-$pkgver.tar.gz"
+builddir="$srcdir/$_orig"
+# check: localedef: command not found
+options="!check"
+
+prepare() {
+	default_prepare
+
+	# DATA_TOOLS exige los ejecutables 'spatialite' y 'spatialite_tool', que
+	# Alpine NO empaqueta -- solo tiene la biblioteca. Sin este parche, cmake ni
+	# siquiera llega a compilar.
+	#
+	# Se puede quitar sin consecuencias AQUI. Su comentario en el CMakeLists dice
+	# para que son: "make sure we can build tz.sqlite", la base de husos horarios.
+	# Esa base se construye a partir de datos de OSM, y nosotros NO construimos
+	# teselas en el movil: las descargamos ya hechas, con su tz.sqlite dentro.
+	#
+	# Lo que se pierde es la capacidad de generar teselas desde cero en este
+	# aparato, que no es algo que un movil vaya a hacer nunca: son horas de CPU y
+	# decenas de gigas de .pbf.
+	sed -i '/spatialite-tools not found/s/FATAL_ERROR/WARNING/' CMakeLists.txt
+}
+
+build() {
+	export CXXFLAGS="$CXXFLAGS -Wno-deprecated-declarations"
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=None \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib \
+		-DBUILD_SHARED_LIBS=TRUE \
+		-DENABLE_WERROR=OFF \
+		-DENABLE_TOOLS=OFF \
+		-DENABLE_DATA_TOOLS=ON \
+		-DENABLE_SERVICES=OFF \
+		-DENABLE_HTTP=ON \
+		-DENABLE_PYTHON_BINDINGS=ON \
+		-DENABLE_CCACHE=OFF \
+		-DENABLE_COVERAGE=OFF \
+		-DENABLE_COMPILER_WARNINGS=ON \
+		-DENABLE_SANITIZERS=OFF \
+		-DENABLE_ADDRESS_SANITIZER=OFF \
+		-DENABLE_UNDEFINED_SANITIZER=OFF \
+		-DENABLE_TESTS=OFF \
+		-DENABLE_SINGLE_FILES_WERROR=OFF \
+		-DENABLE_THREAD_SAFE_TILE_REF_COUNT=OFF \
+		-DProtobuf_PROTOC_EXECUTABLE=/usr/bin/protoc
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+# El modulo de Python en su propio paquete, para poder instalarlo sin arrastrar
+# nada y para que 'apk' sepa que depende de python3.
+_py3() {
+	pkgdesc="$pkgdesc (Python module)"
+	provides="py3-$_orig=$pkgver-r$pkgrel"
+	replaces="py3-$_orig"
+	depends="python3 $pkgname=$pkgver-r$pkgrel"
+	amove usr/lib/python3*/site-packages/valhalla* || true
+}
+
+dev() {
+	default_dev
+	provides="valhalla-dev=$pkgver-r$pkgrel"
+	replaces="valhalla-dev"
+}
+
+doc() {
+	default_doc
+	provides="valhalla-doc=$pkgver-r$pkgrel"
+	replaces="valhalla-doc"
+}
+
+sha512sums="
+cec28bce116742052e7d3f9d2cbddd1368b2f1bd441d3bb050db9d7c6282a2f760f4b518b0493257f650469090ff26fa36e5504c1bfe481eb59bb1dec738b75a  valhalla-3.8.3.tar.gz
+"

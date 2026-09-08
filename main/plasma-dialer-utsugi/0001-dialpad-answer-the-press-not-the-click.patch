@@ -1,0 +1,224 @@
+From 205fc3604cf034e34bd697a9ac965dbc20a87254 Mon Sep 17 00:00:00 2001
+From: Cidwel Highwind <clara2gamma@gmail.com>
+Date: Mon, 24 Aug 2026 23:06:23 +0200
+Subject: [PATCH] dialpad: answer the press, not the click
+
+Qt promotes any second tap that lands inside mouseDoubleClickInterval
+(400 ms by default) to a double click, and it does so per window rather
+than per item: a tap on '2' right after a tap on '1' counts. When that
+happens QQuickAbstractButton emits doubleClicked() and drops clicked()
+altogether, so the dialpad never hears about the key.
+
+Dialling is exactly the workload that trips this. Measured on a
+touchscreen with synthetic taps, six taps 150 ms apart on one key:
+
+    clicked()   1 of 6
+    pressed()   6 of 6
+
+Below the widget everything was intact -- the compositor sent all six
+wl_touch down/up pairs, and MultiPointTouchArea saw all six -- so this
+is not a driver or compositor problem.
+
+Answer pressed() instead. That is also what a dialpad should do: the
+tone belongs to the moment the key goes down.
+
+Long press has to give the digit back now that the press types it:
+holding 1 removes the 1 before calling voicemail, holding 0 replaces the
+0 with +, and the duplicate onHeld handlers on * and # are gone. Neither
+takes anything back during a call, where the DTMF tone has already been
+sent and pad.number is not what is being edited.
+
+The call button still answers clicked(), on purpose: released() fires
+even when the finger slides off the button, and placing a call is not
+something to trigger on a gesture the user was trying to abort.
+---
+ .../src/qml/dialpad/DialerButton.qml          | 12 ++++-
+ .../src/qml/dialpad/DialerIconButton.qml      |  6 ++-
+ plasma-dialer/src/qml/dialpad/Dialpad.qml     | 45 ++++++++++---------
+ 3 files changed, 40 insertions(+), 23 deletions(-)
+
+diff --git a/plasma-dialer/src/qml/dialpad/DialerButton.qml b/plasma-dialer/src/qml/dialpad/DialerButton.qml
+index 98a081a..2450f16 100644
+--- a/plasma-dialer/src/qml/dialpad/DialerButton.qml
++++ b/plasma-dialer/src/qml/dialpad/DialerButton.qml
+@@ -17,7 +17,8 @@ Item {
+     property bool voicemail: false
+     property bool special: false
+ 
+-    signal clicked(string text)
++    // Emitted on press, not on click -- see the AbstractButton below.
++    signal tapped(string text)
+     signal held(string text)
+ 
+     Layout.fillWidth: true
+@@ -35,7 +36,14 @@ Item {
+         id: mouse
+ 
+         anchors.fill: parent
+-        onClicked: root.clicked(parent.text)
++        // A dialpad has to answer the press. Qt turns any second tap that
++        // lands inside mouseDoubleClickInterval (400 ms by default) into a
++        // double click -- even when it lands on a different key -- and
++        // AbstractButton then drops clicked() entirely. Dialling at any
++        // normal speed therefore loses most of the digits: measured on a
++        // touchscreen, six taps 150 ms apart produced one clicked() and six
++        // pressed().
++        onPressed: root.tapped(parent.text)
+         onPressAndHold: root.held(parent.text)
+     }
+ 
+diff --git a/plasma-dialer/src/qml/dialpad/DialerIconButton.qml b/plasma-dialer/src/qml/dialpad/DialerIconButton.qml
+index 5120634..cf3938b 100644
+--- a/plasma-dialer/src/qml/dialpad/DialerIconButton.qml
++++ b/plasma-dialer/src/qml/dialpad/DialerIconButton.qml
+@@ -58,7 +58,11 @@ Item {
+         id: mouse
+ 
+         anchors.fill: parent
+-        onClicked: buttonRoot.pressed()
++        // Same reason as DialerButton: clicked() is dropped whenever a tap
++        // falls inside the double click window, so deleting several digits in
++        // a row only removed the first one. The signal was already named
++        // pressed(); now it actually is one.
++        onPressed: buttonRoot.pressed()
+         onPressAndHold: buttonRoot.pressAndHold()
+     }
+ 
+diff --git a/plasma-dialer/src/qml/dialpad/Dialpad.qml b/plasma-dialer/src/qml/dialpad/Dialpad.qml
+index 23aafb2..ab2edc3 100644
+--- a/plasma-dialer/src/qml/dialpad/Dialpad.qml
++++ b/plasma-dialer/src/qml/dialpad/Dialpad.qml
+@@ -101,17 +101,23 @@ GridLayout {
+         id: one
+ 
+         text: "1"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+         voicemail: showBottomRow // TODO: only show voicemail icon if voicemail number exists
+-        onHeld: !callActive && callVoicemail()
++        onHeld: {
++            if (callActive)
++                return;
++            // The press already typed the digit; take it back before dialling.
++            pad.number = pad.number.slice(0, -1);
++            callVoicemail();
++        }
+     }
+ 
+     DialerButton {
+         text: "2"
+         sub: "ABC"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -119,7 +125,7 @@ GridLayout {
+     DialerButton {
+         text: "3"
+         sub: "DEF"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -127,7 +133,7 @@ GridLayout {
+     DialerButton {
+         text: "4"
+         sub: "GHI"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -135,7 +141,7 @@ GridLayout {
+     DialerButton {
+         text: "5"
+         sub: "JKL"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -143,7 +149,7 @@ GridLayout {
+     DialerButton {
+         text: "6"
+         sub: "MNO"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -151,7 +157,7 @@ GridLayout {
+     DialerButton {
+         text: "7"
+         sub: "PQRS"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -159,7 +165,7 @@ GridLayout {
+     DialerButton {
+         text: "8"
+         sub: "TUV"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -167,7 +173,7 @@ GridLayout {
+     DialerButton {
+         text: "9"
+         sub: "WXYZ"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -176,10 +182,7 @@ GridLayout {
+         display: "＊"
+         text: "*"
+         special: true
+-        onClicked: (text) => {
+-            return onPadNumberPressed(text);
+-        }
+-        onHeld: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+@@ -188,20 +191,22 @@ GridLayout {
+         text: "0"
+         subdisplay: "＋"
+         sub: "+"
+-        onClicked: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+-        onHeld: onPadNumberPressed("+")
++        onHeld: {
++            if (callActive)
++                return;
++            pad.number = pad.number.slice(0, -1);
++            onPadNumberPressed("+");
++        }
+     }
+ 
+     DialerButton {
+         display: "＃"
+         text: "#"
+         special: true
+-        onClicked: (text) => {
+-            return onPadNumberPressed(text);
+-        }
+-        onHeld: (text) => {
++        onTapped: (text) => {
+             return onPadNumberPressed(text);
+         }
+     }
+-- 
+2.53.0
+

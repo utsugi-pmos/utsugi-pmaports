@@ -1,0 +1,37 @@
+name: image
+
+# Build a flashable image from what is PUBLISHED, and attach it to a release.
+on:
+  workflow_dispatch:
+    inputs:
+      device:
+        type: choice
+        options: [surya, vayu]
+        default: surya
+      tag:
+        description: 'release tag, e.g. v2026.09.08'
+  schedule:
+    - cron: '0 3 * * 1'
+
+permissions:
+  contents: write
+
+jobs:
+  image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/pmbootstrap
+        with:
+          abuild-privkey: ${{ secrets.ABUILD_PRIVKEY }}
+      - name: free disk
+        # A full disk image plus its .xz does not fit next to the preinstalled
+        # toolchains on a 14 GB runner.
+        run: |
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc \
+                      /usr/local/.ghcup "$AGENT_TOOLSDIRECTORY" || true
+          df -h /
+      - run: scripts/image --device '${{ inputs.device || ''surya'' }}' ${{ inputs.tag && format('--tag {0}', inputs.tag) || '' }} --release
+        env:
+          GH_TOKEN: ${{ github.token }}
