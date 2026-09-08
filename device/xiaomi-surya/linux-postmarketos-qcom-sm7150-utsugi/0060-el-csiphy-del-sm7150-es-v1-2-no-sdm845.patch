@@ -1,0 +1,132 @@
+El bloque comun del CSIPHY del SM7150 lleva los valores del sdm845
+
+QUE PASA
+--------
+El SM7150 monta un CSIPHY version 1.2. Mainline tiene una tabla de carriles
+propia para el (lane_regs_sm7150), pero el BLOQUE COMUN -los cuatro registros
+que se escriben a mano en csiphy_lanes_enable()- se quedo con los numeros del
+sdm845, que es un CSIPHY 1.0/1.1.
+
+Del driver de Qualcomm del kernel Android del propio surya, en
+cam_sensor_module/cam_csiphy/include/:
+
+    csiphy_common_reg_1_0[]  ->  {0x081C, 0x02}, {0x0800, 0x01, 1ms}, {0x0800, 0x00}
+    csiphy_common_reg_1_1[]  ->  igual
+    csiphy_common_reg_1_2[]  ->  {0x0814, 0xd5, LANE_ENABLE}
+                                 {0x0818, 0x01}
+                                 {0x081C, 0x52}          <-- 0x52, no 0x02
+                                 {0x0800, 0x03, 1ms}     <-- 0x03 y esperar
+                                 {0x0800, 0x02, 2PH}     <-- luego 0x02
+    csiphy_common_reg_1_2_2[]->  igual que la 1.2
+
+Y mainline, en csiphy_lanes_enable():
+
+    ctrl5 (0x814) = 0xd5    coincide
+    ctrl6 (0x818) = 0x01    coincide
+    ctrl7 (0x81C) = 0x02    <-- valor del sdm845
+    ctrl0 (0x800) = 0x00    <-- ni el 0x03 ni la espera de 1 ms
+
+Las direcciones cuadran exactamente: CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(0x800, n)
+es 0x800 + 4n, o sea 0x814, 0x818, 0x81C y 0x800.
+
+POR QUE ENCAJA CON LO MEDIDO
+----------------------------
+En la camara frontal del surya (S5K3T2, 4 carriles D-PHY, CSIPHY1):
+
+  - el sensor emite de verdad: su contador de fotogramas avanza 30 por segundo,
+  - el CSIPHY1 OYE a ese sensor: parando el sensor por I2C con la tuberia en
+    marcha las interrupciones caen de 8700/s a cero, y vuelven al arrancarlo,
+  - y el receptor CSI-2 del CSID no ve NADA: CSI2_RX_IRQ_STATUS = 0x00000000
+    con la mascara abierta del todo. Ni un sincronismo de inicio en ninguno de
+    los cuatro carriles, ni un paquete, ni un error de CRC.
+
+Que fallen los CUATRO carriles a la vez descarta un carril de datos suelto y
+apunta a la configuracion comun del PHY, que es justo lo que este parche
+corrige.
+
+Antes se descarto, con medida: la cuenta de asentamiento (barrida de 16 a 46,
+respuesta plana), las dos posiciones del conmutador MIPI, la alimentacion, y
+-contrastado contra el mismo driver de Qualcomm- lane_enable, lane_assign,
+phy_sel, el tipo de PHY y todos los offsets de registro del CSID.
+
+Los dos valores van ademas como parametros de modulo en 0644, porque en este
+aparato cada reinicio cuesta caro y asi se prueban variantes sin recompilar.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 22:38:47.123645135 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 22:39:20.969498021 +0200
+@@ -1213,6 +1213,20 @@
+ 	return ret;
+ }
+ 
++/*
++ * Ajustables en caliente para poder probar variantes del bloque comun del
++ * CSIPHY sin recompilar ni reiniciar. -1 = lo que corresponda al SoC.
++ */
++static int ctrl7_valor = -1;
++module_param(ctrl7_valor, int, 0644);
++MODULE_PARM_DESC(ctrl7_valor,
++	"Valor de CSI_COMMON_CTRL7 (0x81C). -1 = 0x52 en SM7150, 0x02 en el resto.");
++
++static int secuencia_ctrl0 = -1;
++module_param(secuencia_ctrl0, int, 0644);
++MODULE_PARM_DESC(secuencia_ctrl0,
++	"CTRL0 (0x800): 1 = 0x03, esperar 1 ms, 0x02 (como Qualcomm v1.2). 0 = 0x00 (mainline). -1 = segun SoC.");
++
+ static void csiphy_lanes_enable(struct csiphy_device *csiphy,
+ 				struct csiphy_config *cfg,
+ 				s64 link_freq, u8 lane_mask)
+@@ -1237,13 +1251,51 @@
+ 	writel_relaxed(val, csiphy->base +
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 6));
+ 
+-	val = 0x02;
++	/*
++	 * El SM7150 lleva un CSIPHY v1.2 y estos dos registros del bloque comun
++	 * NO valen lo mismo que en el sdm845 (v1.0/v1.1), que es de donde salen
++	 * los numeros que hay escritos a pelo aqui.
++	 *
++	 * Del driver de Qualcomm del kernel Android del propio surya,
++	 * cam_csiphy_1_2_hwreg.h, csiphy_common_reg_1_2[]:
++	 *
++	 *     {0x0814, 0xd5, ..., CSIPHY_LANE_ENABLE}     <- ctrl5, coincide
++	 *     {0x0818, 0x01, ...}                         <- ctrl6, coincide
++	 *     {0x081C, 0x52, ...}                         <- ctrl7: 0x52, NO 0x02
++	 *     {0x0800, 0x03, delay 1 ms}                  <- ctrl0: 0x03 y esperar
++	 *     {0x0800, 0x02, ..., CSIPHY_2PH_REGS}        <- luego 0x02
++	 *
++	 * Y en las versiones viejas:
++	 *
++	 *     csiphy_common_reg_1_0  ->  {0x081C, 0x02}, {0x0800, 0x01}, {0x0800, 0x00}
++	 *     csiphy_common_reg_1_1  ->  igual
++	 *
++	 * O sea que mainline tiene tabla de carriles propia del SM7150
++	 * (lane_regs_sm7150) pero el bloque comun se quedo con los valores del
++	 * sdm845. Encaja con lo medido: el PHY ve actividad en los carriles
++	 * -para el sensor por I2C y las interrupciones caen a cero- pero no
++	 * consigue un solo sincronismo de inicio, y al CSID no le llega nada.
++	 *
++	 * Los dos valores van como parametros para poder probar variantes en
++	 * caliente: en este movil cada reinicio cuesta caro.
++	 */
++	val = ctrl7_valor >= 0 ? ctrl7_valor :
++	      (csiphy->camss->res->version == CAMSS_7150 ? 0x52 : 0x02);
+ 	writel_relaxed(val, csiphy->base +
+ 		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 7));
+ 
+-	val = 0x00;
+-	writel_relaxed(val, csiphy->base +
+-		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
++	if (secuencia_ctrl0 > 0 ||
++	    (secuencia_ctrl0 < 0 && csiphy->camss->res->version == CAMSS_7150)) {
++		writel_relaxed(0x03, csiphy->base +
++			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
++		usleep_range(1000, 1200);
++		writel_relaxed(0x02, csiphy->base +
++			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
++	} else {
++		val = 0x00;
++		writel_relaxed(val, csiphy->base +
++			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
++	}
+ 
+ 	if (csiphy_is_gen2(csiphy->camss->res->version))
+ 		csiphy_gen2_config_lanes(csiphy, settle_cnt);

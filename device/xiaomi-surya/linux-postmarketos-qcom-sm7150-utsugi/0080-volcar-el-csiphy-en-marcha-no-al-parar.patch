@@ -1,0 +1,104 @@
+DIAGNOSTICO: volcar el CSIPHY EN MARCHA, no al parar
+
+EL FALLO DE MEDIDA QUE CORRIGE
+------------------------------
+El volcado del parche 0079 se hace en csiphy_lanes_disable(), o sea CUANDO EL
+SENSOR YA HA DEJADO DE EMITIR.
+
+Para los bits de ERROR da igual: se quedan enclavados y sobreviven. Pero para
+los de ESTADO no: reflejan el final de la transmision, no la transmision.
+
+Y sobre eso se saco una conclusion equivocada. Se observo que el registro de
+estado del carril de RELOJ (0x794) valia 0x01 tanto emitiendo como mudo -"no se
+inmuta"- mientras los de los carriles de datos si cambiaban, y se tomo como
+indicio de que el sensor no daba reloj de alta velocidad.
+
+Pero es que en los DOS casos se estaba mirando cuando ya no habia nada que ver.
+No era un dato: era el instrumento mirando tarde.
+
+QUE HACE
+--------
+Un parametro que vuelca el espacio del CSIPHY EN CUALQUIER MOMENTO desde el
+espacio de usuario. Asi se puede leer con el sensor transmitiendo de verdad, que
+es la unica forma de contestar la pregunta que queda viva:
+
+    ¿llega el carril de reloj a entrar en alta velocidad?
+
+Si con el sensor emitiendo el estado del carril de reloj sigue igual que en
+reposo, el sensor no esta dando reloj y el problema es del enlace fisico. Si
+cambia, el reloj llega y el fallo esta en el muestreo de los carriles de datos.
+
+Es la primera medida que separa esas dos cosas.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:08:57.514907994 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:09:22.934201082 +0200
+@@ -1060,6 +1060,61 @@
+ MODULE_PARM_DESC(pulso_terminacion,
+ 	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
+ 
++/*
++ * VOLCAR EL PHY EN MARCHA, NO AL PARAR.
++ *
++ * El volcado del 0079 se hace en csiphy_lanes_disable(), o sea CUANDO EL SENSOR
++ * YA HA DEJADO DE EMITIR. Los bits de ERROR sobreviven enclavados, pero los de
++ * ESTADO -como el del carril de reloj- reflejan el final, no la transmision.
++ *
++ * Por eso el registro del carril de reloj salia igual emitiendo que mudo: se
++ * estaba mirando en los dos casos cuando ya no habia nada. Es un fallo de la
++ * medida, no un dato.
++ *
++ * Con esto se puede volcar EN CUALQUIER MOMENTO desde el espacio de usuario,
++ * con el sensor transmitiendo de verdad, que es la unica forma de ver si el
++ * carril de reloj llega a entrar en alta velocidad.
++ */
++static struct csiphy_device *phy_guardado;
++
++static void volcar_phy(struct csiphy_device *csiphy, const char *cuando)
++{
++	int a;
++
++	for (a = 0; a < 0x900; a += 32)
++		dev_info(csiphy->camss->dev,
++			 "csiphy%d %s %03x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
++			 csiphy->id, cuando, a,
++			 readl_relaxed(csiphy->base + a + 0x00),
++			 readl_relaxed(csiphy->base + a + 0x04),
++			 readl_relaxed(csiphy->base + a + 0x08),
++			 readl_relaxed(csiphy->base + a + 0x0c),
++			 readl_relaxed(csiphy->base + a + 0x10),
++			 readl_relaxed(csiphy->base + a + 0x14),
++			 readl_relaxed(csiphy->base + a + 0x18),
++			 readl_relaxed(csiphy->base + a + 0x1c));
++}
++
++static int volcar_ahora_set(const char *val, const struct kernel_param *kp)
++{
++	int ret = param_set_int(val, kp);
++
++	if (!ret && phy_guardado)
++		volcar_phy(phy_guardado, "EN MARCHA");
++
++	return ret;
++}
++
++static const struct kernel_param_ops volcar_ahora_ops = {
++	.set = volcar_ahora_set,
++	.get = param_get_int,
++};
++
++static int volcar_ahora;
++module_param_cb(volcar_ahora, &volcar_ahora_ops, &volcar_ahora, 0644);
++MODULE_PARM_DESC(volcar_ahora,
++	"Escribir cualquier cosa para volcar el CSIPHY AHORA, con el sensor emitiendo.");
++
+ static int volcado_csiphy;
+ module_param(volcado_csiphy, int, 0644);
+ MODULE_PARM_DESC(volcado_csiphy,
+@@ -1298,6 +1353,8 @@
+ 	u8 val, ctrl5;
+ 	int i;
+ 
++	phy_guardado = csiphy;
++
+ 	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
+ 
+ 	val = CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;

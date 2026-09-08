@@ -1,0 +1,147 @@
+Grow the listener input buffer, and name the calls it cannot serve
+
+Two changes, both learned from the first run with writes enabled (0002).
+
+1. The input buffer was a 256-byte array on the stack, and anything longer was
+   refused outright:
+
+       Large (>256B) input buffers aren't implemented
+
+   That held while the file service was read-only -- an input buffer only ever
+   carried a path. It does not hold now: the payload of an fwrite() arrives in
+   that same buffer, and the very first thing the DSP writes is already bigger.
+   The daemon died on it, which kills the sensor PD, which takes the ADSP and
+   the sound card with it.
+
+   Now 64 KiB, allocated once, and if something still does not fit the message
+   says how much was needed instead of just the limit that was hit.
+
+2. A rejected call printed the method number and nothing else. The method
+   number alone does not even say which interface it belongs to -- apps_std
+   method 31 and apps_mem method 31 print identically -- and the interesting
+   part, the path the DSP asked for, was thrown away. Rejections now print the
+   handle, the method, the buffer counts on both sides and the printable
+   content of each input buffer.
+
+diff -urN base-0002/hexagonrpcd/listener.c src/hexagonrpc-0.4.0/hexagonrpcd/listener.c
+--- a/hexagonrpcd/listener.c	2026-08-22 21:36:32.185906566 +0200
++++ b/hexagonrpcd/listener.c	2026-08-22 22:34:28.906505265 +0200
+@@ -30,6 +30,52 @@
+ #include "iobuffer.h"
+ #include "listener.h"
+ 
++/*
++ * The DSP sends the payload of an fwrite() in this buffer, so it has to hold a
++ * whole file the DSP writes back -- the sensor registry's scratch JSON among
++ * them -- and not just a path. 256 bytes were enough while the file service
++ * was read-only; they are not any more.
++ */
++#define LISTENER_INBUF_SIZE	(64 * 1024)
++
++/*
++ * Everything known about a call that could not be served. A method number on
++ * its own is a dead end: it does not say which interface it belongs to, and
++ * the payload is usually the path that names what the DSP was after.
++ */
++static void report_unserved_call(const char *why,
++				 uint32_t handle,
++				 uint32_t sc,
++				 const struct fastrpc_io_buffer *inbufs)
++{
++	uint32_t n_inbufs = REMOTE_SCALARS_INBUFS(sc);
++	uint32_t i, j;
++
++	fprintf(stderr, "%s: handle %u, method %u, %u in, %u out (sc %08x)\n",
++			why,
++			handle,
++			REMOTE_SCALARS_METHOD(sc),
++			n_inbufs,
++			REMOTE_SCALARS_OUTBUFS(sc),
++			sc);
++
++	if (inbufs == NULL)
++		return;
++
++	for (i = 0; i < n_inbufs; i++) {
++		const unsigned char *p = inbufs[i].p;
++
++		fprintf(stderr, "  in[%" PRIu32 "] %" PRIu32 " bytes: ",
++				i, inbufs[i].s);
++
++		/* Printable only, and capped: this goes to the journal. */
++		for (j = 0; j < inbufs[i].s && j < 96; j++)
++			fputc(p[j] >= 0x20 && p[j] < 0x7f ? p[j] : '.', stderr);
++
++		fputc('\n', stderr);
++	}
++}
++
+ static int adsp_listener_init2(int fd)
+ {
+ 	return fastrpc2(&adsp_listener_init2_def, fd, ADSP_LISTENER_HANDLE);
+@@ -142,7 +188,8 @@
+ 				  struct fastrpc_io_buffer **decoded)
+ {
+ 	struct fastrpc_decoder_context *ctx;
+-	char inbufs[256];
++	/* One buffer for the whole run: it is too big to sit on the stack. */
++	static char inbufs[LISTENER_INBUF_SIZE];
+ 	char *outbufs = NULL;
+ 	uint32_t inbufs_len;
+ 	uint32_t outbufs_len;
+@@ -164,7 +211,7 @@
+ 				  *rctx, result,
+ 				  outbufs_len, outbufs,
+ 				  rctx, handle, sc,
+-				  &inbufs_len, 256, inbufs);
++				  &inbufs_len, LISTENER_INBUF_SIZE, inbufs);
+ 	if (ret) {
+ 		if (ret == -1)
+ 			perror("Could not fetch next FastRPC message");
+@@ -174,8 +221,9 @@
+ 		goto err_free_outbufs;
+ 	}
+ 
+-	if (inbufs_len > 256) {
+-		fprintf(stderr, "Large (>256B) input buffers aren't implemented\n");
++	if (inbufs_len > LISTENER_INBUF_SIZE) {
++		fprintf(stderr, "Input buffer of %" PRIu32 " B does not fit in %u B\n",
++				inbufs_len, LISTENER_INBUF_SIZE);
+ 		ret = -1;
+ 		goto err_free_outbufs;
+ 	}
+@@ -228,13 +276,13 @@
+ 	}
+ 
+ 	if (handle >= n_ifaces) {
+-		fprintf(stderr, "Unsupported handle: %u\n", handle);
++		report_unserved_call("Unsupported handle", handle, sc, decoded);
+ 		*result = AEE_EUNSUPPORTED;
+ 		return 1;
+ 	}
+ 
+ 	if (method >= ifaces[handle]->n_procs) {
+-		fprintf(stderr, "Unsupported method: %u (%08x)\n", method, sc);
++		report_unserved_call("Method out of range", handle, sc, decoded);
+ 		*result = AEE_EUNSUPPORTED;
+ 		return 1;
+ 	}
+@@ -242,7 +290,7 @@
+ 	impl = &ifaces[handle]->procs[method];
+ 
+ 	if (impl->def == NULL || impl->impl == NULL) {
+-		fprintf(stderr, "Unsupported method: %u (%08x)\n", method, sc);
++		report_unserved_call("Unimplemented method", handle, sc, decoded);
+ 		*result = AEE_EUNSUPPORTED;
+ 		return 1;
+ 	}
+@@ -254,7 +302,8 @@
+ 
+ 	if (REMOTE_SCALARS_INBUFS(sc) != in_count
+ 	 || REMOTE_SCALARS_OUTBUFS(sc) != out_count) {
+-		fprintf(stderr, "Unexpected buffer count: %08x\n", sc);
++		report_unserved_call("Unexpected buffer count", handle, sc, decoded);
++		fprintf(stderr, "  expected %u in, %u out\n", in_count, out_count);
+ 		*result = AEE_EBADPARM;
+ 		return 1;
+ 	}

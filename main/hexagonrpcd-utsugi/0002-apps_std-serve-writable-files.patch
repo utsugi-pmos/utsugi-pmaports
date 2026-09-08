@@ -1,0 +1,420 @@
+Serve writable files, and survive a call we cannot serve
+
+The sensor registry is not a read-only blob: before the DSP can bring up the
+registry it writes a scratch file next to it,
+
+    /mnt/vendor/persist/sensors/registry/registry/../temp.json
+
+and sns_reg.conf points its 'output=' at the registry directory too. hexagonrpcd
+0.4.0 answers every write-mode fopen() with AEE_EUNSUPPORTED, so registry init
+fails, the sensor PD dies and takes the ADSP -- and the sound card -- with it.
+
+Adds apps_std_fwrite (method 5) and the hexagonfs write path behind it.
+
+Two departures from the version this is based on
+(Sr-0w/hotdog-linux-bringup, aports/main/hexagonrpcd):
+
+  - The open mode is carried through as open(2) flags rather than a bare
+    'create' bool. fopen("w") must truncate; without O_TRUNC a second, shorter
+    write leaves the tail of the first one behind, and a registry file that is
+    valid up to byte N and garbage after it is worse than one that never got
+    written.
+
+  - The listener clears `sc` before continuing past a failed call. `sc` still
+    describes the call that failed, and outbufs_calculate_size() walks
+    REMOTE_SCALARS_OUTBUFS(sc) entries of a `returned` array that is NULL here,
+    so any failed call declaring an output buffer would segfault the daemon.
+
+The Oppo-specific /proc/oppoVersion and /sys/project_info mappings from that
+same patch are left out, and so is its rpcd_builder.c hunk, which is already
+covered by 0001.
+
+Upstream issues: linux-msm/hexagonrpc#19, linux-msm/hexagonrpc#21
+
+diff -urN base-0001/hexagonrpcd/apps_std.c src/hexagonrpc-0.4.0/hexagonrpcd/apps_std.c
+--- a/hexagonrpcd/apps_std.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/apps_std.c	2026-08-22 21:36:32.185871189 +0200
+@@ -20,6 +20,7 @@
+  */
+ 
+ #include <errno.h>
++#include <fcntl.h>
+ #include <stdio.h>
+ #include <stdint.h>
+ #include <string.h>
+@@ -120,6 +121,40 @@
+ 	return 0;
+ }
+ 
++static uint32_t apps_std_fwrite(void *data,
++				const struct fastrpc_io_buffer *inbufs,
++				struct fastrpc_io_buffer *outbufs)
++{
++	struct apps_std_ctx *ctx = data;
++	const struct {
++		uint32_t fd;
++		uint32_t buf_size;
++	} *first_in = inbufs[0].p;
++	struct {
++		uint32_t written;
++		uint32_t is_eof;
++	} *first_out = outbufs[0].p;
++	ssize_t ret;
++
++	ret = hexagonfs_write(ctx->fds, first_in->fd,
++			      first_in->buf_size, inbufs[1].p);
++	if (ret < 0) {
++		fprintf(stderr, "Could not write file: %s\n", strerror(-ret));
++		return AEE_EFAILED;
++	}
++
++#ifdef HEXAGONRPC_VERBOSE
++	printf("write(%u, %u) -> %ld\n", first_in->fd,
++					  first_in->buf_size,
++					  ret);
++#endif
++
++	first_out->written = ret;
++	first_out->is_eof = 0;
++
++	return 0;
++}
++
+ static uint32_t apps_std_fseek(void *data,
+ 			       const struct fastrpc_io_buffer *inbufs,
+ 			       struct fastrpc_io_buffer *outbufs)
+@@ -157,6 +192,7 @@
+ 	struct apps_std_ctx *ctx = data;
+ 	uint32_t *out = outbufs[0].p;
+ 	char rw_mode;
++	int create_flags;
+ 	int dirfd, fd;
+ 
+ 	// The name and environment variable must also be NULL-terminated
+@@ -165,11 +201,22 @@
+ 	 || ((const char *) inbufs[4].p)[inbufs[4].s - 1] != 0)
+ 		return AEE_EBADPARM;
+ 
++	/*
++	 * fopen("w") truncates and fopen("a") appends; both create. Dropping
++	 * the distinction leaves the tail of an earlier, longer write at the
++	 * end of the file, which is worse than refusing to write at all.
++	 */
+ 	rw_mode = ((const char *) inbufs[4].p)[0];
+-	if (rw_mode == 'w' || rw_mode == 'a') {
+-		fprintf(stderr, "Tried to open %s for writing\n",
+-				(const char *) inbufs[3].p);
+-		return AEE_EUNSUPPORTED;
++	switch (rw_mode) {
++	case 'w':
++		create_flags = O_CREAT | O_TRUNC;
++		break;
++	case 'a':
++		create_flags = O_CREAT | O_APPEND;
++		break;
++	default:
++		create_flags = 0;
++		break;
+ 	}
+ 
+ 	if (!strcmp(inbufs[1].p, "ADSP_LIBRARY_PATH")) {
+@@ -188,7 +235,8 @@
+ 		return AEE_EFAILED;
+ 	}
+ 
+-	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, inbufs[3].p);
++	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, dirfd, inbufs[3].p,
++			      create_flags);
+ 	if (fd < 0) {
+ 		fprintf(stderr, "Could not open %s: %s\n",
+ 				(const char *) inbufs[3].p,
+@@ -219,7 +267,8 @@
+ 	if (((const char *) inbufs[1].p)[inbufs[1].s - 1] != 0)
+ 		return AEE_EBADPARM;
+ 
+-	ret = hexagonfs_openat(ctx->fds, ctx->rootfd, ctx->rootfd, inbufs[1].p);
++	ret = hexagonfs_openat(ctx->fds, ctx->rootfd, ctx->rootfd, inbufs[1].p,
++			       0);
+ 	if (ret < 0) {
+ 		fprintf(stderr, "Could not open %s: %s\n",
+ 				(const char *) inbufs[1].p,
+@@ -312,7 +361,8 @@
+ 	if (((const char *) inbufs[1].p)[inbufs[1].s - 1] != 0)
+ 		return AEE_EBADPARM;
+ 
+-	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, ctx->adsp_library_dirfd, pathname);
++	fd = hexagonfs_openat(ctx->fds, ctx->rootfd, ctx->adsp_library_dirfd,
++			      pathname, 0);
+ 	if (fd < 0) {
+ 		fprintf(stderr, "Could not open %s: %s\n",
+ 				pathname, strerror(-fd));
+@@ -372,11 +422,13 @@
+ 	ctx->adsp_avs_cfg_dirfd = hexagonfs_openat(ctx->fds,
+ 						   ctx->rootfd,
+ 						   ctx->rootfd,
+-						   "/vendor/etc/acdbdata/");
++						   "/vendor/etc/acdbdata/",
++						   0);
+ 	ctx->adsp_library_dirfd = hexagonfs_openat(ctx->fds,
+ 						   ctx->rootfd,
+ 						   ctx->rootfd,
+-						   "/usr/lib/qcom/adsp/");
++						   "/usr/lib/qcom/adsp/",
++						   0);
+ 
+ 	iface->data = ctx;
+ 
+@@ -419,7 +471,10 @@
+ 		.def = &apps_std_fread_def,
+ 		.impl = apps_std_fread,
+ 	},
+-	{ .def = NULL, .impl = NULL, },
++	{
++		.def = &apps_std_fwrite_def,
++		.impl = apps_std_fwrite,
++	},
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+ 	{ .def = NULL, .impl = NULL, },
+diff -urN base-0001/hexagonrpcd/hexagonfs.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs.c
+--- a/hexagonrpcd/hexagonfs.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/hexagonfs.c	2026-08-22 21:36:32.185672195 +0200
+@@ -139,7 +139,8 @@
+ 	return ret;
+ }
+ 
+-int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd, const char *name)
++int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd,
++		     const char *name, int create_flags)
+ {
+ 	struct hexagonfs_fd *fd;
+ 	const char *curr = name;
+@@ -169,7 +170,8 @@
+ 		} else if (!strcmp(segment, "..")) {
+ 			fd = pop_dir(fd, fds[rootfd]);
+ 		} else {
+-			ret = fd->ops->openat(fd, segment, expect_dir, &fd);
++			ret = fd->ops->openat(fd, segment, expect_dir,
++					      create_flags, &fd);
+ 		}
+ 
+ 	next:
+@@ -244,6 +246,24 @@
+ 	return fd->ops->read(fd, size, ptr);
+ }
+ 
++ssize_t hexagonfs_write(struct hexagonfs_fd **fds, int fileno,
++			size_t size, const void *ptr)
++{
++	struct hexagonfs_fd *fd;
++
++	if (fileno < 0 || fileno >= HEXAGONFS_MAX_FD)
++		return -EBADF;
++
++	fd = fds[fileno];
++	if (fd == NULL)
++		return -EBADF;
++
++	if (fd->ops->write == NULL)
++		return -EROFS;
++
++	return fd->ops->write(fd, size, ptr);
++}
++
+ int hexagonfs_readdir(struct hexagonfs_fd **fds, int fileno, size_t ent_size, char *ent)
+ {
+ 	struct hexagonfs_fd *fd;
+diff -urN base-0001/hexagonrpcd/hexagonfs.h src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs.h
+--- a/hexagonrpcd/hexagonfs.h	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/hexagonfs.h	2026-08-22 21:36:32.185628543 +0200
+@@ -37,9 +37,11 @@
+ 	int (*openat)(struct hexagonfs_fd *dir,
+ 		      const char *segment,
+ 		      bool expect_dir,
++		      int create_flags,
+ 		      struct hexagonfs_fd **out);
+ 	int (*readdir)(struct hexagonfs_fd *fd, size_t size, char *out);
+ 	ssize_t (*read)(struct hexagonfs_fd *fd, size_t size, void *ptr);
++	ssize_t (*write)(struct hexagonfs_fd *fd, size_t size, const void *ptr);
+ 	int (*stat)(struct hexagonfs_fd *fd, struct stat *stats);
+ 	int (*seek)(struct hexagonfs_fd *fd, off_t off, int whence);
+ };
+@@ -70,8 +72,11 @@
+ extern struct hexagonfs_file_ops hexagonfs_virt_dir_ops;
+ 
+ int hexagonfs_open_root(struct hexagonfs_fd **fds, struct hexagonfs_dirent *root);
+-int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd, const char *name);
++int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd,
++		     const char *name, int create_flags);
+ int hexagonfs_close(struct hexagonfs_fd **fds, int fileno);
++ssize_t hexagonfs_write(struct hexagonfs_fd **fds, int fileno,
++			size_t size, const void *ptr);
+ 
+ int hexagonfs_fstat(struct hexagonfs_fd **fds, int fileno, struct stat *stats);
+ int hexagonfs_lseek(struct hexagonfs_fd **fds, int fileno, off_t pos, int whence);
+diff -urN base-0001/hexagonrpcd/hexagonfs_mapped.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs_mapped.c
+--- a/hexagonrpcd/hexagonfs_mapped.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/hexagonfs_mapped.c	2026-08-22 21:36:32.185792201 +0200
+@@ -61,7 +61,14 @@
+ 	if (dir)
+ 		flags |= O_DIRECTORY;
+ 
+-	ctx->fd = open(name, flags);
++	/*
++	 * The DSP updates some of the files it is served, the sensor registry
++	 * version among them. Prefer read-write and fall back, so a read-only
++	 * mount or a file we may not write still opens.
++	 */
++	ctx->fd = dir ? -1 : open(name, (flags & ~O_ACCMODE) | O_RDWR);
++	if (ctx->fd == -1)
++		ctx->fd = open(name, flags);
+ 	if (ctx->fd == -1) {
+ 		ret = -errno;
+ 		goto err;
+@@ -81,6 +88,7 @@
+ static int mapped_openat(struct hexagonfs_fd *dir,
+ 			 const char *segment,
+ 			 bool expect_dir,
++			 int create_flags,
+ 			 struct hexagonfs_fd **out)
+ {
+ 	struct mapped_ctx *dir_ctx = dir->data;
+@@ -102,7 +110,26 @@
+ 	if (expect_dir)
+ 		flags |= O_DIRECTORY;
+ 
+-	ctx->fd = openat(dir_ctx->fd, segment, flags);
++	/*
++	 * The DSP creates and rewrites files under the directories it is
++	 * served -- the sensor registry among them -- so honour the create
++	 * flags the caller derived from the fopen() mode instead of failing
++	 * the open. Directories are always opened read-only.
++	 *
++	 * A read-only open is still tried read-write first: a file the DSP
++	 * only reads now may be one it writes later, and there is no second
++	 * chance to upgrade the descriptor.
++	 */
++	if (expect_dir)
++		ctx->fd = -1;
++	else
++		ctx->fd = openat(dir_ctx->fd, segment,
++				 (flags & ~O_ACCMODE) | O_RDWR | create_flags,
++				 0644);
++
++	/* Read-only filesystem, or a file we may not write: serve it as-is. */
++	if (ctx->fd == -1)
++		ctx->fd = openat(dir_ctx->fd, segment, flags);
+ 	if (ctx->fd == -1) {
+ 		ret = -errno;
+ 		goto err_free_fd;
+@@ -138,6 +165,19 @@
+ 	return ret;
+ }
+ 
++static ssize_t mapped_write(struct hexagonfs_fd *fd, size_t size,
++			    const void *in)
++{
++	struct mapped_ctx *ctx = fd->data;
++	ssize_t ret;
++
++	ret = write(ctx->fd, in, size);
++	if (ret < 0)
++		return -errno;
++
++	return ret;
++}
++
+ static int mapped_readdir(struct hexagonfs_fd *fd, size_t size, char *out)
+ {
+ 	struct mapped_ctx *ctx = fd->data;
+@@ -236,10 +276,11 @@
+ static int mapped_or_empty_openat(struct hexagonfs_fd *dir,
+ 				  const char *segment,
+ 				  bool expect_dir,
++				  int create_flags,
+ 				  struct hexagonfs_fd **out)
+ {
+ 	if (dir->data)
+-		return mapped_openat(dir, segment, expect_dir, out);
++		return mapped_openat(dir, segment, expect_dir, create_flags, out);
+ 	else
+ 		return -ENOENT;
+ }
+@@ -327,6 +368,7 @@
+ 	.from_dirent = mapped_from_dirent,
+ 	.openat = mapped_openat,
+ 	.read = mapped_read,
++	.write = mapped_write,
+ 	.readdir = mapped_readdir,
+ 	.seek = mapped_seek,
+ 	.stat = mapped_stat,
+diff -urN base-0001/hexagonrpcd/hexagonfs_plat_subtype_name.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs_plat_subtype_name.c
+--- a/hexagonrpcd/hexagonfs_plat_subtype_name.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/hexagonfs_plat_subtype_name.c	2026-08-22 21:36:32.185734803 +0200
+@@ -68,6 +68,7 @@
+ static int plat_subtype_name_openat(struct hexagonfs_fd *dir,
+ 			const char *segment,
+ 			bool expect_dir,
++			int create_flags,
+ 			struct hexagonfs_fd **out)
+ {
+ 	return -ENOTDIR;
+diff -urN base-0001/hexagonrpcd/hexagonfs_virt_dir.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs_virt_dir.c
+--- a/hexagonrpcd/hexagonfs_virt_dir.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/hexagonfs_virt_dir.c	2026-08-22 21:36:32.185712461 +0200
+@@ -63,6 +63,7 @@
+ static int virt_dir_openat(struct hexagonfs_fd *dir,
+ 			   const char *segment,
+ 			   bool expect_dir,
++			   int create_flags,
+ 			   struct hexagonfs_fd **out)
+ {
+ 	const struct hexagonfs_dirent *const **dirlist = dir->data;
+diff -urN base-0001/hexagonrpcd/interfaces/apps_std.def src/hexagonrpc-0.4.0/hexagonrpcd/interfaces/apps_std.def
+--- a/hexagonrpcd/interfaces/apps_std.def	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/interfaces/apps_std.def	2026-08-22 21:34:52.737463248 +0200
+@@ -28,6 +28,7 @@
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(2, apps_std_fflush, 8, 0, 0, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(3, apps_std_fclose, 1, 0, 0, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(4, apps_std_fread, 1, 0, 2, 1)
++HEXAGONRPC_DEFINE_REMOTE_METHOD(5, apps_std_fwrite, 1, 1, 2, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(9, apps_std_fseek, 3, 0, 0, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(19, apps_std_fopen_with_env, 0, 4, 1, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(26, apps_std_opendir, 0, 1, 2, 0)
+diff -urN base-0001/hexagonrpcd/listener.c src/hexagonrpc-0.4.0/hexagonrpcd/listener.c
+--- a/hexagonrpcd/listener.c	2025-08-20 04:30:25.000000000 +0200
++++ b/hexagonrpcd/listener.c	2026-08-22 21:36:32.185906566 +0200
+@@ -309,8 +309,31 @@
+ 		ret = invoke_requested_procedure(n_ifaces, ifaces,
+ 						 handle, sc, &result,
+ 						 decoded, &returned);
+-		if (ret)
+-			break;
++		/*
++		 * A call we cannot serve is the DSP's problem, not ours. The
++		 * error code is already in `result` and travels back on the
++		 * next pass, so keep serving instead of tearing down the whole
++		 * file service -- and with it the sensor PD, and with that the
++		 * ADSP -- over one bad call.
++		 */
++		if (ret) {
++			if (decoded != NULL) {
++				iobuf_free(REMOTE_SCALARS_INBUFS(sc), decoded);
++				decoded = NULL;
++			}
++
++			/*
++			 * `sc` still describes the call that failed, and
++			 * nothing allocated its output buffers. Clear it, or
++			 * the encoder walks a NULL array of them.
++			 */
++			sc = REMOTE_SCALARS_MAKE(0, 0, 0);
++			returned = NULL;
++			n_outbufs = 0;
++			ret = 0;
++
++			continue;
++		}
+ 
+ 		if (decoded != NULL)
+ 			iobuf_free(REMOTE_SCALARS_INBUFS(sc), decoded);

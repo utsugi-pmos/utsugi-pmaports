@@ -1,0 +1,27 @@
+name: lint
+
+# Cheap checks on every change: no chroots, no compiler, no signing key.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  lint:
+    runs-on: ubuntu-24.04
+    container: alpine:edge
+    steps:
+      - run: apk add --no-cache bash git findutils atools
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # the version check compares against the base
+      - run: git config --global --add safe.directory "$GITHUB_WORKSPACE"
+      - name: fork bookkeeping and version bumps
+        run: |
+          base='${{ github.event.pull_request.base.sha }}'
+          [ -n "$base" ] || base='${{ github.event.before }}'
+          if [ -n "$base" ] && [ "$base" != "0000000000000000000000000000000000000000" ]; then
+            scripts/lint --base "$base"
+          else
+            scripts/lint
+          fi

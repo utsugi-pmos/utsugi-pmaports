@@ -1,0 +1,61 @@
+#!/bin/sh
+# Build a flashable postmarketOS image with everything from this repository
+# already installed.
+#
+#   scripts/image --device surya [--tag v2026.09.08] [--release]
+#
+# The image is built from the PUBLISHED repository, not from local packages, so
+# what ships is exactly what a phone would install by hand. Publish first.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+DEVICE=""; TAG="v$(date +%Y.%m.%d)"; RELEASE=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--device) DEVICE="$2"; shift 2 ;;
+		--tag) TAG="$2"; shift 2 ;;
+		--release) RELEASE=1; shift ;;
+		*) die "unknown option: $1" ;;
+	esac
+done
+case "$DEVICE" in
+	surya) PMOS_DEVICE=qcom-sm7150; META=utsugi-surya-full ;;
+	vayu)  PMOS_DEVICE=xiaomi-vayu; META=utsugi-vayu-base ;;
+	*) die "--device must be surya or vayu" ;;
+esac
+grep -q "^pmaports_custom" "$PMB_CFG" || die "nothing published yet: run scripts/publish --push first"
+
+setup_sudo
+OUT="$WORK/release/$TAG-$DEVICE"
+mkdir -p "$OUT"
+
+title "Building the image for $DEVICE ($META, $TAG)"
+pmb config device "$PMOS_DEVICE"
+pmb config ui plasma-mobile
+pmb config service_manager systemd
+pmb zap -y
+# --no-local-pkgs is the point: only packages that are actually published may end
+# up in a release image. The signing key still reaches the phone, because the
+# metapackage depends on utsugi-keys, which carries it.
+pmb install --password 147147 --no-local-pkgs --add "$META"
+pmb export "$OUT"
+
+IMG="$OUT/utsugi-$DEVICE-$TAG.img"
+cp -L "$WORK/chroot_native/home/pmos/rootfs/$PMOS_DEVICE.img" "$IMG"
+title "Compressing"
+xz -T0 -6 -f "$IMG"
+( cd "$OUT" && sha256sum ./*.xz > SHA256SUMS )
+pmb chroot -r -- apk list -I 2>/dev/null | sort > "$OUT/PACKAGES.txt" || true
+cp "$REPO/flash/$DEVICE.md" "$OUT/flash.md"
+green "  $OUT ($(du -sh "$IMG.xz" | cut -f1))"
+
+if [ "$RELEASE" = 1 ]; then
+	command -v gh >/dev/null || die "gh is not installed"
+	title "Publishing the release"
+	gh release create "$TAG-$DEVICE" \
+		--repo "$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')" \
+		--title "utsugi postmarketOS $DEVICE $TAG" \
+		--notes-file "$OUT/flash.md" \
+		"$OUT"/*.xz "$OUT/SHA256SUMS" "$OUT/PACKAGES.txt"
+fi

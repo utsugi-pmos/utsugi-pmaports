@@ -1,0 +1,71 @@
+#!/bin/sh
+# Build aports from this tree with pmbootstrap.
+#
+#   scripts/build <pkg>...            build these
+#   scripts/build --all               build everything in the tree
+#   scripts/build --changed [BASE]    build what changed since BASE (default origin/main)
+#   scripts/build --kernel surya      build that device's kernel (slow; see below)
+#   scripts/build --force <pkg>...    rebuild even if the version already exists
+#
+# The kernel takes minutes and dies with the terminal. Run it detached:
+#   systemd-run --user --unit=utsugi-build scripts/build --kernel surya
+#   journalctl --user -u utsugi-build -f
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+FORCE=""
+case "${1:-}" in
+	--force) FORCE="--force"; shift ;;
+esac
+
+case "${1:-}" in
+	"") die "nothing to build. See the header of $0" ;;
+	--all)     set -- $(all_aports) ;;
+	--changed) shift; set -- $(changed_aports "${1:-origin/main}")
+	           [ $# -gt 0 ] || { green "nothing changed"; exit 0; } ;;
+	--kernel)  [ -n "${2:-}" ] || die "--kernel needs a device (surya, vayu)"
+	           set -- "linux-postmarketos-qcom-$([ "$2" = surya ] && echo sm7150 || echo sm8150)-utsugi" ;;
+esac
+
+setup_sudo
+overlay
+rc=0
+for pkg in "$@"; do
+	d="$(aport_dir "$pkg")" || die "unknown aport: $pkg"
+	[ -n "$d" ] || die "unknown aport: $pkg"
+	ver="$(apkbuild_version "$pkg")"
+	title "$pkg $ver"
+
+	# Verify, never rewrite. A stale checksum here means someone edited a source
+	# file and forgot 'scripts/bump --checksum', and silently rebuilding with the
+	# previous version of that file is exactly the bug that cost a day in 2026-08.
+	if ! pmb checksum --verify "$pkg" >/dev/null 2>&1; then
+		red "  checksums do not match its sources."
+		red "  Fix with: scripts/bump --checksum $pkg"
+		rc=1; continue
+	fi
+
+	if ! pmb build "$pkg" --arch "$ARCH" $FORCE; then
+		# crossdirect loses liblto_plugin.so when the host toolchain and the
+		# chroot's disagree. Building the whole thing inside QEMU is slower but
+		# does not depend on the host compiler at all.
+		grey "  cross build failed, retrying inside QEMU (--no-cross)"
+		if ! python3 "$PMB" -c "$PMB_CFG" -w "$WORK" -p "$APORTS" -y --no-cross \
+		     build "$pkg" --arch "$ARCH" --force; then
+			red "  $pkg FAILED"; rc=1; continue
+		fi
+	fi
+
+	# 'up to date' is a successful exit, so the artifact is what actually proves
+	# the build happened. If it is missing, the version was already in an index
+	# and the pkgrel bump was forgotten.
+	if [ -f "$PKGS/$pkg-$ver.apk" ]; then
+		green "  $PKGS/$pkg-$ver.apk"
+	else
+		red "  no $pkg-$ver.apk in $PKGS"
+		red "  pmbootstrap considered it up to date: bump pkgrel (scripts/bump $pkg)"
+		rc=1
+	fi
+done
+exit $rc

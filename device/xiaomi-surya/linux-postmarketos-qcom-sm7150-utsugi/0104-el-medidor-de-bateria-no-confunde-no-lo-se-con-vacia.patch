@@ -1,0 +1,125 @@
+El medidor de bateria decia 0% y el movil se apagaba solo
+
+QUE PASO
+--------
+El 2026-08-22, a mitad de una sesion de trabajo, el movil se apago solo. No fue
+el cable: `qcom_qg` reportaba capacidad 0 con la celda a 3,57 V -que en litio
+son un 25-30%- y UPower lo presentaba como
+
+    state:      empty
+    percentage: 0
+
+o sea bateria agotada, y de ahi la accion de bateria critica. Y lo peor es que
+se realimenta: al encender desde apagado el medidor vuelve a leer lo mismo.
+
+LAS DOS CAUSAS
+--------------
+1. LA CAPACIDAD SE CALCULA DE OTRO REGISTRO QUE EL VOLTAJE.
+
+   `qcom_qg_get_capacity()` interpola linealmente entre los voltajes de diseno
+   -el propio driver lo admite: "Yes, this function simply calculates the
+   capacity based on the current voltage"- pero lee el PROMEDIO S2 (0x80),
+   mientras que la propiedad `voltage_now` de sysfs lee la ULTIMA MUESTRA DEL
+   ADC (0xc0). Por eso se veia esto, que parece contradictorio y no lo es:
+
+       capacity    = 0
+       voltage_now = 3565555     (daria 16% con la misma formula)
+
+   El promedio lo acumula el hardware. Tras un arranque EN FRIO todavia no
+   tiene muestras y lee cero, y cero se traduce por 0%. Comprobado que un
+   `reboot` NO lo reproduce: el PMIC no se apaga y el promedio sobrevive
+   -medido, `voltage_avg` identico byte a byte antes y despues de reiniciar-.
+   Por eso el sintoma solo aparecio tras el apagon.
+
+2. EL ESTADO ERA SIEMPRE UNKNOWN.
+
+       case POWER_SUPPLY_PROP_STATUS:
+       	val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+
+   Sin mirar nada. UPower combina eso con el porcentaje y presenta la bateria
+   como `empty`.
+
+EL ARREGLO
+----------
+Ninguno de los dos inventa datos:
+
+  - Si el promedio S2 no llega ni al minimo de diseno -o sea, no dice nada
+    creible- se usa la ultima muestra del ADC, que es instantanea y vale desde
+    el primer momento. Es mas ruidosa, y por eso solo se usa entonces.
+
+  - El estado se deduce de la corriente, que el driver ya lee y ya viene con el
+    signo que espera la API: positiva al cargar. Umbral de 50 mA para no bailar
+    entre estados con el ruido en reposo.
+
+LO QUE NO ESTA COMPROBADO
+-------------------------
+No he reproducido el transitorio. Hacerlo exige un apagado COMPLETO, y forzarlo
+es exactamente el riesgo que este parche intenta quitar. Lo que si esta medido
+es cada eslabon: los dos registros distintos, el promedio sobreviviendo al
+reinicio, la formula lineal, y el UNKNOWN incondicional.
+
+La comprobacion pendiente es mirar `capacity` y `status` la proxima vez que el
+movil arranque en frio.
+
+--- a/drivers/power/supply/qcom_qg.c
++++ b/drivers/power/supply/qcom_qg.c
+@@ -95,6 +95,27 @@
+ 		return ret;
+ 	}
+ 
++	/*
++	 * "NO LO SE" NO ES "VACIA".
++	 *
++	 * El promedio S2 lo acumula el hardware, y tras un arranque EN FRIO
++	 * -no un reinicio, que conserva el PMIC- todavia no tiene muestras y
++	 * lee cero. Con cero, la regla de abajo da 0 %, el espacio de usuario
++	 * lo toma por bateria agotada y apaga el movil... que al encender
++	 * vuelve a leer cero. Circulo cerrado.
++	 *
++	 * La ultima lectura del ADC no tiene ese problema: es instantanea y
++	 * vale desde el primer momento. Es mas ruidosa que el promedio, y por
++	 * eso solo se usa cuando el promedio no dice nada creible.
++	 */
++	if (voltage_now < voltage_min) {
++		int ultimo;
++
++		if (!qcom_qg_get_voltage(chip, QG_LAST_ADC_V_DATA0_REG,
++					 &ultimo) && ultimo > voltage_now)
++			voltage_now = ultimo;
++	}
++
+ 	if (voltage_now <= voltage_min)
+ 		*val = 0;
+ 	else if (voltage_now >= voltage_max)
+@@ -127,11 +148,29 @@
+ 				union power_supply_propval *val)
+ {
+ 	struct qcom_qg_chip *chip = power_supply_get_drvdata(psy);
+-	int ret;
++	int ret, temp;
+ 
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+-		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
++		/*
++		 * Decir siempre UNKNOWN tampoco es neutral: UPower lo combina
++		 * con el porcentaje y, si este es bajo o cero, presenta la
++		 * bateria como `empty` y dispara la accion de bateria critica.
++		 *
++		 * La corriente ya basta para saberlo, y el driver la lee: la
++		 * API la quiere positiva al cargar, y aqui ya viene invertida.
++		 * El umbral de 50 mA es para no bailar entre estados con el
++		 * ruido de la medida en reposo.
++		 */
++		ret = qcom_qg_get_current(chip, QG_LAST_ADC_I_DATA0_REG, &temp);
++		if (ret)
++			return ret;
++		if (temp > 50000)
++			val->intval = POWER_SUPPLY_STATUS_CHARGING;
++		else if (temp < -50000)
++			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
++		else
++			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+ 		break;
+ 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+ 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;

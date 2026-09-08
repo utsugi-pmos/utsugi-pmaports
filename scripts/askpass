@@ -1,0 +1,14 @@
+#!/bin/sh
+# sudo -A calls this so it can ask for the password without a terminal.
+# pmbootstrap starts processes with no tty and plain sudo then dies with
+# "a terminal is required to authenticate".
+#
+# The password lives in .local/credentials (gitignored), never in this file.
+[ -n "${PMB_PW:-}" ] || {
+	D="$(cd "$(dirname "$0")/.." && pwd)"
+	for f in "$D/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credenciales.local"; do
+		[ -f "$f" ] && . "$f" && break
+	done
+}
+[ -n "${PMB_PW:-}" ] || { echo "PMB_PW not found in .local/credentials" >&2; exit 1; }
+printf '%s\n' "$PMB_PW"

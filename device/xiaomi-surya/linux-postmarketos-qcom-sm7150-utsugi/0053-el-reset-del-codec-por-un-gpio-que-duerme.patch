@@ -1,0 +1,46 @@
+El pin de reset del wcd937x cuelga del PMIC por SPMI, o sea que escribirlo
+DUERME. El driver usa gpiod_set_value(), que es la variante para pines que no
+duermen, y el kernel avisa:
+
+    WARNING: gpiod_set_value
+    lr : wcd937x_reset+0x28/0x68 [snd_soc_wcd937x]
+         wcd937x_reset+0x44/0x68 [snd_soc_wcd937x]
+         wcd937x_probe+0x264/0x2f0 [snd_soc_wcd937x]
+
+Los dos desplazamientos del aviso son exactamente las dos llamadas de aqui.
+
+Importa mas que un aviso feo. El reset es un pulso con dos esperas de 20-30 us:
+
+    subir el pin ; usleep_range(20,30) ; bajar el pin ; usleep_range(20,30)
+
+Si cada escritura del pin viaja por un bus lento y de duracion variable, el
+pulso no dura lo que el driver cree. Un reset mal aplicado deja al codec sin
+salir del estado inicial, y justo despues aparece en el registro:
+
+    qcom-soundwire 62ef0000.soundwire: qcom_swrm_irq_handler: SWR bus clsh detected
+
+que es un choque en el bus SoundWire. Es la ultima cosa que dice el movil antes
+de congelarse en los arranques que fallan (~25%). Ver
+surya/docs/ARRANQUE-01-no-es-un-cuelgue.md.
+
+gpiod_set_value_cansleep() es la variante correcta para un pin que duerme, y es
+lo que usan el resto de drivers en la misma situacion.
+
+OJO: esto NO esta demostrado como la causa. Es el candidato que sale de la
+evidencia. Se mide con surya/arranque/bucle-reinicios, 20 ciclos con el audio
+arrancando entero, contra la tasa de fallo sin el parche.
+
+--- a/sound/soc/codecs/wcd937x.c
++++ b/sound/soc/codecs/wcd937x.c
+@@ -239,9 +239,9 @@
+
+ static void wcd937x_reset(struct wcd937x_priv *wcd937x)
+ {
+-	gpiod_set_value(wcd937x->reset_gpio, 1);
++	gpiod_set_value_cansleep(wcd937x->reset_gpio, 1);
+ 	usleep_range(20, 30);
+-	gpiod_set_value(wcd937x->reset_gpio, 0);
++	gpiod_set_value_cansleep(wcd937x->reset_gpio, 0);
+ 	usleep_range(20, 30);
+ }
+

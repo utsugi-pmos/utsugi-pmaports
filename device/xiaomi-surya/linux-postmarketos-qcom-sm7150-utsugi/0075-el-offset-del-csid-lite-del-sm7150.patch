@@ -1,0 +1,55 @@
+El CSID lite del SM7150 no esta donde mainline cree
+
+Mainline mete al SM7150 en la misma rama que el SM8250 (Titan 480) para calcular
+la direccion del CSID, que en los dos vive DENTRO de la region del VFE. Para los
+dos CSID normales el numero coincide y esta comprobado:
+
+    vfe0  0x0acaf000 + 0x4000 = 0x0acb3000 = cam_csid0    (DT de Android)
+    vfe1  0x0acb6000 + 0x4000 = 0x0acba000 = cam_csid1
+
+Pero para el LITE usa 0x200, que es el del Titan 480, y en el SM7150 son 0x4000
+como los otros:
+
+    vfe_lite  0x0acc4000 + 0x200  = 0x0acc4200   <- lo que hace mainline
+    cam_csid_lite0                = 0x0acc8000   <- lo que dice Android
+
+o sea que el csid2 apunta DENTRO del VFE lite. Contesta, porque es una region
+de registros valida, pero no es el CSID: cualquier cosa que se le escriba va a
+parar a los registros del VFE lite.
+
+Se separa la rama del SM7150 de la del SM8250 en vez de tocar la constante,
+porque el 0x200 sigue siendo correcto para el Titan 480 de verdad.
+
+Encontrado comparando el device tree de Android del propio surya con el de
+mainline, mientras se buscaba por que ningun sensor entrega un solo simbolo al
+CSID en este SoC.
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -1114,7 +1114,26 @@
+ 
+ 	/* Memory */
+ 
+-	if (camss->res->version == CAMSS_8250 || camss->res->version == CAMSS_7150) {
++	if (camss->res->version == CAMSS_7150) {
++		/*
++		 * En el SM7150 el CSID lite NO esta a 0x200 del VFE lite, sino
++		 * a 0x4000, igual que los otros dos. Del device tree de Android
++		 * del propio movil:
++		 *
++		 *     vfe_lite        0x0acc4000   (mainline, reg-names)
++		 *     cam_csid_lite0  0x0acc8000   (Android, qcom,csid_lite@)
++		 *
++		 * o sea 0x4000 de diferencia, no los 0x200 del Titan 480. Con
++		 * el 0x200 el csid2 apunta DENTRO del VFE lite: contesta,
++		 * porque es una region valida, pero no es el CSID.
++		 *
++		 * Los otros dos si cuadran con el 0x4000 de siempre:
++		 *     vfe0 0x0acaf000 + 0x4000 = 0x0acb3000 = cam_csid0
++		 *     vfe1 0x0acb6000 + 0x4000 = 0x0acba000 = cam_csid1
++		 */
++		csid->base = csid->res->parent_dev_ops->get_base_address(camss, id)
++			+ VFE_480_CSID_OFFSET;
++	} else if (camss->res->version == CAMSS_8250) {
+ 		/* for titan 480, CSID registers are inside the VFE region,
+ 		 * between the VFE "top" and "bus" registers. this requires
+ 		 * VFE to be initialized before CSID

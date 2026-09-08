@@ -1,0 +1,34 @@
+# Co-Maintainer: Aelin <aelin@postmarketos.org>
+# Co-Maintainer: David Wronek <david@mainlining.org>
+maintainer="Danila Tikhonov <danila@jiaxyga.com>"
+_orig=alsa-ucm-conf-qcom-sm7150
+pkgname=$_orig-utsugi
+pkgver=1.2.15.3_git20260513
+pkgrel=6
+# FORK of alsa-ucm-conf-qcom-sm7150. Same files as upstream, so it claims upstream's name with a
+# versioned provides and a replaces: apk then refuses to have both installed and
+# every package that depends on "alsa-ucm-conf-qcom-sm7150" is satisfied by this one.
+pkgdesc="ALSA UCM configuration for SM7150 devices"
+url="https://github.com/sm7150-mainline/alsa-ucm-conf"
+arch="aarch64"
+license="BSD-3-Clause"
+provides="$_orig=$pkgver-r$pkgrel alsa-ucm-conf"
+replaces="$_orig alsa-ucm-conf"
+provider_priority=1
+_commit="4821070589906c1d80c83210639591678c245369"
+source="$_orig-$_commit.tar.gz::https://github.com/sm7150-mainline/alsa-ucm-conf/archive/$_commit.tar.gz
+	0001-surya-microfono-en-el-ucm.patch
+	"
+options="!check"
+builddir="$srcdir/alsa-ucm-conf-$_commit"
+
+package() {
+	# install audio config files
+	mkdir -p "$pkgdir"/usr/share/alsa
+	cp -r ucm2 "$pkgdir"/usr/share/alsa/
+}
+
+sha512sums="
+a9ceda049459bf8e228ac34ddc97ee69187ad7183f48a8bb3df0d513dd6066f0d10cb86e40e5b6e24c88f5152d47fec81f872db9ef6c1e027090198b5ddb1d09  alsa-ucm-conf-qcom-sm7150-4821070589906c1d80c83210639591678c245369.tar.gz
+ecef47027bda51db3c232d5076342bdb151839c1d94b0533d981528ab0ae5ae4895fb75f91c5d9fc70f23ca63f65b88f59289ce94f1df0930b975fe8d5bf8486  0001-surya-microfono-en-el-ucm.patch
+"

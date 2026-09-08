@@ -1,0 +1,25 @@
+# The repository's public key, shipped as a package.
+#
+# It is here because an image built with pmbootstrap only gets the keys from
+# $WORK/config_apk_keys when local packages are enabled, and a release image is
+# built without them on purpose. Carrying the key as a dependency of every
+# metapackage means it reaches the phone by every route: image, manual install
+# and upgrade.
+#
+# The .pub next to this file is a copy of ../../keys/. Do not edit it here.
+pkgname=utsugi-keys
+pkgver=1
+pkgrel=0
+pkgdesc="Public key of the utsugi-pmaports apk repository"
+url="https://github.com/jjolmo/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+source="utsugi-pmaports-6aa024e2.rsa.pub"
+
+package() {
+	install -Dm644 "$srcdir"/*.rsa.pub -t "$pkgdir"/etc/apk/keys/
+}
+sha512sums="
+107a34ef1d9e1820fd93b27db18e46d5f3864cd1b76f9e7b77a7e2d3959c80046f7fdb1d5f9a56ed86479e95727d1da31f4734ee43f71efa1c78e8fe01fa79a7  utsugi-pmaports-6aa024e2.rsa.pub
+"

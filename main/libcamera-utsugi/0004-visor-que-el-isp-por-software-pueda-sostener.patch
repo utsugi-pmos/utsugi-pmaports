@@ -1,0 +1,83 @@
+pipeline: simple: no dar por defecto al visor un tamano que el ISP por software no aguanta
+
+generateConfiguration() escoge el tamano mas grande que la tuberia puede
+producir, para todos los roles, y lo dice el propio comentario:
+
+    /*
+     * Create the stream configurations. Take the first entry in the formats
+     * map as the default, for lack of a better option.
+     *
+     * \todo Implement a better way to pick the default format
+     */
+
+Cuando el revelado va por CPU, ese maximo es la resolucion completa del sensor
+y esta muy por encima del tiempo real. Una aplicacion que no pida tamano propio
+-y plasma-camera no lo pide: entra por Qt6 Multimedia y solicita el rol
+Viewfinder- se queda con un visor inutilizable.
+
+MEDIDO en un SM7150 (Xiaomi POCO X3 NFC) con un IMX682 de 64 Mpx, fotogramas
+por segundo entregados contra tamano de salida:
+
+    2312x1304   (3,0 Mpx)   52,5 fps
+    3840x2160   (8,3 Mpx)   27,5 fps, con caidas a 13,8
+    4624x3472  (16,1 Mpx)    7,2 fps
+    9248x6944  (64,2 Mpx)   inutilizable
+
+Asi que para los roles que son EN VIVO -Viewfinder y VideoRecording- se escoge
+la configuracion de sensor mas grande que quepa en un presupuesto de pixeles.
+StillCapture y Raw se quedan con la resolucion completa, que es justo para lo
+que estan.
+
+Solo se aplica cuando el ISP por software esta en uso. Con un convertidor por
+hardware el maximo sigue siendo razonable y no hay motivo para tocarlo.
+--- a/src/libcamera/pipeline/simple/simple.cpp
++++ b/src/libcamera/pipeline/simple/simple.cpp
+@@ -1489,6 +1489,48 @@
+ 		cfg.pixelFormat = formats.begin()->first;
+ 		cfg.size = formats.begin()->second[0].max;
+ 
++		/*
++		 * Don't default a viewfinder to a size the software ISP cannot
++		 * sustain.
++		 *
++		 * The size above is the largest the pipeline can produce, which
++		 * for a raw sensor is its full resolution. When the debayering
++		 * runs on the CPU that is often far beyond real time, and an
++		 * application that does not request a size of its own ends up
++		 * with an unusable preview.
++		 *
++		 * Measured on an SM7150 phone (Xiaomi POCO X3 NFC) with a 64 MP
++		 * IMX682, delivered frames per second against output size:
++		 *
++		 *     2312x1304   (3.0 MP)   52.5 fps
++		 *     3840x2160   (8.3 MP)   27.5 fps, dropping to 13.8
++		 *     4624x3472  (16.1 MP)    7.2 fps
++		 *     9248x6944  (64.2 MP)   unusable
++		 *
++		 * So pick, for the roles that are meant to be live, the largest
++		 * sensor configuration that stays within a budget. Still capture
++		 * and raw keep the full resolution, which is what they are for.
++		 */
++		if (data->swIsp_ &&
++		    (role == StreamRole::Viewfinder ||
++		     role == StreamRole::VideoRecording)) {
++			constexpr unsigned int kSwIspLivePixelBudget = 4000000;
++			Size live;
++
++			for (const SimpleCameraData::Configuration &c : data->configs_) {
++				unsigned int area = c.captureSize.width *
++						    c.captureSize.height;
++
++				if (area > kSwIspLivePixelBudget)
++					continue;
++				if (area > live.width * live.height)
++					live = c.captureSize;
++			}
++
++			if (!live.isNull() && live < cfg.size)
++				cfg.size = live;
++		}
++
+ 		config->addConfiguration(cfg);
+ 	}
+ 

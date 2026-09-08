@@ -1,0 +1,7 @@
+.local/
+*.apk
+*.img
+*.rsa
+# The private half of the signing key must never be committed.
+*.rsa
+!keys/*.rsa.pub

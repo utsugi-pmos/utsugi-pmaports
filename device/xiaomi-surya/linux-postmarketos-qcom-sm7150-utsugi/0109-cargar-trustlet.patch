@@ -1,0 +1,1826 @@
+La huella: cargar un trusted app desde mainline (QSEOS_APP_START_COMMAND)
+
+POR QUE
+-------
+El sensor de huella solo es alcanzable a traves de su trusted app. Mainline sabe
+BUSCAR una app cargada y MANDARLE comandos:
+
+    qcom_scm_qseecom_app_get_id(nombre, &id)
+    qcom_scm_qseecom_app_send(id, ...)
+
+pero no sabe CARGAR ninguna, asi que solo alcanza las que ya arranco la cadena
+de arranque -- en este movil, unicamente qcom.tz.uefisecapp, de donde salen las
+29 variables EFI. Medido: goodixfp, fpctzapp y keymaster no estan cargados.
+
+Esto anade la carga, que es lo que el driver downstream llama
+QSEOS_APP_START_COMMAND. Los tres argumentos y su significado salen de
+drivers/misc/qseecom.c del kernel de Xiaomi (msm-4.14):
+
+    owner = 50 (QSEE_OS)   svc = 1 (APP_MGR)   cmd = 1 (APP_START)
+    args[0] = mdt_len   solo el .mdt
+    args[1] = img_len   .mdt + todos los .bNN
+    args[2] = direccion FISICA de la imagen
+    exito: result == 0, y data ES el app_id
+
+EL FORMATO DE LA IMAGEN, QUE NO ES EL QUE PARECE
+------------------------------------------------
+QSEECom quiere los ficheros PEGADOS: primero el .mdt entero y detras cada .bNN,
+sin padding y SIN respetar los p_offset de la tabla de segmentos. Es literalmente
+
+    cat app.mdt app.b00 app.b01 ... > imagen
+
+NO es un ELF reconstruido por offsets -- ese formato es el que quiere la otra
+via, IAppLoader. Usar el que no toca falla sin decir por que. Los dos guiones
+estan en huella/: concatenar-trustlet y fusionar-trustlet.
+
+DECISIONES QUE CONVIENE CONOCER
+-------------------------------
+- NO se usa el mempool de SCM: esta limitado a 256 KiB y un trustlet son
+  megabytes. Se pide memoria coherente al vuelo, que ademas es contigua, que es
+  lo que exige pasar una direccion fisica.
+- El NOMBRE de la app no se manda a la TrustZone. El driver downstream lo lleva
+  en su estructura pero nunca lo pone en la llamada: TZ lo saca de la imagen.
+- INCOMPLETE se trata como -ENOTSUPP a proposito. Significa que la app pidio un
+  listener al arrancar y mainline no los implementa; la app queda a medio
+  arrancar y no hay nada util que devolver. Mejor decirlo que aparentar exito.
+- El enum de comandos de APP_MGR va aparte: APP_START tambien vale 1, igual que
+  APP_SEND, pero en OTRO servicio. Meterlos juntos seria decir algo falso.
+
+HABLARLE
+--------
+Con el app_id que devuelve la carga se le pueden mandar comandos, que es lo que
+mainline YA sabia hacer (qcom_scm_qseecom_app_send). El formato sale de
+desensamblar fpc_tac_transfer en el HAL del vendor:
+
+    peticion de 64 bytes, con el ID de comando en la primera palabra
+    respuesta de 64 bytes, justo detras (peticion + 0x40)
+
+    echo "3 1" > /sys/kernel/debug/sonda_ta/hablar
+
+La respuesta se vuelca entera al log porque todavia no se conocen las
+estructuras del TA: verla en crudo es justamente el objetivo.
+
+OJO CON LOS BUFERES: qcom_scm_qseecom_app_send() traduce las direcciones con
+qcom_tzmem_to_phys(), que SOLO vale para memoria del pool de la TrustZone. Un
+buffer de kmalloc da una direccion fisica que no es, y la llamada falla con
+-EINVAL sin mas explicacion. Por eso el envoltorio vive en qcom_scm.c, que es
+donde esta ese pool.
+
+PETICIONES A MEDIDA
+-------------------
+El TA rechaza con el mismo codigo (0xe8500029) cualquier comando del 0 al 24,
+o sea que le falta estructura a la peticion, no que el comando sea desconocido.
+Averiguar que espera es probar formatos, y recompilar un kernel por intento no
+es forma de explorar. Por eso hay un modo crudo que manda los bytes tal cual:
+
+    echo "3 0c00000000000000 04000000 01000000" > /sys/kernel/debug/sonda_ta/crudo
+
+Del HAL sale una pista: sus llamadas reservan datos+12 y escriben una cabecera
+de 12 bytes -- {0x0000000c, 0x00000000, longitud} -- antes de los datos. El
+primer campo es el tamano de la propia cabecera.
+
+COMO SE DISPARA
+---------------
+    cp fpctzapp.img /lib/firmware/
+    echo "fpctzapp.img 7260" > /sys/kernel/debug/sonda_ta/cargar
+    dmesg | tail
+
+RIESGO
+------
+La llamada puede devolver error, y eso es informacion. Si el TA arranca y pide
+un listener, se queda a medias: conviene reiniciar antes de sacar conclusiones
+de una segunda prueba.
+
+--- a/drivers/firmware/qcom/qcom_scm.c
++++ b/drivers/firmware/qcom/qcom_scm.c
+@@ -116,6 +116,15 @@
+ 	QSEECOM_TZ_CMD_APP_LOOKUP		= 3,
+ };
+ 
++/*
++ * Commands of the app manager service (QSEECOM_TZ_SVC_APP_MGR). Note that
++ * APP_START is also 1: same number, different service, so it cannot live in
++ * the enum above without meaning something else.
++ */
++enum qcom_scm_qseecom_tz_cmd_app_mgr {
++	QSEECOM_TZ_CMD_APP_START		= 1,
++};
++
+ enum qcom_scm_qseecom_tz_cmd_info {
+ 	QSEECOM_TZ_CMD_INFO_VERSION		= 3,
+ };
+@@ -2282,6 +2291,533 @@
+ }
+ EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_send);
+ 
++/**
++ * qcom_scm_qseecom_app_load() - Load a QSEE application into the TrustZone.
++ * @img:     Image to load: the .mdt file followed by every .bNN, concatenated.
++ * @mdt_len: Size of the .mdt part alone.
++ * @img_len: Size of the whole concatenation.
++ * @app_id:  Output, the id the TrustZone assigns to the loaded app.
++ *
++ * Mainline can look an app up and send it commands, but until now could not
++ * load one, so only apps the boot chain had already started were reachable.
++ * This adds the load, which is what the downstream driver calls
++ * QSEOS_APP_START_COMMAND.
++ *
++ * The image is passed by physical address and TrustZone reads it directly, so
++ * the buffer must be physically contiguous. The name is deliberately not sent:
++ * TrustZone takes it from the image itself.
++ *
++ * Return: Zero on success, negative errno on failure.
++ */
++int qcom_scm_qseecom_app_load(const void *img, size_t mdt_len, size_t img_len,
++			      u32 *app_id)
++{
++	struct qcom_scm_qseecom_resp res = {};
++	struct qcom_scm_desc desc = {};
++	dma_addr_t img_phys;
++	void *img_buf;
++	int status;
++
++	if (!img || !img_len || mdt_len > img_len)
++		return -EINVAL;
++
++	/*
++	 * Not the SCM mempool: that one is capped at 256K and a trusted app is
++	 * several megabytes.
++	 */
++	img_buf = dma_alloc_coherent(__scm->dev, img_len, &img_phys, GFP_KERNEL);
++	if (!img_buf)
++		return -ENOMEM;
++
++	memcpy(img_buf, img, img_len);
++
++	desc.owner = QSEECOM_TZ_OWNER_QSEE_OS;
++	desc.svc = QSEECOM_TZ_SVC_APP_MGR;
++	desc.cmd = QSEECOM_TZ_CMD_APP_START;
++	desc.arginfo = QCOM_SCM_ARGS(3);
++	desc.args[0] = mdt_len;
++	desc.args[1] = img_len;
++	desc.args[2] = img_phys;
++
++	status = qcom_scm_qseecom_call(&desc, &res);
++
++	dma_free_coherent(__scm->dev, img_len, img_buf, img_phys);
++
++	if (status)
++		return status;
++
++	/*
++	 * INCOMPLETE means the app asked for a listener while starting, and
++	 * mainline has no listener support: the app is half-started and there
++	 * is nothing useful to return. Say so rather than pretend.
++	 */
++	if (res.result == QSEECOM_RESULT_INCOMPLETE)
++		return -ENOTSUPP;
++
++	if (res.result != QSEECOM_RESULT_SUCCESS)
++		return -EINVAL;
++
++	*app_id = res.data;
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_load);
++
++/**
++ * qcom_scm_qseecom_app_talk() - Send one command to a loaded QSEE app.
++ * @app_id:   Id returned when the app was loaded.
++ * @cmd:      Command id, placed in the first word of the request.
++ * @rsp:      Buffer for the reply, copied out on success.
++ * @rsp_size: Size of @rsp.
++ *
++ * qcom_scm_qseecom_app_send() resolves its buffers with qcom_tzmem_to_phys(),
++ * which only works for memory from the TrustZone pool -- a kmalloc'd buffer
++ * yields a bogus physical address and the call fails with -EINVAL. That pool
++ * is private to this file, hence this wrapper.
++ *
++ * The 64/64 layout comes from the vendor HAL's fpc_tac_transfer: a 64-byte
++ * request whose first word is the command, and a 64-byte response after it.
++ *
++ * Return: Zero on success, negative errno on failure.
++ */
++int qcom_scm_qseecom_app_talk(u32 app_id, u32 cmd, void *rsp, size_t rsp_size)
++{
++	const size_t req_len = 64;
++	const size_t rsp_len = 64;
++	int ret;
++
++	if (!rsp || rsp_size < rsp_len)
++		return -EINVAL;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_len + rsp_len,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	memset(buf, 0, req_len + rsp_len);
++	*(u32 *)buf = cmd;
++
++	ret = qcom_scm_qseecom_app_send(app_id, buf, req_len,
++					buf + req_len, rsp_len);
++	if (ret)
++		return ret;
++
++	memcpy(rsp, buf + req_len, rsp_len);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_talk);
++
++/**
++ * qcom_scm_qseecom_app_raw() - Send an arbitrary request to a loaded QSEE app.
++ * @app_id:   Id returned when the app was loaded.
++ * @req:      Request bytes, copied into TrustZone memory.
++ * @req_size: Size of @req.
++ * @rsp:      Buffer for the reply.
++ * @rsp_size: Size of @rsp.
++ *
++ * app_talk() sends a fixed 64/64 layout, which is what the vendor HAL uses for
++ * its simplest calls. Working out what else a trusted app expects means trying
++ * different request shapes, and recompiling a kernel per attempt is no way to
++ * explore. This takes the bytes as given.
++ *
++ * Return: Zero on success, negative errno on failure.
++ */
++int qcom_scm_qseecom_app_raw(u32 app_id, const void *req, size_t req_size,
++			     void *rsp, size_t rsp_size)
++{
++	int ret;
++
++	if (!req || !req_size || !rsp || !rsp_size)
++		return -EINVAL;
++	if (req_size + rsp_size > SZ_16K)
++		return -EINVAL;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_size + rsp_size,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	memcpy(buf, req, req_size);
++	memset(buf + req_size, 0, rsp_size);
++
++	ret = qcom_scm_qseecom_app_send(app_id, buf, req_size,
++					buf + req_size, rsp_size);
++	if (ret)
++		return ret;
++
++	memcpy(rsp, buf + req_size, rsp_size);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_raw);
++
++/**
++ * qcom_scm_qseecom_app_fpc() - Send an FPC-style two-buffer command.
++ * @app_id:  Id of the loaded app.
++ * @group:   FPC command group.
++ * @cmd:     Command within the group.
++ * @extra:   Extra words appended after the header, may be NULL.
++ * @n_extra: How many extra words.
++ * @out:     Receives the command buffer after the call.
++ * @out_len: Size of @out in bytes.
++ *
++ * FPC's trusted app does not read the command from the request. The 64-byte
++ * request is a pointer wrapper:
++ *
++ *     struct { u32 length; u32 v_addr; }
++ *
++ * and the command itself lives in a second buffer:
++ *
++ *     struct { u32 group_id; u32 cmd_id; u32 ret_val; }
++ *
++ * On Android, send_modified_cmd hands the second buffer to the TrustZone as an
++ * ION fd and the driver overwrites the word at offset 4 with its physical
++ * address. Mainline has no such variant -- but the TrustZone memory pool is
++ * already shared with the secure world, so a buffer taken from it has a
++ * physical address the TrustZone can follow, and we can write it there
++ * ourselves.
++ *
++ * Return: Zero on success, negative errno on failure.
++ */
++int qcom_scm_qseecom_app_fpc(u32 app_id, u32 group, u32 cmd,
++			     const u32 *extra, size_t n_extra,
++			     void *out, size_t out_len)
++{
++	const size_t req_len = 64;
++	const size_t rsp_len = 64;
++	const size_t cmd_len = PAGE_SIZE;
++	unsigned long cmdpage;
++	phys_addr_t cmd_phys;
++	u32 *req, *cmdbuf;
++	size_t i;
++	int ret;
++
++	if (out_len > cmd_len)
++		return -EINVAL;
++	if (n_extra > 8)
++		return -EINVAL;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_len + rsp_len,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	/*
++	 * The command buffer is deliberately NOT taken from the TrustZone
++	 * pool: v_addr is 32 bits wide, and the pool can sit above 4G, in
++	 * which case the address handed over is a truncated one pointing
++	 * somewhere else entirely. GFP_DMA32 keeps the page addressable.
++	 *
++	 * Getting this wrong is expensive rather than merely wrong. A trustlet
++	 * that faults on a bad address is killed by QSEE, and from then on it
++	 * cannot even be loaded again -- every call returns -EINVAL until the
++	 * phone reboots. Measured, not feared.
++	 */
++	cmdpage = __get_free_pages(GFP_KERNEL | __GFP_ZERO | GFP_DMA32, 0);
++	if (!cmdpage)
++		return -ENOMEM;
++
++	cmdbuf = (u32 *)cmdpage;
++	cmd_phys = virt_to_phys(cmdbuf);
++
++	memset(buf, 0, req_len + rsp_len);
++	req = buf;
++
++	cmdbuf[0] = group;
++	cmdbuf[1] = cmd;
++	for (i = 0; i < n_extra; i++)
++		cmdbuf[3 + i] = extra ? extra[i] : 0;
++
++	/* The wrapper: size of the command buffer, then where it lives. */
++	req[0] = cmd_len;
++	req[1] = lower_32_bits(cmd_phys);
++
++	dev_info(__scm->dev, "fpc: command buffer at %pa (v_addr %#x)\n",
++		 &cmd_phys, req[1]);
++
++	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
++					buf + req_len, rsp_len);
++
++	/* The TA writes its answer back into the command buffer. */
++	if (!ret) {
++		if (out && out_len)
++			memcpy(out, cmdbuf, out_len);
++		ret = *(s32 *)(buf + req_len);
++	}
++
++	free_pages(cmdpage, 0);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_fpc);
++
++/**
++ * qcom_scm_qseecom_app_fpc_buf() - Send an FPC command carrying a payload.
++ * @app_id:  Id of the loaded app.
++ * @group:   FPC command group.
++ * @cmd:     Command within the group.
++ * @data:    Payload placed after the header.
++ * @len:     Payload size in bytes.
++ * @out:     Receives the command buffer after the call, may be NULL.
++ * @out_len: Size of @out in bytes.
++ *
++ * Same two-buffer protocol as qcom_scm_qseecom_app_fpc(), but the command
++ * buffer is FPC's longer form:
++ *
++ *     struct { u32 group_id; u32 cmd_id; s32 status; u32 length; u8 data[]; }
++ *
++ * which is what the trusted app expects whenever a command carries more than
++ * its own id -- setting the key, loading a database, reading a template out.
++ *
++ * Return: The app's status word, or negative errno on failure.
++ */
++int qcom_scm_qseecom_app_fpc_buf(u32 app_id, u32 group, u32 cmd,
++				 const void *data, size_t len,
++				 void *out, size_t out_len)
++{
++	const size_t req_len = 64;
++	const size_t rsp_len = 64;
++	const size_t cmd_len = PAGE_SIZE;
++	const size_t cabecera = 16;
++	unsigned long cmdpage;
++	phys_addr_t cmd_phys;
++	u32 *req, *cmdbuf;
++	int ret;
++
++	if (len > cmd_len - cabecera || out_len > cmd_len)
++		return -EINVAL;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_len + rsp_len,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	cmdpage = __get_free_pages(GFP_KERNEL | __GFP_ZERO | GFP_DMA32, 0);
++	if (!cmdpage)
++		return -ENOMEM;
++
++	cmdbuf = (u32 *)cmdpage;
++	cmd_phys = virt_to_phys(cmdbuf);
++
++	memset(buf, 0, req_len + rsp_len);
++	req = buf;
++
++	cmdbuf[0] = group;
++	cmdbuf[1] = cmd;
++	cmdbuf[2] = 0;
++	cmdbuf[3] = len;
++	if (data && len)
++		memcpy((u8 *)cmdbuf + cabecera, data, len);
++
++	req[0] = cmd_len;
++	req[1] = lower_32_bits(cmd_phys);
++
++	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
++					buf + req_len, rsp_len);
++	if (!ret) {
++		if (out && out_len)
++			memcpy(out, cmdbuf, out_len);
++		ret = *(s32 *)(buf + req_len);
++	}
++
++	free_pages(cmdpage, 0);
++	return ret;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_fpc_buf);
++
++/**
++ * qcom_scm_qseecom_app_goodix() - Send a command to Goodix's trusted app.
++ * @app_id:  Id of the loaded app.
++ * @arg0:    First field of its command struct.
++ * @cmd:     Command id.
++ * @data:    Payload, may be NULL.
++ * @len:     Payload size.
++ * @out:     Receives the reply, may be NULL.
++ * @out_len: Size of @out, at most 64.
++ *
++ * Goodix's trusted app speaks a different dialect from FPC's, and the layout
++ * is not a guess: it comes straight from the arguments libgf_ca.so passes to
++ * QSEECom_send_modified_cmd, plus the ION descriptor it hands over with it.
++ *
++ *     send_buf = base,        length 0x80
++ *     resp_buf = base + 0x80, length 0x40
++ *     ifd_data.data[0].cmd_buf_offset = 0
++ *
++ * That last line is the whole point. A cmd_buf_offset of zero tells Android's
++ * qseecom driver to overwrite the FIRST word of the request with the physical
++ * address of the shared buffer -- so word 0 is a pointer the app follows, and
++ * whatever userspace wrote there is a placeholder. It is the same trick FPC's
++ * app uses at offset 4, which is why a request built by hand from userspace
++ * can never work for either of them: only the kernel knows the address.
++ *
++ * The command struct then sits at base + 8, with arg0 at +4 and the command id
++ * at +0x18.
++ *
++ * Return: The app's reply status, or negative errno on failure.
++ */
++int qcom_scm_qseecom_app_goodix(u32 app_id, u32 arg0, u32 cmd,
++				const void *data, size_t len,
++				void *out, size_t out_len)
++{
++	const size_t req_len = 0x80;
++	const size_t rsp_len = 0x40;
++	const size_t datos = 0x40;
++	u32 *req, *orden;
++	int ret;
++
++	if (out_len > req_len || len > req_len - datos)
++		return -EINVAL;
++
++	/*
++	 * Request and reply share one allocation, contiguous, because the app
++	 * is handed a single buffer and told the reply lives 0x80 bytes into
++	 * it. Splitting them would put the reply somewhere it will not look.
++	 */
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_len + rsp_len,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	memset(buf, 0, req_len + rsp_len);
++
++	req = buf;
++	orden = buf + 8;
++
++	/* Word 0: the address the app dereferences. */
++	req[0] = lower_32_bits(qcom_tzmem_to_phys(buf));
++
++	orden[1] = arg0;		/* base + 0x0c */
++	orden[6] = cmd;			/* base + 0x20 */
++	orden[7] = len;			/* base + 0x24 */
++	if (data && len)
++		memcpy((u8 *)buf + datos, data, len);
++
++	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
++					buf + req_len, rsp_len);
++	if (ret)
++		return ret;
++
++	/*
++	 * Two different things live in two different places, and conflating
++	 * them is what produced a uniform "reply" before. The command's status
++	 * word is at resp_buf + 4 -- that is where libgf_ca.so reads its return
++	 * value (ldr w, [resp_buf, #4]). Any DATA the app writes back lands in
++	 * the shared command buffer instead. So: return the status from
++	 * resp_buf+4, and hand the caller the command buffer to inspect.
++	 */
++	if (out && out_len)
++		memcpy(out, buf, out_len);
++
++	return *(s32 *)(buf + req_len + 4);
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_goodix);
++
++/**
++ * qcom_scm_qseecom_app_goodix_raw() - Send a caller-built Goodix request.
++ * @app_id:  Id of the loaded app.
++ * @in:      The 0x80-byte request, built by the caller.
++ * @out:     Receives the command buffer after the call (0x80 bytes).
++ * @status:  Receives the status word from resp_buf+4.
++ *
++ * Same transport as qcom_scm_qseecom_app_goodix(), but every field of the
++ * request comes from the caller -- token, sequence, timestamps, the lot. The
++ * kernel only stamps word zero with the buffer's physical address, which is
++ * the one field userspace cannot know. This exists because Goodix's session is
++ * stateful with many fields, and probing them one recompile at a time is no way
++ * to find them; here the whole struct is under userspace control at once.
++ *
++ * Return: Zero on success, negative errno on failure.
++ */
++int qcom_scm_qseecom_app_goodix_raw(u32 app_id, const void *in,
++				    void *out, s32 *status)
++{
++	const size_t req_len = 0x80;
++	const size_t rsp_len = 0x40;
++	u32 *req;
++	int ret;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							req_len + rsp_len,
++							GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	memset(buf, 0, req_len + rsp_len);
++	memcpy(buf, in, req_len);
++
++	req = buf;
++	/* NO word0 stamp: command is self-contained (verified in emulator); */
++	/* stamping makes the TA 2nd MAC over word0..3 fail and return -1.   */
++	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
++					buf + req_len, rsp_len);
++	if (ret)
++		return ret;
++
++	if (out)
++		memcpy(out, buf, rsp_len); /* TA writes its response IN-PLACE over the request (buf+0) */
++	if (status)
++		*status = *(s32 *)(buf + 4);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_goodix_raw);
++
++/*
++ * qcom_scm_qseecom_app_goodix_mod() - Modified command with a data buffer.
++ * Lays out tzmem as [cmd 0x80][rsp 0x40][data], stamps the command at
++ * @cmd_buf_offset with the physical address of the data region -- this is what
++ * QSEECom's ifd/cmd_buf_offset does for commands that reference a buffer (e.g.
++ * DETECT_SENSOR). Session commands carry no data buffer and must NOT stamp.
++ * Hands back the in-place command response and the data region the TA wrote.
++ */
++int qcom_scm_qseecom_app_goodix_mod(u32 app_id, const void *cmd, void *cmd_out,
++				    void *data, size_t datalen,
++				    u32 cmd_buf_offset, s32 *status)
++{
++	const size_t req_len = 0x80;
++	const size_t rsp_len = 0x40;
++	size_t total = req_len + rsp_len + datalen;
++	phys_addr_t dphys;
++	u32 *req;
++	int ret;
++
++	void *buf __free(qcom_tzmem) = qcom_tzmem_alloc(__scm->mempool,
++							total, GFP_KERNEL);
++	if (!buf)
++		return -ENOMEM;
++
++	memset(buf, 0, total);
++	memcpy(buf, cmd, req_len);
++	if (datalen)
++		memcpy(buf + req_len + rsp_len, data, datalen);
++
++	req = buf;
++	dphys = qcom_tzmem_to_phys(buf + req_len + rsp_len);
++	*(u32 *)((u8 *)buf + cmd_buf_offset) = lower_32_bits(dphys);
++	pr_info("sonda_ta: goodixmod word0[%u]=%#x data=%zu bytes\n",
++		cmd_buf_offset, *(u32 *)((u8 *)buf + cmd_buf_offset), datalen);
++
++	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
++					buf + req_len, rsp_len);
++	if (ret)
++		return ret;
++
++	if (cmd_out)
++		memcpy(cmd_out, buf, req_len);
++	if (data && datalen)
++		memcpy(data, buf + req_len + rsp_len, datalen);
++	if (status)
++		*status = *(s32 *)((u8 *)buf + 4);
++
++	return 0;
++}
++EXPORT_SYMBOL_GPL(qcom_scm_qseecom_app_goodix_mod);
++
+ /*
+  * We do not yet support re-entrant calls via the qseecom interface. To prevent
+  + any potential issues with this, only allow validated machines for now.
+--- a/include/linux/firmware/qcom/qcom_scm.h
++++ b/include/linux/firmware/qcom/qcom_scm.h
+@@ -170,6 +170,25 @@
+ #ifdef CONFIG_QCOM_QSEECOM
+ 
+ int qcom_scm_qseecom_app_get_id(const char *app_name, u32 *app_id);
++int qcom_scm_qseecom_app_load(const void *img, size_t mdt_len, size_t img_len,
++			      u32 *app_id);
++int qcom_scm_qseecom_app_talk(u32 app_id, u32 cmd, void *rsp, size_t rsp_size);
++int qcom_scm_qseecom_app_raw(u32 app_id, const void *req, size_t req_size,
++			     void *rsp, size_t rsp_size);
++int qcom_scm_qseecom_app_fpc(u32 app_id, u32 group, u32 cmd,
++			     const u32 *extra, size_t n_extra,
++			     void *out, size_t out_len);
++int qcom_scm_qseecom_app_fpc_buf(u32 app_id, u32 group, u32 cmd,
++				 const void *data, size_t len,
++				 void *out, size_t out_len);
++int qcom_scm_qseecom_app_goodix(u32 app_id, u32 arg0, u32 cmd,
++				const void *data, size_t len,
++				void *out, size_t out_len);
++int qcom_scm_qseecom_app_goodix_raw(u32 app_id, const void *in,
++				    void *out, s32 *status);
++int qcom_scm_qseecom_app_goodix_mod(u32 app_id, const void *cmd, void *cmd_out,
++				    void *data, size_t datalen,
++				    u32 cmd_buf_offset, s32 *status);
+ int qcom_scm_qseecom_app_send(u32 app_id, void *req, size_t req_size,
+ 			      void *rsp, size_t rsp_size);
+ 
+@@ -179,6 +187,32 @@
+ {
+ 	return -EINVAL;
+ }
++
++static inline int qcom_scm_qseecom_app_load(const void *img, size_t mdt_len,
++					    size_t img_len, u32 *app_id)
++{
++	return -EINVAL;
++}
++
++static inline int qcom_scm_qseecom_app_talk(u32 app_id, u32 cmd, void *rsp,
++					    size_t rsp_size)
++{
++	return -EINVAL;
++}
++
++static inline int qcom_scm_qseecom_app_raw(u32 app_id, const void *req,
++					   size_t req_size, void *rsp,
++					   size_t rsp_size)
++{
++	return -EINVAL;
++}
++
++static inline int qcom_scm_qseecom_app_fpc(u32 app_id, u32 group, u32 cmd,
++					   const u32 *extra, size_t n_extra,
++					   void *out, size_t out_len)
++{
++	return -EINVAL;
++}
+ 
+ static inline int qcom_scm_qseecom_app_send(u32 app_id,
+ 					    void *req, size_t req_size,
+--- a/drivers/soc/qcom/Makefile
++++ b/drivers/soc/qcom/Makefile
+@@ -40,3 +40,6 @@
+ obj-$(CONFIG_QCOM_INLINE_CRYPTO_ENGINE)	+= qcom_ice.o
+ obj-$(CONFIG_QCOM_PBS) +=	qcom-pbs.o
+ obj-$(CONFIG_QCOM_UBWC_CONFIG) += ubwc_config.o
++
++# Diagnostico temporal de la huella: ver tarea 020. Quitar al cerrarla.
++obj-y += sonda-ta.o
+--- /dev/null
++++ b/drivers/soc/qcom/sonda-ta.c
+@@ -0,0 +1,1108 @@
++// SPDX-License-Identifier: GPL-2.0
++/*
++ * Diagnostic: ask the TrustZone whether a given trustlet is loaded.
++ *
++ * The fingerprint sensor is only reachable through its trusted app; every
++ * direct route to its bus is measured shut (task 020). But mainline can talk
++ * to a QSEECom app that is ALREADY loaded:
++ *
++ *      qcom_scm_qseecom_app_get_id(name, &id)   -- resolve name to id
++ *      qcom_scm_qseecom_app_send(id, ...)       -- send it a command
++ *
++ * What mainline lacks is the load operation. So the question worth answering
++ * before writing any of that is simply: is it loaded already? On Android,
++ * qseecomd loads these at boot; postmarketOS has no qseecomd, but the boot
++ * chain may well have loaded some itself.
++ *
++ * Reading is harmless: an unknown name just returns an error.
++ *
++ *      cat /sys/kernel/debug/sonda_ta/estado
++ */
++
++#include <linux/debugfs.h>
++#include <linux/firmware.h>
++#include <linux/slab.h>
++#include <linux/string.h>
++#include <linux/hex.h>
++#include <linux/unaligned.h>
++#include <linux/clk.h>
++#include <linux/of_clk.h>
++#include <linux/of.h>
++#include <linux/gpio/consumer.h>
++#include <linux/gpio/driver.h>
++#include <linux/interrupt.h>
++#include <linux/delay.h>
++#include <linux/init.h>
++#include <linux/kernel.h>
++#include <linux/seq_file.h>
++#include <linux/firmware/qcom/qcom_scm.h>
++
++/* The two the phone ships, plus known-loaded ones as controls. */
++/*
++ * QTEE names its apps with a "qcom.tz." prefix -- the uefisecapp driver header
++ * says so: "Client driver for Qualcomm UEFI Secure Application
++ * (qcom.tz.uefisecapp)". Asking for the bare name returns -ENOENT for
++ * everything, control included, which is a broken probe rather than a result.
++ * Both spellings are tried so the answer cannot be blamed on the prefix.
++ */
++static const char * const nombres[] = {
++	/* CONTROL: this one is known to work -- the EFI variables come from it. */
++	"qcom.tz.uefisecapp",
++	"uefisecapp",
++	/* El sensor de huella, las dos variantes de fabrica. */
++	"qcom.tz.goodixfp",
++	"goodixfp",
++	"qcom.tz.fpctzapp",
++	"fpctzapp",
++	/* Mas controles, de los que suele cargar el arranque. */
++	"qcom.tz.keymaster",
++	"qcom.tz.qwes",
++};
++
++static int sonda_ta_show(struct seq_file *s, void *sin_usar)
++{
++	int i;
++
++	for (i = 0; i < ARRAY_SIZE(nombres); i++) {
++		u32 id = 0;
++		int ret = qcom_scm_qseecom_app_get_id(nombres[i], &id);
++
++		if (ret)
++			seq_printf(s, "%-12s no: %d\n", nombres[i], ret);
++		else
++			seq_printf(s, "%-12s CARGADO, app_id=%u\n",
++				   nombres[i], id);
++	}
++
++	return 0;
++}
++DEFINE_SHOW_ATTRIBUTE(sonda_ta);
++
++/*
++ * Asking by name: write a name here and the TrustZone is asked whether it has
++ * an app so called.
++ *
++ *   echo qcom.tz.keymaster > /sys/kernel/debug/sonda_ta/buscar
++ *
++ * `estado` above carries a fixed list, which was fine while the question was
++ * "is the fingerprint TA loaded". It stops being fine as soon as the name is
++ * the unknown -- keymaster is loaded by the bootloader under a name nobody
++ * here knows, and finding it by rebuilding the kernel once per guess is not a
++ * way to search.
++ */
++static ssize_t sonda_buscar_write(struct file *f, const char __user *ubuf,
++				  size_t len, loff_t *off)
++{
++	char *buf, *nombre;
++	u32 id = 0;
++	int ret;
++
++	if (len >= 128)
++		return -EINVAL;
++
++	buf = memdup_user_nul(ubuf, len);
++	if (IS_ERR(buf))
++		return PTR_ERR(buf);
++
++	nombre = strim(buf);
++	ret = qcom_scm_qseecom_app_get_id(nombre, &id);
++	if (ret)
++		pr_info("sonda_ta: buscar '%s' -> no: %d\n", nombre, ret);
++	else
++		pr_info("sonda_ta: buscar '%s' -> CARGADO, app_id=%u\n",
++			nombre, id);
++
++	kfree(buf);
++	return len;
++}
++
++/*
++ * The fingerprint sensor hangs off spi6 (0xa80000, function qup10 on pins
++ * 59-62), whose SE clock is GCC_QUPV3_WRAP1_S0_CLK. On this kernel that clock
++ * is registered, off, and has no consumer at all -- `deviceless` in
++ * clk_summary -- because no SPI node claims the controller: it belongs to the
++ * secure world.
++ *
++ * Which raises the question this knob exists to answer. The TrustZone may well
++ * turn its own clock on; or it may assume the HLOS left it running, in which
++ * case its register accesses land on an unclocked block, and an unclocked
++ * register access is exactly the kind of fault that gets a trustlet killed --
++ * which is what every command that reaches the sensor does here.
++ *
++ *   echo on  > /sys/kernel/debug/sonda_ta/relojes
++ *   echo off > /sys/kernel/debug/sonda_ta/relojes
++ *
++ * Only GCC registers are touched, never the controller's own: reading those
++ * from here is what hung the CPU the first time round.
++ */
++#define GCC_QUPV3_WRAP1_CORE_2X_CLK	75
++#define GCC_QUPV3_WRAP1_CORE_CLK	76
++#define GCC_QUPV3_WRAP1_S0_CLK		77
++#define GCC_QUPV3_WRAP_1_M_AHB_CLK	95
++#define GCC_QUPV3_WRAP_1_S_AHB_CLK	96
++
++static const unsigned int sonda_relojes_spi6[] = {
++	/* AHB (interface) clocks first: without them the QUP wrapper's SE
++	 * registers can't be reached -- not by HLOS and not by QSEE when the TA
++	 * opens the secure SPI. These were missing before. S0 (the SE) stays LAST
++	 * so ARRAY_SIZE-1 still points to it for the rate logic. */
++	GCC_QUPV3_WRAP_1_M_AHB_CLK,
++	GCC_QUPV3_WRAP_1_S_AHB_CLK,
++	GCC_QUPV3_WRAP1_CORE_2X_CLK,
++	GCC_QUPV3_WRAP1_CORE_CLK,
++	GCC_QUPV3_WRAP1_S0_CLK,
++};
++
++static struct clk *sonda_relojes[ARRAY_SIZE(sonda_relojes_spi6)];
++static bool sonda_relojes_puestos;
++static unsigned long sonda_relojes_rate = 19200000;
++
++static struct clk *sonda_pillar_reloj(unsigned int indice)
++{
++	struct of_phandle_args spec = {};
++	struct device_node *gcc;
++	struct clk *clk;
++
++	gcc = of_find_compatible_node(NULL, NULL, "qcom,sm7150-gcc");
++	if (!gcc)
++		return ERR_PTR(-ENODEV);
++
++	spec.np = gcc;
++	spec.args_count = 1;
++	spec.args[0] = indice;
++
++	clk = of_clk_get_from_provider(&spec);
++	of_node_put(gcc);
++
++	return clk;
++}
++
++static void sonda_relojes_soltar(void)
++{
++	int i;
++
++	if (!sonda_relojes_puestos)
++		return;
++
++	for (i = ARRAY_SIZE(sonda_relojes_spi6) - 1; i >= 0; i--) {
++		if (IS_ERR_OR_NULL(sonda_relojes[i]))
++			continue;
++		clk_disable_unprepare(sonda_relojes[i]);
++		clk_put(sonda_relojes[i]);
++		sonda_relojes[i] = NULL;
++	}
++
++	sonda_relojes_puestos = false;
++	pr_info("sonda_ta: relojes de spi6 apagados\n");
++}
++
++static int sonda_relojes_poner(void)
++{
++	int i, ret;
++
++	if (sonda_relojes_puestos)
++		return 0;
++
++	for (i = 0; i < ARRAY_SIZE(sonda_relojes_spi6); i++) {
++		sonda_relojes[i] = sonda_pillar_reloj(sonda_relojes_spi6[i]);
++		if (IS_ERR(sonda_relojes[i])) {
++			ret = PTR_ERR(sonda_relojes[i]);
++			pr_err("sonda_ta: no hay reloj %u: %d\n",
++			       sonda_relojes_spi6[i], ret);
++			sonda_relojes[i] = NULL;
++			goto atras;
++		}
++
++		ret = clk_prepare_enable(sonda_relojes[i]);
++		if (ret) {
++			pr_err("sonda_ta: el reloj %u no enciende: %d\n",
++			       sonda_relojes_spi6[i], ret);
++			clk_put(sonda_relojes[i]);
++			sonda_relojes[i] = NULL;
++			goto atras;
++		}
++	}
++
++	/* The SE clock (WRAP1_S0) sets the SPI bit rate. QSEE drives the SE from
++	 * the secure world but cannot set clock rates -- that is HLOS's job. With
++	 * no rate the bus does not clock and the sensor never answers. Goodix runs
++	 * the SE around 19.2 MHz. Settable live via `echo "rate <hz>" > relojes`. */
++	if (sonda_relojes[ARRAY_SIZE(sonda_relojes_spi6) - 1]) {
++		struct clk *se = sonda_relojes[ARRAY_SIZE(sonda_relojes_spi6) - 1];
++		ret = clk_set_rate(se, sonda_relojes_rate);
++		pr_info("sonda_ta: SE clock rate pedido %lu -> real %lu (ret %d)\n",
++			sonda_relojes_rate, clk_get_rate(se), ret);
++	}
++
++	sonda_relojes_puestos = true;
++	pr_info("sonda_ta: relojes de spi6 encendidos\n");
++	return 0;
++
++atras:
++	sonda_relojes_puestos = true;	/* para que soltar() limpie lo hecho */
++	sonda_relojes_soltar();
++	return ret;
++}
++
++/*
++ * Prepare the sensor's hardware the way Goodix's kernel driver does before the
++ * trusted app is expected to reach it. The driver (gf3208/gf_spi.c) is a
++ * platform driver in the TEE model: it does no SPI itself, it only powers,
++ * clocks, resets and arms the IRQ, and the secure world does the transfers.
++ * Its power hook is empty on this board, so the sequence is:
++ *
++ *   1. turn on spi6's clocks
++ *   2. pulse FP_RESET_N (out 0, 3 ms, out 1), the driver's gf_hw_reset
++ *   3. arm the IRQ on FP_INT_N
++ *
++ * This is a probe, not the port: if the trustlet stops answering -1 once the
++ * hardware is in this state, the driver is worth porting for real. The reset
++ * and IRQ lines are the ones already measured -- 90 and 89.
++ */
++/*
++ * The reset and interrupt lines by chip offset, not global number. The tlmm's
++ * global base is assigned dynamically, so gpio_request(90) reaches the wrong
++ * pin -- the descriptor API takes the chip and the offset (90, 89) straight.
++ */
++#define GOODIX_TLMM_LABEL	"3500000.pinctrl"
++#define GOODIX_RESET_OFFSET	90
++#define GOODIX_IRQ_OFFSET	89
++
++static struct gpio_desc *sonda_goodix_rst;
++static struct gpio_desc *sonda_goodix_int;
++static int sonda_goodix_irq;
++
++static irqreturn_t sonda_goodix_isr(int irq, void *dev)
++{
++	pr_info("sonda_ta: goodix IRQ (FP_INT_N)\n");
++	return IRQ_HANDLED;
++}
++
++static struct gpio_desc *sonda_pillar_linea(unsigned int offset, const char *con)
++{
++	struct gpio_device *gdev;
++	struct gpio_desc *desc;
++
++	gdev = gpio_device_find_by_label(GOODIX_TLMM_LABEL);
++	if (!gdev)
++		return ERR_PTR(-ENODEV);
++
++	desc = gpio_device_get_desc(gdev, offset);
++	gpio_device_put(gdev);
++	return desc;
++}
++
++static int sonda_preparar_goodix(void)
++{
++	int ret;
++
++	ret = sonda_relojes_poner();
++	if (ret)
++		return ret;
++
++	if (!sonda_goodix_rst) {
++		sonda_goodix_rst = sonda_pillar_linea(GOODIX_RESET_OFFSET, "reset");
++		if (IS_ERR(sonda_goodix_rst)) {
++			ret = PTR_ERR(sonda_goodix_rst);
++			sonda_goodix_rst = NULL;
++			pr_err("sonda_ta: no hay linea de reset: %d\n", ret);
++			return ret;
++		}
++	}
++	if (!sonda_goodix_int) {
++		sonda_goodix_int = sonda_pillar_linea(GOODIX_IRQ_OFFSET, "irq");
++		if (IS_ERR(sonda_goodix_int)) {
++			ret = PTR_ERR(sonda_goodix_int);
++			sonda_goodix_int = NULL;
++			pr_err("sonda_ta: no hay linea de irq: %d\n", ret);
++			return ret;
++		}
++	}
++
++	/* gf_hw_reset: out 0, 3 ms, out 1, then settle. */
++	gpiod_direction_output(sonda_goodix_rst, 0);
++	mdelay(3);
++	gpiod_set_value(sonda_goodix_rst, 1);
++	mdelay(10);
++
++	gpiod_direction_input(sonda_goodix_int);
++	if (!sonda_goodix_irq) {
++		sonda_goodix_irq = gpiod_to_irq(sonda_goodix_int);
++		if (sonda_goodix_irq < 0) {
++			ret = sonda_goodix_irq;
++			sonda_goodix_irq = 0;
++			pr_err("sonda_ta: gpiod_to_irq: %d\n", ret);
++			return ret;
++		}
++		ret = request_irq(sonda_goodix_irq, sonda_goodix_isr,
++				  IRQF_TRIGGER_RISING, "goodix_fp", NULL);
++		if (ret) {
++			pr_err("sonda_ta: request_irq: %d\n", ret);
++			sonda_goodix_irq = 0;
++			return ret;
++		}
++	}
++
++	pr_info("sonda_ta: hardware de goodix preparado (clk+reset+irq)\n");
++	return 0;
++}
++
++static ssize_t sonda_preparar_write(struct file *f, const char __user *ubuf,
++				    size_t len, loff_t *off)
++{
++	int ret = sonda_preparar_goodix();
++
++	return ret ? ret : len;
++}
++
++static const struct file_operations sonda_preparar_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_preparar_write,
++	.llseek = noop_llseek,
++};
++
++static ssize_t sonda_relojes_write(struct file *f, const char __user *ubuf,
++				   size_t len, loff_t *off)
++{
++	char buf[32];
++	unsigned long hz;
++	int ret;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sysfs_streq(buf, "on")) {
++		ret = sonda_relojes_poner();
++		if (ret)
++			return ret;
++	} else if (sysfs_streq(buf, "off")) {
++		sonda_relojes_soltar();
++	} else if (sscanf(buf, "rate %lu", &hz) == 1) {
++		sonda_relojes_rate = hz;
++		if (sonda_relojes_puestos &&
++		    sonda_relojes[ARRAY_SIZE(sonda_relojes_spi6) - 1]) {
++			struct clk *se =
++			    sonda_relojes[ARRAY_SIZE(sonda_relojes_spi6) - 1];
++			ret = clk_set_rate(se, hz);
++			pr_info("sonda_ta: SE rate pedido %lu -> real %lu (ret %d)\n",
++				hz, clk_get_rate(se), ret);
++		}
++	} else {
++		return -EINVAL;
++	}
++
++	return len;
++}
++
++/*
++ * Goodix's dialect: write "<app_id> <arg0> <cmd>" and the request is built the
++ * way libgf_ca.so builds it, with the shared buffer's physical address in word
++ * zero -- which is the part userspace cannot supply.
++ *
++ *   echo "3 2 110" > /sys/kernel/debug/sonda_ta/goodix    # pide el desafio
++ *
++ * Commands 0x6e and 0x6f are the authentication handshake, and the vendor
++ * client treats them apart from every other command precisely because they run
++ * before there is a session to encrypt under.
++ */
++static ssize_t sonda_goodix_write(struct file *f, const char __user *ubuf,
++				  size_t len, loff_t *off)
++{
++	unsigned int app_id, arg0, cmd, largo = 0;
++	u8 respuesta[128] = {};
++	char buf[64];
++	int ret, i, n;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	/* "<app> <arg0> <cmd> [largo]" -- largo es el tamano del dato pedido. */
++	n = sscanf(buf, "%u %u %u %u", &app_id, &arg0, &cmd, &largo);
++	if (n < 3)
++		return -EINVAL;
++
++	ret = qcom_scm_qseecom_app_goodix(app_id, arg0, cmd, NULL, largo,
++					  respuesta, sizeof(respuesta));
++	if (ret < 0) {
++		pr_err("sonda_ta: goodix arg0=%u cmd=%#x -> error %d\n",
++		       arg0, cmd, ret);
++		return ret;
++	}
++
++	pr_info("sonda_ta: goodix arg0=%u cmd=%#x -> status %d (buffer de comando)\n",
++		arg0, cmd, ret);
++	for (i = 0; i < sizeof(respuesta); i += 16) {
++		if (memchr_inv(respuesta + i, 0, 16))
++			pr_info("sonda_ta:   +%02d: %*ph\n", i, 16,
++				respuesta + i);
++	}
++
++	return len;
++}
++
++/*
++ * Goodix, every field yours: write "<app_id> <hex>" -- up to 128 bytes of the
++ * request -- and the kernel sends it verbatim save for word zero, which it
++ * fills with the physical address. Spaces in the hex are ignored, so a request
++ * can be laid out field by field.
++ *
++ *   # token=1 at +8, arg0=2 at +0xc, cmd=0x6e at +0x20, len=0x10 at +0x24
++ *   echo "3 00000000 0000 0000 01000000 02000000 ..." > .../goodixraw
++ */
++static ssize_t sonda_goodixraw_write(struct file *f, const char __user *ubuf,
++				     size_t len, loff_t *off)
++{
++	u8 req[0x80] = {}, out[0x80] = {};
++	char *buf, *hex;
++	unsigned int app_id;
++	s32 status = 0;
++	int ret, n = 0, i;
++
++	if (len >= 1024)
++		return -EINVAL;
++
++	buf = memdup_user_nul(ubuf, len);
++	if (IS_ERR(buf))
++		return PTR_ERR(buf);
++
++	if (sscanf(buf, "%u", &app_id) != 1) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	hex = strchr(buf, ' ');
++	if (!hex) { ret = -EINVAL; goto out; }
++
++	while (*hex && n < (int)sizeof(req)) {
++		int hi, lo;
++		while (*hex == ' ' || *hex == '\n')
++			hex++;
++		if (!hex[0] || !hex[1])
++			break;
++		hi = hex_to_bin(hex[0]);
++		lo = hex_to_bin(hex[1]);
++		if (hi < 0 || lo < 0) { ret = -EINVAL; goto out; }
++		req[n++] = (hi << 4) | lo;
++		hex += 2;
++	}
++
++	ret = qcom_scm_qseecom_app_goodix_raw(app_id, req, out, &status);
++	if (ret) {
++		pr_err("sonda_ta: goodixraw -> error %d\n", ret);
++		goto out;
++	}
++
++	pr_info("sonda_ta: goodixraw(%d bytes) -> status %d (%#x)\n",
++		n, status, status);
++	for (i = 0; i < (int)sizeof(out); i += 16) {
++		if (memchr_inv(out + i, 0, 16))
++			pr_info("sonda_ta:   +%02d: %*ph\n", i, 16, out + i);
++	}
++
++	ret = len;
++out:
++	kfree(buf);
++	return ret;
++}
++
++/*
++ * Acceso a registros fisicos A TRAVES del TrustZone, con qcom_scm_io_readl/writel.
++ * El Serial Engine del sensor (0xa80000) esta amurallado por el XPU: leerlo
++ * directo desde Linux cuelga la CPU. Pero el TZ SI tiene permiso sobre el (la
++ * politica QUPAC lo asigna al TEE), asi que quiza pueda leerlo/escribirlo por
++ * nosotros sin colgar. Este modo lo prueba.
++ *
++ *   echo "r a80068" > /sys/kernel/debug/sonda_ta/scmio   # leer el registro de proto
++ *   echo "w a80068 1" > /sys/kernel/debug/sonda_ta/scmio # escribir
++ */
++static ssize_t sonda_scmio_write(struct file *f, const char __user *ubuf,
++				 size_t len, loff_t *off)
++{
++	char buf[64], op;
++	unsigned long long addr;
++	unsigned int val = 0;
++	int ret, n;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	n = sscanf(buf, " %c %llx %x", &op, &addr, &val);
++	if (n < 2)
++		return -EINVAL;
++
++	if (op == 'r') {
++		ret = qcom_scm_io_readl((phys_addr_t)addr, &val);
++		if (ret)
++			pr_err("sonda_ta: scm_io_readl(%#llx) -> error %d\n", addr, ret);
++		else
++			pr_info("sonda_ta: scm_io_readl(%#llx) = %#010x\n", addr, val);
++	} else if (op == 'w') {
++		ret = qcom_scm_io_writel((phys_addr_t)addr, val);
++		pr_info("sonda_ta: scm_io_writel(%#llx, %#x) -> %d\n", addr, val, ret);
++	} else {
++		return -EINVAL;
++	}
++
++	return len;
++}
++
++static const struct file_operations sonda_scmio_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_scmio_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_goodixraw_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_goodixraw_write,
++	.llseek = noop_llseek,
++};
++
++/*
++ * Comando modified con buffer de datos (para DETECT/imagen). Formato:
++ *   echo "<app_id> <cmd_buf_offset> <cmd_hex 128B> | <data_hex>" > goodixmod
++ * Estampa la fisica del buffer de datos en cmd[cmd_buf_offset] (=word0), como
++ * hace el ifd de QSEECom. Vuelca cmd (c+NN) y data (d+NNNN) de vuelta.
++ */
++static ssize_t sonda_goodixmod_write(struct file *f, const char __user *ubuf,
++				     size_t len, loff_t *off)
++{
++	u8 cmd[0x80] = {}, cmd_out[0x80] = {};
++	u8 *data = NULL;
++	char *buf, *hex, *sep;
++	unsigned int app_id, cbo;
++	s32 status = 0;
++	size_t datalen = 0, dcap = 0x2000;
++	int ret, n = 0, i;
++
++	if (len >= 0x6000)
++		return -EINVAL;
++
++	buf = memdup_user_nul(ubuf, len);
++	if (IS_ERR(buf))
++		return PTR_ERR(buf);
++
++	if (sscanf(buf, "%u %u", &app_id, &cbo) != 2) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	sep = strchr(buf, '|');
++	if (!sep) { ret = -EINVAL; goto out; }
++
++	hex = strchr(buf, ' ');
++	hex = hex ? strchr(hex + 1, ' ') : NULL;	/* saltar app_id y offset */
++	if (!hex) { ret = -EINVAL; goto out; }
++	while (hex < sep && n < (int)sizeof(cmd)) {
++		int hi, lo;
++		while (*hex == ' ' || *hex == '\n')
++			hex++;
++		if (hex >= sep || !hex[0] || !hex[1])
++			break;
++		hi = hex_to_bin(hex[0]);
++		lo = hex_to_bin(hex[1]);
++		if (hi < 0 || lo < 0)
++			break;
++		cmd[n++] = (hi << 4) | lo;
++		hex += 2;
++	}
++
++	data = kzalloc(dcap, GFP_KERNEL);
++	if (!data) { ret = -ENOMEM; goto out; }
++	hex = sep + 1;
++	while (*hex && datalen < dcap) {
++		int hi, lo;
++		while (*hex == ' ' || *hex == '\n')
++			hex++;
++		if (!hex[0] || !hex[1])
++			break;
++		hi = hex_to_bin(hex[0]);
++		lo = hex_to_bin(hex[1]);
++		if (hi < 0 || lo < 0)
++			break;
++		data[datalen++] = (hi << 4) | lo;
++		hex += 2;
++	}
++
++	ret = qcom_scm_qseecom_app_goodix_mod(app_id, cmd, cmd_out,
++					      data, datalen, cbo, &status);
++	if (ret) {
++		pr_err("sonda_ta: goodixmod -> error %d\n", ret);
++		goto out;
++	}
++
++	pr_info("sonda_ta: goodixmod(cmd %d, data %zu) -> status %d (%#x)\n",
++		n, datalen, status, status);
++	for (i = 0; i < (int)sizeof(cmd_out); i += 16)
++		if (memchr_inv(cmd_out + i, 0, 16))
++			pr_info("sonda_ta:   c+%02d: %*ph\n", i, 16, cmd_out + i);
++	for (i = 0; i < (int)datalen; i += 16)
++		if (memchr_inv(data + i, 0, 16))
++			pr_info("sonda_ta:   d+%04d: %*ph\n", i, 16, data + i);
++
++	ret = len;
++out:
++	kfree(data);
++	kfree(buf);
++	return ret;
++}
++
++static const struct file_operations sonda_goodixmod_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_goodixmod_write,
++	.llseek = noop_llseek,
++};
++
++/*
++ * Volcado de una region de memoria fisica leible por el HLOS (ioremap). Para
++ * leer el TZ_DIAG log de QSEE (~0x146aa000 en IMEM), que es donde el mundo
++ * seguro escribe sus mensajes -- incluidos los del SPI del sensor.
++ *   echo "146aa000 2000" > /sys/kernel/debug/sonda_ta/leermem
++ * OJO: solo para regiones no-seguras leibles; una region amurallada colgaria.
++ */
++static ssize_t sonda_leermem_write(struct file *f, const char __user *ubuf,
++				   size_t len, loff_t *off)
++{
++	char buf[64];
++	unsigned long long addr;
++	unsigned int n = 0x800;
++	void __iomem *m;
++	int i;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sscanf(buf, "%llx %u", &addr, &n) < 1)
++		return -EINVAL;
++	if (n > 0x4000)
++		n = 0x4000;
++
++	m = ioremap((phys_addr_t)addr, n);
++	if (!m) {
++		pr_err("sonda_ta: leermem ioremap %#llx fallo\n", addr);
++		return -ENOMEM;
++	}
++	pr_info("sonda_ta: leermem %#llx (%u bytes):\n", addr, n);
++	for (i = 0; i < (int)n; i += 32) {
++		u8 tmp[32];
++		memcpy_fromio(tmp, m + i, 32);
++		if (memchr_inv(tmp, 0, 32))
++			pr_info("sonda_ta:   +%04x: %*ph\n", i, 32, tmp);
++	}
++	iounmap(m);
++	return len;
++}
++
++static const struct file_operations sonda_leermem_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_leermem_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_goodix_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_goodix_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_relojes_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_relojes_write,
++	.llseek = noop_llseek,
++};
++
++/*
++ * Keymaster answers with a certificate, which is about a kilobyte -- far more
++ * than the 64 bytes the fingerprint TA replies with. Dumps skip rows that are
++ * all zero, so asking for the big buffer costs nothing when the reply is small.
++ */
++#define SONDA_RSP_MAX	1024
++
++/*
++ * Pairing: write "<keymaster_app_id> <fingerprint_app_id>" and the two steps
++ * Android's HAL does at init happen here, in one go.
++ *
++ *   echo "1 3" > /sys/kernel/debug/sonda_ta/emparejar
++ *
++ * Step one asks keymaster for the certificate with its command 0x205; step two
++ * hands the blob straight to the fingerprint app as FPC_SET_KEY_DATA.
++ *
++ * It is done inside the kernel on purpose. The blob is a device key, and the
++ * obvious shape -- read it in one debugfs call, write it back in another --
++ * would mean printing it to the kernel log and carrying it through userspace
++ * to get it back. There is no reason for it to leave this function.
++ */
++#define KM_CMD_GET_CERT		0x205
++#define FPC_GROUP_FPCDATA	0x3
++#define FPC_SET_KEY_DATA	0x5
++
++static ssize_t sonda_emparejar_write(struct file *f, const char __user *ubuf,
++				     size_t len, loff_t *off)
++{
++	unsigned int km_id, fp_id;
++	u32 peticion[16] = {};
++	u32 estado, offset, largo;
++	char buf[64];
++	u8 *rsp;
++	int ret;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sscanf(buf, "%u %u", &km_id, &fp_id) != 2)
++		return -EINVAL;
++
++	rsp = kzalloc(SONDA_RSP_MAX, GFP_KERNEL);
++	if (!rsp)
++		return -ENOMEM;
++
++	/* keymaster_cmd_t { cmd_id, ret_val, length } */
++	peticion[0] = KM_CMD_GET_CERT;
++	peticion[1] = 0x02;
++
++	ret = qcom_scm_qseecom_app_raw(km_id, peticion, sizeof(peticion),
++				       rsp, SONDA_RSP_MAX);
++	if (ret) {
++		pr_err("sonda_ta: keymaster (app %u) -> error %d\n", km_id, ret);
++		goto out;
++	}
++
++	/* keymaster_return_t { status, offset, length } */
++	estado = get_unaligned_le32(rsp);
++	offset = get_unaligned_le32(rsp + 4);
++	largo = get_unaligned_le32(rsp + 8);
++
++	if (estado) {
++		pr_err("sonda_ta: keymaster dice que no: %#x\n", estado);
++		ret = -EIO;
++		goto out;
++	}
++
++	if (!largo || offset > SONDA_RSP_MAX || largo > SONDA_RSP_MAX - offset) {
++		pr_err("sonda_ta: keymaster contesta fuera de rango: offset=%u largo=%u\n",
++		       offset, largo);
++		ret = -EIO;
++		goto out;
++	}
++
++	pr_info("sonda_ta: keymaster suelta %u bytes de clave\n", largo);
++
++	ret = qcom_scm_qseecom_app_fpc_buf(fp_id, FPC_GROUP_FPCDATA,
++					   FPC_SET_KEY_DATA, rsp + offset,
++					   largo, NULL, 0);
++	if (ret < 0) {
++		pr_err("sonda_ta: SET_KEY_DATA -> error %d\n", ret);
++		goto out;
++	}
++
++	pr_info("sonda_ta: SET_KEY_DATA -> status %d (%#x)\n", ret, ret);
++	ret = len;
++out:
++	kfree_sensitive(rsp);
++	return ret;
++}
++
++static const struct file_operations sonda_emparejar_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_emparejar_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_buscar_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_buscar_write,
++	.llseek = noop_llseek,
++};
++
++/*
++ * Loading: write "<firmware-name> <mdt_len>" here and the image is fetched
++ * from /lib/firmware and handed to the TrustZone.
++ *
++ *   echo "fpctzapp.img 7260" > /sys/kernel/debug/sonda_ta/cargar
++ *
++ * The image must be the QSEECom layout -- .mdt followed by every .bNN,
++ * concatenated, no padding -- which is NOT the same as an ELF rebuilt by
++ * segment offsets.
++ */
++static ssize_t sonda_cargar_write(struct file *f, const char __user *ubuf,
++				  size_t len, loff_t *off)
++{
++	const struct firmware *fw;
++	char buf[128], nombre[96];
++	unsigned int mdt_len;
++	u32 app_id = 0;
++	int ret;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sscanf(buf, "%95s %u", nombre, &mdt_len) != 2)
++		return -EINVAL;
++
++	ret = request_firmware(&fw, nombre, NULL);
++	if (ret) {
++		pr_err("sonda_ta: no encuentro %s en /lib/firmware: %d\n",
++		       nombre, ret);
++		return ret;
++	}
++
++	pr_info("sonda_ta: cargando %s, mdt_len=%u img_len=%zu\n",
++		nombre, mdt_len, fw->size);
++
++	ret = qcom_scm_qseecom_app_load(fw->data, mdt_len, fw->size, &app_id);
++	release_firmware(fw);
++
++	if (ret) {
++		pr_err("sonda_ta: la TrustZone dice que no: %d\n", ret);
++		return ret;
++	}
++
++	pr_info("sonda_ta: CARGADO, app_id=%u\n", app_id);
++
++	return len;
++}
++
++/*
++ * Talking to it: write "<app_id> <cmd>" and the TA gets a 64-byte request whose
++ * first word is <cmd>, with a 64-byte response right after it. That layout
++ * comes from disassembling fpc_tac_transfer in the vendor HAL:
++ *
++ *     mov w2, #0x40      request length
++ *     mov w4, #0x40      response length
++ *     str w9, [x8]       command id goes in the first word
++ *     add x19, x9, #0x40 response starts at request + 0x40
++ *     bl  QSEECom_send_modified_cmd
++ *
++ * The reply is dumped whole because we do not know the TA's structures yet;
++ * printing it raw is the point.
++ */
++#define SONDA_REQ_LEN	64
++#define SONDA_RSP_LEN	64
++
++static ssize_t sonda_hablar_write(struct file *f, const char __user *ubuf,
++				  size_t len, loff_t *off)
++{
++	unsigned int app_id, cmd;
++	u32 rsp[SONDA_RSP_LEN / 4];
++	char buf[64];
++	int ret, i;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sscanf(buf, "%u %u", &app_id, &cmd) != 2)
++		return -EINVAL;
++
++	ret = qcom_scm_qseecom_app_talk(app_id, cmd, rsp, sizeof(rsp));
++	if (ret) {
++		pr_err("sonda_ta: app %u cmd %u -> error %d\n", app_id, cmd, ret);
++		return ret;
++	}
++
++	pr_info("sonda_ta: app %u cmd %u -> RESPONDE\n", app_id, cmd);
++	for (i = 0; i < SONDA_RSP_LEN / 4; i += 4)
++		pr_info("sonda_ta:   +%02d: %08x %08x %08x %08x\n",
++			i * 4, rsp[i], rsp[i + 1], rsp[i + 2], rsp[i + 3]);
++
++	return len;
++}
++
++/*
++ * Free-form requests: write "<app_id> <hex>" and those exact bytes are sent.
++ *
++ *   echo "3 0c00000000000000 04000000 01000000" > .../crudo
++ *
++ * Spaces are ignored, so a request can be written grouped by field. The reply
++ * is dumped whole; without knowing the TA's structures, seeing it raw is the
++ * whole point.
++ */
++#define SONDA_MAX_REQ	512
++
++static ssize_t sonda_crudo_write(struct file *f, const char __user *ubuf,
++				 size_t len, loff_t *off)
++{
++	u8 req[SONDA_MAX_REQ], *rsp;
++	char *buf, *p, *hex;
++	unsigned int app_id;
++	int ret, n = 0, i;
++
++	if (len >= 2048)
++		return -EINVAL;
++
++	buf = memdup_user_nul(ubuf, len);
++	if (IS_ERR(buf))
++		return PTR_ERR(buf);
++
++	rsp = kzalloc(SONDA_RSP_MAX, GFP_KERNEL);
++	if (!rsp) {
++		kfree(buf);
++		return -ENOMEM;
++	}
++
++	p = strim(buf);
++	if (sscanf(p, "%u", &app_id) != 1) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	hex = strchr(p, ' ');
++	if (!hex) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	/* Read hex nibble pairs, skipping any spacing. */
++	while (*hex && n < SONDA_MAX_REQ) {
++		int hi, lo;
++
++		while (*hex == ' ' || *hex == '\n')
++			hex++;
++		if (!hex[0] || !hex[1])
++			break;
++		hi = hex_to_bin(hex[0]);
++		lo = hex_to_bin(hex[1]);
++		if (hi < 0 || lo < 0) {
++			ret = -EINVAL;
++			goto out;
++		}
++		req[n++] = (hi << 4) | lo;
++		hex += 2;
++	}
++
++	if (!n) {
++		ret = -EINVAL;
++		goto out;
++	}
++
++	ret = qcom_scm_qseecom_app_raw(app_id, req, n, rsp, SONDA_RSP_MAX);
++	if (ret) {
++		pr_err("sonda_ta: app %u crudo(%d) -> error %d\n", app_id, n, ret);
++		goto out;
++	}
++
++	pr_info("sonda_ta: app %u crudo(%d bytes) -> RESPONDE\n", app_id, n);
++	for (i = 0; i < SONDA_RSP_MAX; i += 16) {
++		/* Silence the empty tail: a kilobyte of zeros hides the reply. */
++		if (memchr_inv(rsp + i, 0, 16))
++			pr_info("sonda_ta:   +%04d: %*ph\n", i, 16, rsp + i);
++	}
++
++	ret = len;
++out:
++	kfree(rsp);
++	kfree(buf);
++	return ret;
++}
++
++/*
++ * FPC-style: write "<app_id> <group> <cmd>" and the two-buffer protocol is
++ * used, which is the one its trusted app actually speaks.
++ *
++ *   echo "3 1 3" > /sys/kernel/debug/sonda_ta/fpc     # grupo 1, comando 3
++ *
++ * Groups, from Sony's open HAL: 1 normal, 2 db, 3 fpcdata, 6 debug, 7 qc,
++ * 8 navigation, 9 info, 0xa sensor, 0xb template. The command ids differ
++ * between TA variants, so they have to be found by trying.
++ */
++static ssize_t sonda_fpc_write(struct file *f, const char __user *ubuf,
++			       size_t len, loff_t *off)
++{
++	unsigned int app_id, group, cmd;
++	u32 out[8];
++	char buf[64];
++	int ret;
++
++	if (len >= sizeof(buf))
++		return -EINVAL;
++	if (copy_from_user(buf, ubuf, len))
++		return -EFAULT;
++	buf[len] = '\0';
++
++	if (sscanf(buf, "%u %i %i", &app_id, &group, &cmd) != 3)
++		return -EINVAL;
++
++	ret = qcom_scm_qseecom_app_fpc(app_id, group, cmd, NULL, 0,
++				       out, sizeof(out));
++	if (ret < 0) {
++		pr_err("sonda_ta: fpc g=%#x c=%#x -> error %d\n",
++		       group, cmd, ret);
++		return ret;
++	}
++
++	pr_info("sonda_ta: fpc g=%#x c=%#x -> status %d | ret_val=%#x  %08x %08x %08x\n",
++		group, cmd, ret, out[2], out[3], out[4], out[5]);
++
++	return len;
++}
++
++static const struct file_operations sonda_fpc_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_fpc_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_crudo_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_crudo_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_hablar_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_hablar_write,
++	.llseek = noop_llseek,
++};
++
++static const struct file_operations sonda_cargar_fops = {
++	.owner = THIS_MODULE,
++	.write = sonda_cargar_write,
++	.llseek = noop_llseek,
++};
++
++static int __init sonda_ta_init(void)
++{
++	struct dentry *dir = debugfs_create_dir("sonda_ta", NULL);
++
++	debugfs_create_file("estado", 0400, dir, NULL, &sonda_ta_fops);
++	debugfs_create_file("buscar", 0200, dir, NULL, &sonda_buscar_fops);
++	debugfs_create_file("emparejar", 0200, dir, NULL,
++			    &sonda_emparejar_fops);
++	debugfs_create_file("relojes", 0200, dir, NULL, &sonda_relojes_fops);
++	debugfs_create_file("preparar", 0200, dir, NULL,
++			    &sonda_preparar_fops);
++	debugfs_create_file("goodix", 0200, dir, NULL, &sonda_goodix_fops);
++	debugfs_create_file("goodixraw", 0200, dir, NULL,
++			    &sonda_goodixraw_fops);
++	debugfs_create_file("goodixmod", 0200, dir, NULL,
++			    &sonda_goodixmod_fops);
++	debugfs_create_file("leermem", 0200, dir, NULL,
++			    &sonda_leermem_fops);
++	debugfs_create_file("scmio", 0200, dir, NULL, &sonda_scmio_fops);
++	debugfs_create_file("cargar", 0200, dir, NULL, &sonda_cargar_fops);
++	debugfs_create_file("hablar", 0200, dir, NULL, &sonda_hablar_fops);
++	debugfs_create_file("crudo", 0200, dir, NULL, &sonda_crudo_fops);
++	debugfs_create_file("fpc", 0200, dir, NULL, &sonda_fpc_fops);
++	return 0;
++}
++late_initcall(sonda_ta_init);

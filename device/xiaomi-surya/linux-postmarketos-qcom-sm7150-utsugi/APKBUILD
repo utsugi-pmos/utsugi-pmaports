@@ -1,0 +1,239 @@
+# Co-Maintainer: David Wronek <david@mainlining.org>
+# Co-Maintainer: Aelin <aelin@postmarketos.org>
+maintainer="Danila Tikhonov <danila@jiaxyga.com>"
+_flavor="postmarketos-qcom-sm7150"
+_orig=linux-$_flavor
+pkgname=$_orig-utsugi
+pkgver=7.1_rc3
+pkgrel=248
+
+# FORK of linux-postmarketos-qcom-sm7150. _flavor is deliberately NOT renamed:
+# /boot/vmlinuz, /lib/modules/<release> and /usr/share/kernel/<flavor> must stay
+# byte-identical or mkinitfs and boot-deploy stop finding the kernel. Only the
+# package name changes, and the versioned provides makes apk refuse to have this
+# and upstream's kernel installed at the same time.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="Mainline Kernel fork for SM7150 devices"
+arch="aarch64"
+_carch="arm64"
+url="https://github.com/sm7150-mainline/linux"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	pmb:kconfigcheck-community
+	"
+makedepends="
+	bison
+	clang
+	findutils
+	flex
+	lld
+	llvm
+	openssl-dev
+	perl
+	postmarketos-installkernel
+	python3
+	zstd
+"
+
+_tag="$pkgver"
+
+# Source
+source="
+	$_orig-v$_tag.tar.gz::$url/archive/v$_tag.tar.gz
+	config-$_flavor.$arch
+	0001-tas2562-dvc-write-order.patch
+	0035-soundwire-rx-segunda-linea-de-datos.patch
+	0036-media-format-escribia-en-el-miembro-equivocado.patch
+	0037-registrar-topologias-desde-la-acdb.patch
+	0038-ruta-de-la-acdb-en-el-device-tree.patch
+	0039-ver-que-contesta-el-dsp-al-registro.patch
+	0040-que-la-acdb-no-pueda-dejar-el-movil-mudo.patch
+	0041-registrar-topologias-por-memoria-compartida.patch
+	0042-desmutear-la-transmision-de-voz.patch
+	0043-cancelador-de-eco-ajustable-en-caliente.patch
+	0044-un-microfono-no-dos-en-la-transmision.patch
+	0045-el-puerto-del-microfono-mono-como-de-fabrica.patch
+	0046-registrar-topologias-pegadas-al-paquete-como-el-pixel-3a.patch
+	0047-barrer-el-marco-del-bloque-y-aislar-el-mapeo.patch
+	0048-el-adsp-lee-por-el-smmu-la-direccion-necesita-el-sid.patch
+	0049-encender-los-modulos-del-vocproc.patch
+	0050-primer-arranque-de-la-camara-trasera.patch
+	0051-la-camara-frontal-driver-del-s5k3t2.patch
+	0052-diagnostico-hacer-hablar-al-csiphy.patch
+	0053-el-reset-del-codec-por-un-gpio-que-duerme.patch
+	0054-pstore-no-tirar-la-traza-por-un-bit.patch
+	0055-el-watchdog-vigila-tambien-el-arranque.patch
+	0056-la-tactil-usaba-el-firmware-despues-de-liberarlo.patch
+	0058-callar-de-verdad-la-tormenta-de-handover.patch
+	0059-diagnostico-que-ve-el-receptor-csi2.patch
+	0060-el-csiphy-del-sm7150-es-v1-2-no-sdm845.patch
+	0061-bajar-la-velocidad-del-enlace-del-sensor.patch
+	0062-de-que-phy-escucha-el-csid-y-estado-del-phy-al-parar.patch
+	0063-los-relojes-del-csiphy-del-sm7150-estaban-incompletos.patch
+	0064-releer-los-registros-del-csiphy-tras-configurarlo.patch
+	0065-los-relojes-del-csid-y-del-vfe1-del-sm7150-tambien.patch
+	0066-la-secuencia-de-reset-del-csiphy-como-la-de-qualcomm.patch
+	0067-el-pulso-de-terminacion-del-csiphy-que-falta-en-mainline.patch
+	0068-el-sensor-salia-del-reset-sin-reloj.patch
+	0069-esperar-a-que-el-pll-de-salida-enganche.patch
+	0070-reactivar-la-trasera-para-bisecar.patch
+	0071-la-puerta-de-reloj-del-receptor-csi2.patch
+	0072-los-contadores-de-hardware-del-csid.patch
+	0073-releer-la-configuracion-del-csid.patch
+	0074-reaplicar-el-receptor-con-el-sensor-ya-transmitiendo.patch
+	0075-el-offset-del-csid-lite-del-sm7150.patch
+	0076-el-patron-exacto-de-los-registros-de-interrupcion-del-csiphy.patch
+	0077-el-tercer-modo-del-sensor-1280x720.patch
+	0078-volcar-el-espacio-de-registros-del-csid.patch
+	0079-volcar-el-espacio-de-registros-del-csiphy.patch
+	0080-volcar-el-csiphy-en-marcha-no-al-parar.patch
+	0081-el-reloj-del-camino-al-csid-en-el-cuarzo.patch
+	0082-el-refgen-que-el-csiphy-necesita-esta-apagado.patch
+	0084-el-reloj-del-csiphy0-para-los-otros-phy.patch
+	0085-fuera-el-modo-de-20mp-para-el-visor.patch
+	0086-portar-la-trasera-desde-fabrica.patch
+	0087-barrer-el-enlace-de-la-trasera-en-caliente.patch
+	0088-soporte-de-cphy-en-camss.patch
+	0089-cphy-la-mascara-de-carriles-sin-reloj.patch
+	0090-cphy-los-trios-en-los-bits-impares.patch
+	0091-cphy-el-modo-antes-de-los-trios.patch
+	0092-decirle-al-sensor-que-hable-cphy.patch
+	0093-los-cinco-modos-de-la-trasera-y-el-recorte.patch
+	0094-el-tope-de-ancho-de-camss-no-es-del-hardware.patch
+	0095-la-exposicion-minima-depende-del-agrupado.patch
+	0096-orientacion-y-rotacion-de-las-dos-camaras.patch
+	0097-encender-el-riel-del-actuador-para-buscarlo.patch
+	0098-buscador-de-sensores-en-el-bus-cci.patch
+	0099-el-gran-angular-driver-del-hi1337.patch
+	0100-camss-enlaces-de-sensor-conmutables.patch
+	0101-el-motor-de-enfoque-de-la-trasera.patch
+	0102-el-motor-de-enfoque-no-se-envenena-al-suspenderse.patch
+	0103-el-techo-de-exposicion-sigue-a-la-trama.patch
+	0104-el-medidor-de-bateria-no-confunde-no-lo-se-con-vacia.patch
+	0105-el-panel-tambien-puede-hacer-60-hz.patch
+	0109-cargar-trustlet.patch
+	0110-goodix-fp.patch
+	0111-el-apagado-apaga.patch
+	0112-el-medidor-tampoco-se-cree-un-promedio-imposible.patch
+	0113-el-conector-usb-c-tambien-pide-carga.patch
+	0114-fastrpc-fix-context-leak-signal-interrupted.patch
+	0115-sm7150-gcc-power-domain-cx.patch
+	0116-sm7150-gcc-qup-ahb-clocks-critical.patch
+"
+builddir="$srcdir/linux-$_tag"
+
+prepare() {
+	default_prepare
+	cp "$srcdir/config-$_flavor.$arch" .config
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	make modules_install zinstall dtbs_install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_PATH="$pkgdir"/boot \
+		INSTALL_MOD_PATH="$pkgdir"/usr \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs-tmp
+
+	mkdir -p "$pkgdir"/boot/dtbs/qcom
+	cp -r "$pkgdir"/boot/dtbs-tmp/qcom/sm7150* "$pkgdir"/boot/dtbs/qcom
+	rm -rf "$pkgdir"/boot/dtbs-tmp
+
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+
+sha512sums="
+bb837959e337c66ff374d8f3aac6593723c4f4eb69fb18f9ff25c5c096c6656fd71149e105255c0f97c83e0bf547b0b0e94ca23eabde7b5f88308e9ecd784e3d  linux-postmarketos-qcom-sm7150-v7.1_rc3.tar.gz
+e0e5e4c8f0a28b6801d2606e5dbc329b27a614421c1b1001e17eeefb8d3122e49f9ca052acb28c617b3b28d539a3ef3028248f0b8b5281528a60f8a08612812d  config-postmarketos-qcom-sm7150.aarch64
+c6133d1eaafc623c94c4ec93732f633fb7d534d2300cf10ff002a65d3faf4e50f60032710169e1f0f469a493bb9c86122ff9f2e9084c0a179d51c764eb4126dd  0001-tas2562-dvc-write-order.patch
+f3ffc99cba9b9a8aa926b560ebd3b1a99f189be89c645a55ab35e1b597a11ca22f9e11e29990d5a885bfc9fc5f90c1a6e0aeac0d1c2c15deecb0103c7c5beb57  0035-soundwire-rx-segunda-linea-de-datos.patch
+7431e360d31bc5eadfe7c99cf8a440ffea68b5fa4e8cb46697fc52230d133fd6c658728dceec02736cdb0aee37c0a1b85447c1c8badfc1ab765f97db0665fd02  0036-media-format-escribia-en-el-miembro-equivocado.patch
+45b6119719c54a23de8b4e500d910df54bae6abcbb1cfdbd8838741e4dadb3d436c6e1073e0a802dd6fabb6776b39990df577f36d570e303ef17aae7f359544c  0037-registrar-topologias-desde-la-acdb.patch
+b89bdc2afa6cde46592e013486f37df9644ecb9fb4b914b9084a8790bd3aeba588edf471907c1e555c7114f1182204bf482318af6d3b4f0026eb69fbcfe285ad  0038-ruta-de-la-acdb-en-el-device-tree.patch
+4b0998696247b01776cc77ee83e9102989203666e34c933cdf28c18d7033ae682c58ae3234e4ac45079a1ae03b1e555fcca8f44ee6e8a70521e1e7188d00ec48  0039-ver-que-contesta-el-dsp-al-registro.patch
+4830d6c390b8d023ca751a99c8c66eaa1228acf1ef8117a3a0b2893b96af477cf5722dc72434c58b632ab48426589ea91df99aae63dc5d8f892ec6a3dd9f37cb  0040-que-la-acdb-no-pueda-dejar-el-movil-mudo.patch
+f0f99913a14eaf71c67dce2fdb427f868c927ccd1e86df23a89e3fe6b098a161a89a4e4f014baf4180596498ed82462aa1d527455722b7b92c09413dedb6717e  0041-registrar-topologias-por-memoria-compartida.patch
+2ff045d6784575df2c3389239a744ed9f352ca31785d53d17c56d84200f560e6eb059830eb6e92b94d3d5d5c92b9f582c36d7fcb3db43ce245bec9a1bdadfb99  0042-desmutear-la-transmision-de-voz.patch
+1d3edc4de9923ed13b6faeadccdda6f8cb8d7e12fef28047e32d4c0e5b47c32c9ef213b7f465ddcc03e98835d9d8c0e2902ccaf664d3b3d56e760f1b79952311  0043-cancelador-de-eco-ajustable-en-caliente.patch
+685b266b1002c91a3d1055a7e28a57ece25a67a3742d57cf66e0295d459aff63546b770e452786177da10d0ec66fb0d82f0d7f82b2d4ec83d3c93cba2072bb5a  0044-un-microfono-no-dos-en-la-transmision.patch
+6a6d061a5f6c43b28bae564d5d4d57e95bb021e4a9bbaa749ac3af79c1e0ba445274d43aa54cd9bce16ab60d1f733cb2aae0e4ba4f62626700294b102277a6d9  0045-el-puerto-del-microfono-mono-como-de-fabrica.patch
+e3d8f36c272df8f1e7cf51f6102a3e9f7305568e8137970fcdc42ecfc1e36ee8891d7f4d22e8c54a04a304ed6b450ab169cdba5541f645a9defc6483844a895c  0046-registrar-topologias-pegadas-al-paquete-como-el-pixel-3a.patch
+968b38cc59b83dceddedade98f213243f6b2e58eb7d7ddb8c47230c5ca57ac9941937289fa38074479ea926454833d9187551c0f3f8d9e6876030f766d072d52  0047-barrer-el-marco-del-bloque-y-aislar-el-mapeo.patch
+b6c503013e69b10ad3690c6c747f0a821caa41cdc8bb03070dae5f7c0947db15cdea46db4ad46655236283bf6bd2bda3f966ffc243cdb4dd0fe6cbdec9a5a340  0048-el-adsp-lee-por-el-smmu-la-direccion-necesita-el-sid.patch
+c502367e578770dff1e7041c979bddafa14d3fac12c14ef0382503f4cd43dbf826235768171efa198b4bd8f7ee485ee5bab3b07e1093834485ae26bae2834317  0049-encender-los-modulos-del-vocproc.patch
+ca7259d51ba97520022539749f1b3c29f51e3cf206d2b8af5193858a0c96f0bbacbcd467458d5cce2ad74eb663bf6a21f489ca50473f1f0fe4ee056bed2ff9d0  0050-primer-arranque-de-la-camara-trasera.patch
+2d57a8e0b744d22863a33b69f7895f01d34c6e928d0fb061df0cac9f37cd5195690a0940333a475a543f921e9258fb9cc2bcd3a2f220cf3e3175cce6c03380dd  0051-la-camara-frontal-driver-del-s5k3t2.patch
+8d0ae3ca2abc68fce666a9077b78598070ce1b1a4580384209dd6cd2f19763a9d18e4298286ac3cf6e51f94c8578574adbdcc3a4e7c56b87f68777f6d805adc7  0052-diagnostico-hacer-hablar-al-csiphy.patch
+84c31a5de77b18c6e3ae1463de54ef8669cbfe12a8dd8b9f354b2dcb63d5cdb2b513880ed6bdb3f33c5d552ab325f409dadabeccf8c3bbbee28a5d8b410bdf17  0053-el-reset-del-codec-por-un-gpio-que-duerme.patch
+0e59fba7777d20639bf68a00f1c228726958223c60457ff04a553d08610da50739b3c4b15df3c154a31e85c7197629267db81b00331e8278fcfd938b255cdc9f  0054-pstore-no-tirar-la-traza-por-un-bit.patch
+782290b4f58f8309b281ae5e3897093fb5489d1144eee0189ad87694d9a98a80fbab286d5c790b1f2b0587f6b1c1c23696c6b89bf36fb1e926e725b916e805f8  0055-el-watchdog-vigila-tambien-el-arranque.patch
+50e762e7903f73d92d1ee4c42ffa615799be2c66fd215a78007824b7e6f51de7a010a9e7b00297d64da558fa56cba79803a3c678eadd0a449b4120764e64de9c  0056-la-tactil-usaba-el-firmware-despues-de-liberarlo.patch
+8bcee0d57cc1e8e632d0b4a2545750aaf875887c591ad8678f30167c7f6d587db4a838543009572a10e9b9f6d49861af4386132fa04dfd07505c04e379aad229  0058-callar-de-verdad-la-tormenta-de-handover.patch
+ded00f27b5576b0f6d9fb15bf2a2b95679466a9d5c791ba165d9f29b0b966b4d787586e701c78ab1ed40486604cab2d1cafb82dd9d4f0d3c90cbd827b5b3d9c4  0059-diagnostico-que-ve-el-receptor-csi2.patch
+7f101e1cb22ef81c04b7af7f9ad2c5dfa3aa6fb82ab9ff1c3ee298b348817502ab001ab78948039b478c384a630bc54e5b3ad87fe5d12bfcb4b640ef7b626885  0060-el-csiphy-del-sm7150-es-v1-2-no-sdm845.patch
+752ae061f018bdc1867e3a070b75aab4258283eee3bbc5b586af9557254d1b6022cc444c9b3b19bc07afeae820ad95e42ca2853eaeeab421716edb6806b41926  0061-bajar-la-velocidad-del-enlace-del-sensor.patch
+df6e11e6a9c152eb54b2ad0e8d52517897a077eb071ba0de1f54f8d2bed2bc07c8cef68307125b94805987679c26651c4adfe1e59fecd7293a7e3e0e00d45789  0062-de-que-phy-escucha-el-csid-y-estado-del-phy-al-parar.patch
+bf837241a9ecb8225798076255bb6a458b02b97d2af378cb71811ea2bbd4858db5f50dc22233a13cf9cad6e468a069568f9625c3bc5430b5476f20c8783f95f4  0063-los-relojes-del-csiphy-del-sm7150-estaban-incompletos.patch
+5a9b145abd1835e0461001eca1142ad0e7f15626c1641f359449df41af6a41ce284423be21a43923bb173bc52bd5b71f4195a5e590c0dfc6af2db39c98cd9dfb  0064-releer-los-registros-del-csiphy-tras-configurarlo.patch
+3623ed78b702cc11bf2f5419ee7a2b6a553c654994b069353e95a37302a7f010ad621491f1f522f27f015e5f90d2c9ef5949d70ecf20b40ed30d351b034f6aa0  0065-los-relojes-del-csid-y-del-vfe1-del-sm7150-tambien.patch
+f2166364f983c5f4c30c1d86796f66b23c78bf4bcaa0e5f997137fa68d35c120f808effbc0d82eb47c4b17a46b2b19137f4cf6a4aabe4365d87082d91ce4cae4  0066-la-secuencia-de-reset-del-csiphy-como-la-de-qualcomm.patch
+a0c6c0b54ea196537eb4ef691764012cfd7df9759522c424d01a5bd1a47dbb70e90b20ef6a0ee4810926bb0c76b8593b2a374daacf99b13fc6bc96541eedc590  0067-el-pulso-de-terminacion-del-csiphy-que-falta-en-mainline.patch
+391fb9800239414c1292172fa4105a259ccf11ecf6e5960ad75bcbc1188e76ddd29e455f808265a269f39813c02f4bf7cc2dd572412400372e4e7c5c28adce2d  0068-el-sensor-salia-del-reset-sin-reloj.patch
+79aa5e3e36335b861e915b6a3a7a7b47543c552a235b2472c64d2d62d5d3dd64f0d52540f2f84ea46b260744ff1a9a43d56310efabae08e50c2357f86fc69ad6  0069-esperar-a-que-el-pll-de-salida-enganche.patch
+fdfefb9029a515890c906aea4afe511f81549920a069fcc4e67010e4319aa415d7106bfc4cb1c993dc4424e678620cd483f8461cd4b92dbe08f6d1a9703751c2  0070-reactivar-la-trasera-para-bisecar.patch
+8ae023f528def4603d2991c51d2f92ba673d119c815ed57cb5912c034f4840edf8a52ef042450722908b0f8b3c2c38ec7fba1cd2b73b113714760070ab642812  0071-la-puerta-de-reloj-del-receptor-csi2.patch
+d56406d0689265a2c4a2afce51b442dcdfb0bb1c95b172132bcf9df138d43bbade662bec67e820c992dbaf46de2cac86050ec684064807fc0d85e6a3ad398bef  0072-los-contadores-de-hardware-del-csid.patch
+b304f764cc7b66b0361cc528fd6d8793e07016b0cb62415433359313fd0351da5f486c20433200084744ecda17255a8fa9bf256592b3a2efa4f83185195cedd9  0073-releer-la-configuracion-del-csid.patch
+fef47bed13ccda108013122b37bb6d7643e4e5735a0a1cf62efdc799e62280fafbef8a27033fd799f6b6cfeb50f4e907962666d4fb9ca2db48b4b59641daa7cf  0074-reaplicar-el-receptor-con-el-sensor-ya-transmitiendo.patch
+16f35e2e6bb75339cbaaa645da3e4b26ce8f3a2d1e27dc63e5d86b4915dab0e6d0a3374970faf5020850dfef6b6aee687426ae1dc2818ba04a25f1570add3729  0075-el-offset-del-csid-lite-del-sm7150.patch
+9629b3f27799ff619b6e6e94abdab4d928776c5169b18de3136e30b0d23c4c98a4f7d0cd723deafcec3c485a832e6f2d47e6f25cd04f8cc390ef062be7724f37  0076-el-patron-exacto-de-los-registros-de-interrupcion-del-csiphy.patch
+98548ee874fc9bf6f2e795656897a7ca3450f43ffa6af551b199af31203be5a68b96762db8ba138c4b6f8d001d7a3a85b6c76591aa83ccb616527952be750f84  0077-el-tercer-modo-del-sensor-1280x720.patch
+0bbcbf296d1babf67d45594772b7333433fe40b3a3600952f5567ff1832b41756403998a05d0b8bac82e41ac86771d483270441d5ea7608140a092e895480b76  0078-volcar-el-espacio-de-registros-del-csid.patch
+14dcfa245e070439dc0a5f0d1f23af1cab679423bb437571cc184224b8e2a8f2cec25541fe7c9ff1190ef3d05a14532459785e3202056a6763ce2cffd897098e  0079-volcar-el-espacio-de-registros-del-csiphy.patch
+201f09e012d734797bb1bcfb77ce08f1ac02c9c48ad58cbcd4355d452c194a0b81755bd46c406f051bfeb93e585784aaf6a44e941cedfcc7740234c883413534  0080-volcar-el-csiphy-en-marcha-no-al-parar.patch
+47da857accd16f354c00acb3ff13d2fb566d71c27d6ff6097d2c82f9b367414e1fa61e1aa4f846e1a46702b2f5720cdaef69137a5cf880966de7a3c1c932290c  0081-el-reloj-del-camino-al-csid-en-el-cuarzo.patch
+54b73e239a717a5830510bfd5c278e01fd5faf90ca180a19f353884cde1d5a263d5b1a7db84cf971acbad274b56b8452895e1046299f96551e71b499691ca5d9  0082-el-refgen-que-el-csiphy-necesita-esta-apagado.patch
+381266774571aa0e684f550195b9bbfbe6690e6bec3300319db291b16a199cfa0a5e2e3beddefbf115d5e80ded4996fda1b7f65464410632a45f36738cb15c14  0084-el-reloj-del-csiphy0-para-los-otros-phy.patch
+a488c140943b85da031e0cf69f34038fdff955c11d1fa8e593f5539c034f40e78794383ab74cbf8ae6523d2bbc88e538e57bfcfa17e5fd08587fbfabd29cf5d4  0085-fuera-el-modo-de-20mp-para-el-visor.patch
+3a884d03317a0fc3a348089fd93ab9ccdecaf992e32f6f75ce081981794a56e1ed6cf93ce0238624af9a6db0de7e9af1e28413f24a5aa766b8a018993cb6dc71  0086-portar-la-trasera-desde-fabrica.patch
+74cb63fe468446f244094acef64b3227618790a2d99c7f9ed5ef1d8fa25daa8757465492f87d6e63264dcd4cff4a975168fd158ffeafcf332a14c79212eb7150  0087-barrer-el-enlace-de-la-trasera-en-caliente.patch
+4d2ac97294e51b3ac3d28f9a56fd9b94c2040af182c253efcd6d68a5bde811283e1e7130a59d9610b6a3139da4257482d58436c6a4263002871b1535c2169f19  0088-soporte-de-cphy-en-camss.patch
+bc0b7f0b4624b3f47092cf2004d2ced74191424466b7cf305ce88edae7b609567cde14dbc303b1cf2b5361f710d44e99efa30efc2e9d8f526b14a5f4e2da5389  0089-cphy-la-mascara-de-carriles-sin-reloj.patch
+102a3e507250854cc627ba9c95d33e434c114996aaf6b4344f85a115157bcfe6710cfda5a22f1272793952630eb39ae1843c9a7776940b47a8500f5994020467  0090-cphy-los-trios-en-los-bits-impares.patch
+f52b9c3129e82181e8b6531bafcfda80311b1cbe5f8c071a173820b349a9b3192afedbd797afee043f04630eff036111b3e103659e9a21c36e55263ff3173424  0091-cphy-el-modo-antes-de-los-trios.patch
+bf67f0fbd5ec2877fa461a4d9c88574036ddea52276ad3f7066bfc0aaed90b4977e7e1674c45cb78ce89321c3c7706b258a55da362b73b41c0719e4cd442e0a9  0092-decirle-al-sensor-que-hable-cphy.patch
+c1a59a5e7e896e38e3d8103eb8eef00419063f789fa39fef01d882745a9b529108d0b1b8778ee33a2ef389fd6eb3bf5422be16ac785465371725bc7f9ff7da2b  0093-los-cinco-modos-de-la-trasera-y-el-recorte.patch
+6e3c3215e08edbf96ab780595fa2b991744c70021fe99eef11139ab5c5ed0bbd195959a3a88384da8d767787a1b645b852b673aece32c74bd6771d290ee8f57c  0094-el-tope-de-ancho-de-camss-no-es-del-hardware.patch
+4f3c936e191d24cbaba3afca0ca2f1e9a4dc96410fa340adaf95678acb1822ef9b8df036243955da5feeecf37f103c7229b3f7763facd5cf6945862f9d0bf58e  0095-la-exposicion-minima-depende-del-agrupado.patch
+ea5c2748764c71401e82df5a5136e7bd17d71c04de3eebe94d23b85039e62e39891da8b690af364c0cd06e1cf0acf26620aec87f80979114ef50938a9986541f  0096-orientacion-y-rotacion-de-las-dos-camaras.patch
+885f1c572deffd8049269f189e163f611630e8588b3a03c70fbe9dfcf0a60dcef3c72656a21435c0c8f21ce2f2b0b6cb38178344a6bf58db59995854c184bbc2  0097-encender-el-riel-del-actuador-para-buscarlo.patch
+43f030f7d1cd0746baa26bed20752012fb42c1bf67e4eb4509f05a15529a424e2970da30afe100026a88d25c91efbd43b7ff82e7a83eec1e8a830f2b1e5eeebc  0098-buscador-de-sensores-en-el-bus-cci.patch
+c4aba37285be8d0067ee24c739b2093ce33da1eb05c4cbe0827e8823174da3ffd20849febbd9d7c33ff8d6c0700d8e4f559f38590b726b4bb141ba7c0582af32  0099-el-gran-angular-driver-del-hi1337.patch
+60b2a6bf71b48751b5277aea1050f4a0e0532f8952abd71c505be59dd82efdc3f42f1f162fed2d3dd54babf3eac6848a0d2004c2171e22b0b991a74be7353c0e  0100-camss-enlaces-de-sensor-conmutables.patch
+5170efd8fb726903648fc7e11552ebfa94108309ea911ef43d694fca1e7a7fa47fec0c4aeef6f6c9e9248a4048d1918a0773caafa1c42a87d3b98bfb74e05b13  0101-el-motor-de-enfoque-de-la-trasera.patch
+0599c2d4ad16c40e5075d94412a231bcc08ece4b4a80a43de4ca872679634168f9ed8cae7d1046c81a0919d0a5540755c6545909c14309fda063f44e6331a547  0102-el-motor-de-enfoque-no-se-envenena-al-suspenderse.patch
+bb655f4e999e48a91827728f49591e5c51edeeb5619d638ba962828c0b1b16985603a52735ae042e843d3e1aa660159197d117af004bba1f5b33c6c5a592a803  0103-el-techo-de-exposicion-sigue-a-la-trama.patch
+8f0e174811928410ec8fd4bbad945016f2f9b4c094475df2822abdd32ca8d3e516afc67b9aee3179ddce7b915b001dcec8a06bcd4f41ca6427b9e191cb348c0b  0104-el-medidor-de-bateria-no-confunde-no-lo-se-con-vacia.patch
+cd23c5bf9517f2a09c92aeeca3bea7729cb7665ab9a5af16caac2b9ee7cdd732608029637787fa7330c9d9e28f8e02e00fc798187099ff1757fc054a6ef85745  0105-el-panel-tambien-puede-hacer-60-hz.patch
+57d2490cb28791b92a1713d165775ea9374269e5be772b1fe55fb5a58120e5e4ddfcf2408e86aaef45d7b5eae3af4e88efd314f9a4746e4bfbabffc809e9bb06  0109-cargar-trustlet.patch
+78b5a039faafdc0bf53d083e9b08095d3669bc6c987ff9631ac9f015ca283c8fe47df3e600a9f6da086784cd212a708295ddcd0fedb558590ce242e98ef141cd  0110-goodix-fp.patch
+cfc3665afdd02f0fe4e2efaff88a8a1baa11d8a11891b80c9508ca5c9560c0840d890e70abfad7b543fb57d97d0cc0fdd2de87163a6c9f9467de5a3e24895a1e  0111-el-apagado-apaga.patch
+5a395ef64fecb1b77344384898f45a62eb51d4eaf8a11665ff22abdd1099e12cd7d25765f8b798086594a230d7a13c5714e5a06f7974a2dbf7a01001def8de0f  0112-el-medidor-tampoco-se-cree-un-promedio-imposible.patch
+6b463aa21f6c6a2197766f29de1eb8b37bfb98470cf01d51152e937e73f299ff6b18be5c2d55f27250b5d7ced61d00ff99dbf21d07ab71c7ab1a92b0fd107610  0113-el-conector-usb-c-tambien-pide-carga.patch
+6020c3e56c23e595cf312b6d7a6782fbea463aa31f57fafd5dbdb2e3baef1d1d615340ebb089a25f9462566299eb5e6ee8fc445ea7dee8652e90054b1e548dab  0114-fastrpc-fix-context-leak-signal-interrupted.patch
+f6370551df970835272c7d50a2f5158e7a4ddc926f513b6f0f9fdd9fc2ed6848345e60bb91d456db5ba42e2fdcdb726606e918998209c876338cb3b9294d3838  0115-sm7150-gcc-power-domain-cx.patch
+a452de707f40bf1f660bd5465677979247da40c54c418dfb333c7a5263d5f7082ca4ad4d3e80dcff28250f5b691230e2609ed3d3de9dd79a75ab45d3841747e7  0116-sm7150-gcc-qup-ahb-clocks-critical.patch
+"

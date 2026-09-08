@@ -1,0 +1,756 @@
+Tocar la pantalla para enfocar, con el motor de la trasera
+
+QUE HACE
+--------
+Un toque en el visor enfoca en ese punto. Sale una mirilla: blanca mientras
+busca, verde si lo logro, roja si no. Que diga que NO se enfoco importa tanto
+como lo otro -sobre una escena sin bordes la busqueda no puede converger, y
+callarlo dejaria al usuario esperando algo que no va a pasar-.
+
+POR QUE AQUI Y NO EN LIBCAMERA
+------------------------------
+Porque el manejador de tuberia simple no publica AfMode ni LensPosition para
+este sensor, y porque el actuador de este movil tiene dos restricciones que
+ningun autoenfoque generico contempla:
+
+  - solo acepta ordenes MIENTRAS EL SENSOR TRANSMITE, porque el bus CCI vive
+    con el sensor;
+  - y al cerrar su nodo, el driver devuelve la lente al origen y apaga el chip.
+
+La segunda la resuelve el servicio `enfoque-surya` (camara/enfoque-surya), que
+mantiene el nodo abierto y acepta posiciones por /run/enfoque-surya. La primera
+deja de ser un problema justo aqui: la vista previa YA esta transmitiendo
+cuando el usuario toca la pantalla. Que es, mirandolo bien, como funciona
+cualquier autoenfoque de verdad.
+
+EL METODO, Y QUE SE VALIDO ANTES DE ESCRIBIRLO
+-----------------------------------------------
+Subir la colina de nitidez: cinco posiciones repartidas por todo el recorrido y
+dos afinados de cinco alrededor de la mejor. Se probo primero desde el PC, con
+la herramienta de mandos, y dio 512 -el mismo valor que un barrido exhaustivo
+de nueve posiciones por otro camino-:
+
+     posicion  nitidez
+        0        4.15
+      398        5.52  ###########
+      498        8.01  ################################
+      512        9.37  ############################################
+      569        6.96  #######################
+     1023        4.23
+
+Aqui sale mucho mas barato: en la vista previa los fotogramas llegan cada ~50 ms
+en vez de cada 1,2 s.
+
+La nitidez es la varianza de la segunda diferencia horizontal, normalizada por
+el nivel medio al cuadrado. Normalizar no es cosmetico: subir la ganancia sube
+la senal y su ruido a la vez, y sin normalizar un cambio de exposicion a mitad
+de busqueda se leeria como un cambio de enfoque.
+
+TRES COSAS QUE PARECEN DETALLES Y NO LO SON
+--------------------------------------------
+1. SE TIRAN CUATRO FOTOGRAMAS tras mover la lente. El actuador tarda en llegar
+   y la tuberia de la camara va con retraso. Medir sin esperar no da una curva
+   mas ruidosa: da una curva DESPLAZADA, que es peor porque parece buena.
+
+2. EL PUNTO SE TRADUCE. La vista previa se gira por software antes de pintarla
+   -el sensor va montado torcido, 270 grados en la trasera-, asi que el punto
+   que toca el usuario no es el punto de la imagen que llega al medidor. Y con
+   el zoom puesto tampoco coincide: el visor se amplia desde el centro, o sea
+   que un toque en el borde cae mucho mas adentro. Sin las dos correcciones, la
+   camara enfocaria en un sitio distinto del que se toca.
+
+3. SI LA COLINA ES PLANA, NO SE TOCA LA LENTE. Una escena oscura mide ruido del
+   sensor, y el ruido NO se desenfoca porque se anade despues de la optica: la
+   busqueda converge igual y devuelve un numero con toda la pinta de ser bueno.
+   Paso de verdad -una busqueda entera dio 972 con la camara mirando a la nada-.
+   Se exige que la nitidez varie al menos x1,25; si no, se deja el enfoque donde
+   estaba y la mirilla sale roja.
+
+Y la escritura en la tuberia va con O_NONBLOCK: abrir una tuberia para escribir
+BLOQUEA hasta que haya alguien leyendo, y esto corre en el hilo de la interfaz.
+Sin el, no tener el servicio instalado colgaria la aplicacion entera.
+
+MENOS RUIDO: CADA ETAPA SE RECORRE HACIA EL LADO MAS CERCANO
+-------------------------------------------------------------
+Un VCM es una bobina que empuja la lente contra un muelle, y cada salto largo
+se OYE. Probandolo en el movil: "se escuchan unos claqueos".
+
+La primera version pedia las posiciones en orden creciente siempre, sin mirar
+donde habia quedado la lente, asi que entre etapa y etapa hacia un viaje largo
+para nada:
+
+    gruesa:  0 -> 256 -> 512 -> 767 -> 1023    (acaba arriba del todo)
+    fina:    1023 -> 256 -> 384 -> ...         (767 de vuelta, inutil)
+
+Ahora cada etapa se recorre hacia el lado que empieza mas cerca de donde esta
+la lente. Se miden las MISMAS posiciones y sale el MISMO resultado: solo cambia
+el orden, y con el, el ruido y el tiempo.
+
+diff -ruN a/src/CMakeLists.txt b/src/CMakeLists.txt
+--- a/src/CMakeLists.txt
++++ b/src/CMakeLists.txt
+@@ -9,6 +9,7 @@
+     plasmacamera.cpp
+     plasmacameramanager.cpp
+     plasmacamera/converter.cpp
++    plasmacamera/enfocador.cpp
+     plasmacamera/image.cpp
+     plasmacamera/path.cpp
+     plasmacamera/settings.cpp
+diff -ruN a/src/contents/ui/camera/CameraPage.qml b/src/contents/ui/camera/CameraPage.qml
+--- a/src/contents/ui/camera/CameraPage.qml
++++ b/src/contents/ui/camera/CameraPage.qml
+@@ -133,6 +133,7 @@
+         anchors.fill: parent
+ 
+         camera: root.camera
++        enfocador: root.captureSession ? root.captureSession.enfocador : null
+         bottomMargin: controlContainer.height
+ 
+         // Header controls
+diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewfinder.qml
+--- a/src/contents/ui/camera/Viewfinder.qml
++++ b/src/contents/ui/camera/Viewfinder.qml
+@@ -16,6 +16,11 @@
+     id: root
+ 
+     required property PlasmaCamera camera
++
++    // El autoenfoque, que vive en el gestor porque es donde pasan los
++    // fotogramas. Puede ser nulo: si el servicio del motor no esta instalado,
++    // el toque no hace nada en vez de romper.
++    property var enfocador: null
+     property real bottomMargin: 0
+ 
+     property alias videoSink: viewfinder.videoSink
+@@ -201,6 +206,67 @@
+         }
+     }
+ 
++    // TOCAR PARA ENFOCAR
++    // -------------------
++    // Convive con el pellizco sin pelearse: un toque suelto no es un pellizco,
++    // y Qt los distingue solo.
++    TapHandler {
++        enabled: root.camera.available && root.enfocador && root.enfocador.disponible
++
++        onTapped: (evento) => {
++            // El punto hay que llevarlo a coordenadas de la IMAGEN, no de la
++            // pantalla, y con el zoom puesto no es lo mismo: el visor esta
++            // ampliado desde el centro, asi que solo se ve la parte central y
++            // un toque en el borde cae mucho mas adentro de lo que parece. Sin
++            // esto, con zoom la camara enfocaria en un sitio distinto del que
++            // se toca, y desde fuera pareceria que el enfoque falla.
++            const s = Math.max(0.0001, viewfinder.scale);
++            const u = 0.5 + ((evento.position.x / root.width) - 0.5) / s;
++            const v = 0.5 + ((evento.position.y / root.height) - 0.5) / s;
++
++            marca.x = evento.position.x - marca.width / 2;
++            marca.y = evento.position.y - marca.height / 2;
++            marca.visible = true;
++            relojDeLaMarca.restart();
++            root.enfocador.enfocarEn(u, v);
++        }
++    }
++
++    // La mirilla: cuadrado blanco mientras busca, verde si lo logro y rojo si
++    // no. Decir que NO se ha enfocado importa tanto como decir que si: sobre
++    // una escena sin bordes la busqueda no puede converger, y callarlo dejaria
++    // al usuario esperando algo que no va a pasar.
++    Rectangle {
++        id: marca
++
++        width: Math.round(root.width * 0.22)
++        height: width
++        visible: false
++        color: "transparent"
++        border.width: 2
++        border.color: root.enfocador && root.enfocador.enfocando
++                      ? "white"
++                      : (root.enfocador && root.enfocador.logrado ? "#40d060" : "#e06040")
++        radius: 4
++        opacity: root.enfocador && root.enfocador.enfocando ? 1.0 : 0.85
++
++        SequentialAnimation on scale {
++            running: marca.visible && root.enfocador && root.enfocador.enfocando
++            loops: Animation.Infinite
++            NumberAnimation { from: 1.0; to: 0.88; duration: 500 }
++            NumberAnimation { from: 0.88; to: 1.0; duration: 500 }
++        }
++
++        Timer {
++            id: relojDeLaMarca
++            // Se queda un rato despues de terminar para que de tiempo a ver el
++            // color del resultado, no solo la busqueda.
++            interval: 2500
++            onTriggered: if (!root.enfocador || !root.enfocador.enfocando) marca.visible = false;
++                         else restart()
++        }
++    }
++
+     // EL PELLIZCO, que es la unica forma de mover el zoom.
+     //
+     // Sin animacion de por medio: una animacion sobre la escala hace que la
+diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
+--- a/src/plasmacamera/enfocador.cpp
++++ b/src/plasmacamera/enfocador.cpp
+@@ -0,0 +1,331 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++
++#include "enfocador.h"
++
++#include <QDebug>
++#include <QFile>
++#include <QRect>
++
++#include <algorithm>
++
++#include <fcntl.h>
++#include <unistd.h>
++
++namespace
++{
++// La tuberia del servicio `enfoque-surya`, que es quien mantiene el nodo del
++// motor abierto. Sin el, la lente vuelve al origen en cuanto nadie lo sujeta.
++constexpr const char *kTuberia = "/run/enfoque-surya";
++
++constexpr int kMinimo = 0;
++constexpr int kMaximo = 1023;
++
++//! Etapas de la busqueda: cinco posiciones cada una, afinando alrededor.
++constexpr int kPuntosPorEtapa = 5;
++constexpr int kEtapas = 3;
++
++/*!
++ * Cuanto de la imagen se mira alrededor del punto tocado, en tanto por uno.
++ * Un quinto del lado: bastante para tener bordes que medir, y bastante poco
++ * para que enfocar "ahi" signifique algo.
++ */
++constexpr qreal kLadoRecorte = 0.2;
++
++//! Por debajo de esto, la colina es ruido y no se toca la lente.
++constexpr double kRelacionMinima = 1.25;
++}
++
++Enfocador::Enfocador(QObject *parent)
++    : QObject(parent)
++{
++    // El servicio puede no estar instalado. Se comprueba una vez y se dice, en
++    // vez de fallar en silencio cada vez que alguien toque la pantalla.
++    m_disponible = QFile::exists(QString::fromLatin1(kTuberia));
++    if (!m_disponible) {
++        qWarning() << "enfoque: no hay servicio en" << kTuberia
++                   << "- el toque para enfocar no hara nada";
++    }
++}
++
++bool Enfocador::pedirPosicion(int posicion)
++{
++    // O_NONBLOCK a proposito: abrir una tuberia para escribir BLOQUEA hasta
++    // que haya alguien leyendo, y aqui se esta en el hilo de la interfaz. Si
++    // el servicio no esta, esto falla con ENXIO al instante en vez de colgar
++    // la aplicacion entera, que es exactamente lo que no puede pasar.
++    const int fd = ::open(kTuberia, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
++    if (fd < 0) {
++        return false;
++    }
++    const QByteArray linea = QByteArray::number(posicion) + '\n';
++    const ssize_t escrito = ::write(fd, linea.constData(), linea.size());
++    ::close(fd);
++    return escrito == linea.size();
++}
++
++void Enfocador::moverA(int posicion)
++{
++    posicion = qBound(kMinimo, posicion, kMaximo);
++    if (pedirPosicion(posicion)) {
++        setPosicion(posicion);
++    }
++}
++
++void Enfocador::enfocarEn(qreal x, qreal y)
++{
++    if (!m_disponible) {
++        return;
++    }
++    m_punto = QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0));
++    Q_EMIT puntoChanged();
++
++    // Se empieza de cero aunque hubiera una busqueda en marcha: el usuario
++    // acaba de decir donde quiere mirar, y las medidas de antes son de otro
++    // sitio de la imagen.
++    m_medidas.clear();
++    m_pendientes.clear();
++    m_etapa = 0;
++    setLogrado(false);
++
++    for (int i = 0; i < kPuntosPorEtapa; ++i) {
++        m_pendientes.append(kMinimo + (kMaximo - kMinimo) * i / (kPuntosPorEtapa - 1));
++    }
++    ordenarDesdeDondeEsta();
++    setEnfocando(true);
++    siguientePosicion();
++}
++
++void Enfocador::ordenarDesdeDondeEsta()
++{
++    // RECORRER CADA ETAPA EN LA DIRECCION QUE EMPIECE MAS CERCA
++    //
++    // Un VCM es una bobina empujando la lente contra un muelle: cada salto
++    // largo se OYE. Y la primera version pedia el recorrido en orden creciente
++    // siempre, sin mirar donde habia quedado la lente, asi que entre etapa y
++    // etapa hacia un viaje largo para nada:
++    //
++    //     gruesa:  0 -> 256 -> 512 -> 767 -> 1023   (acaba arriba del todo)
++    //     fina:    1023 -> 256 -> ...               (767 de vuelta, inutil)
++    //
++    // Recorriendo cada etapa hacia el lado que empieza mas cerca, ese viaje
++    // desaparece. Se miden las mismas posiciones y sale el mismo resultado:
++    // solo cambia el orden, y con el, el ruido y el tiempo.
++    if (m_pendientes.size() < 2 || m_posicion < 0) {
++        return;
++    }
++    std::sort(m_pendientes.begin(), m_pendientes.end());
++    const int aLoBajo = qAbs(m_pendientes.first() - m_posicion);
++    const int aLoAlto = qAbs(m_pendientes.last() - m_posicion);
++    if (aLoAlto < aLoBajo) {
++        std::reverse(m_pendientes.begin(), m_pendientes.end());
++    }
++}
++
++void Enfocador::siguientePosicion()
++{
++    if (m_pendientes.isEmpty()) {
++        return;
++    }
++    const int siguiente = m_pendientes.takeFirst();
++    if (!pedirPosicion(siguiente)) {
++        // El servicio se ha caido a mitad. Mejor rendirse que seguir midiendo
++        // una lente que ya no se mueve y dar un resultado con buena pinta.
++        qWarning() << "enfoque: la tuberia dejo de aceptar; se abandona";
++        setEnfocando(false);
++        return;
++    }
++    setPosicion(siguiente);
++    m_porTirar = kFotogramasDeEspera;
++}
++
++void Enfocador::nuevoFotograma(const QImage &imagen)
++{
++    if (!m_enfocando || imagen.isNull()) {
++        return;
++    }
++    if (m_porTirar > 0) {
++        --m_porTirar;
++        return;
++    }
++
++    m_medidas.append({m_posicion, nitidez(imagen)});
++
++    if (!m_pendientes.isEmpty()) {
++        siguientePosicion();
++        return;
++    }
++
++    // Etapa terminada. Si queda alguna, se afina alrededor de la mejor con un
++    // tramo del ancho de UN PASO de esta etapa a cada lado: menos se arriesga
++    // a dejar fuera el maximo cuando la mejor cayo en el borde de la colina,
++    // y mas no afina nada.
++    ++m_etapa;
++    if (m_etapa < kEtapas) {
++        int mejor = m_medidas.first().first;
++        double valor = m_medidas.first().second;
++        int menor = mejor, mayor = mejor;
++        for (const auto &m : std::as_const(m_medidas)) {
++            if (m.second > valor) {
++                valor = m.second;
++                mejor = m.first;
++            }
++            menor = qMin(menor, m.first);
++            mayor = qMax(mayor, m.first);
++        }
++        const int paso = qMax(1, (mayor - menor) / (kPuntosPorEtapa - 1));
++        const int desde = qBound(kMinimo, mejor - paso, kMaximo);
++        const int hasta = qBound(kMinimo, mejor + paso, kMaximo);
++        for (int i = 0; i < kPuntosPorEtapa; ++i) {
++            const int p = desde + (hasta - desde) * i / (kPuntosPorEtapa - 1);
++            // Repetir una posicion ya medida no anade nada y cuesta fotogramas.
++            bool repetida = false;
++            for (const auto &m : std::as_const(m_medidas)) {
++                if (m.first == p) {
++                    repetida = true;
++                    break;
++                }
++            }
++            if (!repetida && !m_pendientes.contains(p)) {
++                m_pendientes.append(p);
++            }
++        }
++        if (!m_pendientes.isEmpty()) {
++            ordenarDesdeDondeEsta();
++            siguientePosicion();
++            return;
++        }
++    }
++    terminar();
++}
++
++void Enfocador::terminar()
++{
++    int mejor = m_posicion;
++    double alto = 0.0;
++    double bajo = 0.0;
++    bool primero = true;
++    for (const auto &m : std::as_const(m_medidas)) {
++        if (primero) {
++            alto = bajo = m.second;
++            mejor = m.first;
++            primero = false;
++            continue;
++        }
++        if (m.second > alto) {
++            alto = m.second;
++            mejor = m.first;
++        }
++        bajo = qMin(bajo, m.second);
++    }
++
++    // SI LA COLINA ES PLANA, NO SE TOCA LA LENTE.
++    //
++    // Una escena sin bordes -o demasiado oscura, donde lo que se mide es ruido
++    // del sensor, que NO se desenfoca porque se anade despues de la optica- da
++    // un maximo cualquiera con toda la pinta de ser bueno. Ya paso: una
++    // busqueda entera convergio a 972 sin un solo error, con la camara mirando
++    // a la nada. Mejor dejar el enfoque donde estaba y decir que no se logro.
++    const double relacion = bajo > 0.0 ? alto / bajo : 0.0;
++    const bool bien = m_medidas.size() >= 3 && relacion >= kRelacionMinima;
++
++    if (bien) {
++        pedirPosicion(mejor);
++        setPosicion(mejor);
++    }
++    setLogrado(bien);
++    setEnfocando(false);
++}
++
++void Enfocador::setGiro(int grados)
++{
++    m_giro = ((grados % 360) + 360) % 360;
++}
++
++QPointF Enfocador::puntoEnElSensor() const
++{
++    const qreal u = m_punto.x();
++    const qreal v = m_punto.y();
++    switch (m_giro) {
++    case 90:
++        // La imagen se muestra girada un cuarto en el sentido del reloj, o sea
++        // que la esquina de abajo a la izquierda del sensor acaba arriba a la
++        // izquierda de la pantalla. Deshacerlo es esto:
++        return {v, 1.0 - u};
++    case 180:
++        return {1.0 - u, 1.0 - v};
++    case 270:
++        return {1.0 - v, u};
++    default:
++        return {u, v};
++    }
++}
++
++double Enfocador::nitidez(const QImage &imagen) const
++{
++    const QPointF p = puntoEnElSensor();
++    const int lado = qMax(16, int(qMin(imagen.width(), imagen.height()) * kLadoRecorte));
++    const int cx = int(p.x() * imagen.width());
++    const int cy = int(p.y() * imagen.height());
++    QRect r(cx - lado / 2, cy - lado / 2, lado, lado);
++    r = r.intersected(imagen.rect());
++    if (r.width() < 8 || r.height() < 3) {
++        return 0.0;
++    }
++
++    // Se recorre por filas con qGray, que es suficiente y no obliga a convertir
++    // la imagen entera -esto corre en cada fotograma de la vista previa-.
++    double suma = 0.0;
++    double suma2 = 0.0;
++    double nivel = 0.0;
++    qint64 n = 0;
++    qint64 nNivel = 0;
++
++    for (int y = r.top(); y <= r.bottom(); ++y) {
++        const QRgb *fila = reinterpret_cast<const QRgb *>(imagen.constScanLine(y));
++        for (int x = r.left() + 1; x < r.right(); ++x) {
++            const int a = qGray(fila[x - 1]);
++            const int b = qGray(fila[x]);
++            const int c = qGray(fila[x + 1]);
++            const double d = a + c - 2 * b;
++            suma += d;
++            suma2 += d * d;
++            nivel += b;
++            ++n;
++            ++nNivel;
++        }
++    }
++    if (n < 8 || nNivel == 0) {
++        return 0.0;
++    }
++    const double media = suma / n;
++    const double varianza = suma2 / n - media * media;
++    const double nivelMedio = qMax(1.0, nivel / nNivel);
++    return varianza / (nivelMedio * nivelMedio);
++}
++
++void Enfocador::setEnfocando(bool valor)
++{
++    if (m_enfocando == valor) {
++        return;
++    }
++    m_enfocando = valor;
++    Q_EMIT enfocandoChanged();
++}
++
++void Enfocador::setPosicion(int valor)
++{
++    if (m_posicion == valor) {
++        return;
++    }
++    m_posicion = valor;
++    Q_EMIT posicionChanged();
++}
++
++void Enfocador::setLogrado(bool valor)
++{
++    if (m_logrado == valor) {
++        return;
++    }
++    m_logrado = valor;
++    Q_EMIT logradoChanged();
++}
+diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
+--- a/src/plasmacamera/enfocador.h
++++ b/src/plasmacamera/enfocador.h
+@@ -0,0 +1,166 @@
++// SPDX-License-Identifier: GPL-2.0-or-later
++//
++// Autoenfoque por contraste para el POCO X3 NFC (surya).
++//
++// POR QUE AQUI Y NO EN LIBCAMERA
++// ------------------------------
++// Porque el manejador de tuberia simple de libcamera no publica ni AfMode ni
++// LensPosition para este sensor, y porque el actuador de este movil tiene dos
++// restricciones que ningun autoenfoque generico contempla:
++//
++//   - solo acepta ordenes MIENTRAS EL SENSOR TRANSMITE, porque el bus CCI vive
++//     con el sensor;
++//   - y al cerrar su nodo, el driver devuelve la lente al origen y apaga el
++//     chip.
++//
++// La segunda la resuelve el servicio `enfoque-surya`, que mantiene el nodo
++// abierto y acepta posiciones por una tuberia. La primera deja de ser un
++// problema justo aqui: la vista previa YA esta transmitiendo cuando el usuario
++// toca la pantalla. Que es, mirandolo bien, como funciona cualquier
++// autoenfoque de verdad.
++//
++// EL METODO
++// ---------
++// Subir la colina de nitidez, en grueso y luego afinando, que es lo que se
++// valido midiendo desde el PC: cinco posiciones repartidas por todo el
++// recorrido y dos afinados de cinco alrededor de la mejor. Catorce medidas
++// dieron 512, el mismo valor que un barrido exhaustivo de nueve posiciones por
++// otro camino.
++//
++// Aqui sale mucho mas barato que alli: en la vista previa los fotogramas
++// llegan cada ~50 ms en vez de cada 1,2 s.
++
++#pragma once
++
++#include <QImage>
++#include <QList>
++#include <QObject>
++#include <QPointF>
++
++class Enfocador : public QObject
++{
++    Q_OBJECT
++
++    Q_PROPERTY(bool enfocando READ enfocando NOTIFY enfocandoChanged)
++    Q_PROPERTY(bool disponible READ disponible NOTIFY disponibleChanged)
++    Q_PROPERTY(int posicion READ posicion NOTIFY posicionChanged)
++    Q_PROPERTY(QPointF punto READ punto NOTIFY puntoChanged)
++    Q_PROPERTY(bool logrado READ logrado NOTIFY logradoChanged)
++
++public:
++    explicit Enfocador(QObject *parent = nullptr);
++
++    /*!
++     * Empieza a enfocar en un punto de la imagen, en coordenadas de 0 a 1.
++     * Si ya se estaba enfocando, se descarta lo anterior y se empieza de nuevo
++     * en el punto nuevo: el usuario acaba de decir donde quiere mirar.
++     */
++    Q_INVOKABLE void enfocarEn(qreal x, qreal y);
++
++    /*!
++     * Lleva la lente a una posicion concreta, sin buscar. Para el mando manual.
++     */
++    Q_INVOKABLE void moverA(int posicion);
++
++    //! Cada fotograma de la vista previa. Barato si no se esta enfocando.
++    void nuevoFotograma(const QImage &imagen);
++
++    /*!
++     * Los grados que se le van a dar a la imagen para mostrarla.
++     *
++     * Sin esto el "toca para enfocar" seria mentira: la vista previa se gira
++     * por software antes de pintarla -el sensor va montado torcido- asi que el
++     * punto que toca el usuario NO es el punto de la imagen que llega aqui. Con
++     * el giro de 270 de la trasera, tocar arriba a la izquierda mediria abajo a
++     * la izquierda, y el usuario veria la camara enfocar en otro sitio sin
++     * entender por que.
++     */
++    void setGiro(int grados);
++
++    bool enfocando() const
++    {
++        return m_enfocando;
++    }
++    bool disponible() const
++    {
++        return m_disponible;
++    }
++    int posicion() const
++    {
++        return m_posicion;
++    }
++    QPointF punto() const
++    {
++        return m_punto;
++    }
++    bool logrado() const
++    {
++        return m_logrado;
++    }
++
++Q_SIGNALS:
++    void enfocandoChanged();
++    void disponibleChanged();
++    void posicionChanged();
++    void puntoChanged();
++    void logradoChanged();
++
++private:
++    //! Escribe la posicion en la tuberia del servicio. Falso si no hay servicio.
++    bool pedirPosicion(int posicion);
++
++    /*!
++     * Nitidez del recorte alrededor del punto elegido.
++     *
++     * Varianza de la segunda diferencia HORIZONTAL, normalizada por el nivel
++     * medio al cuadrado. Lo de normalizar no es cosmetico: subir la ganancia
++     * sube la senal y su ruido a la vez, y sin normalizar un cambio de
++     * exposicion durante la busqueda se leeria como un cambio de enfoque.
++     *
++     * Se mide solo en horizontal porque es la version que se valido -contra
++     * desenfoque sintetico sobre una captura real: un pase divide por 15,9 y
++     * dos por 54,3-. Aqui la imagen no viene diezmada, asi que anadir el eje
++     * vertical daria mas senal; se deja para cuando se mida, no antes.
++     */
++    double nitidez(const QImage &imagen) const;
++
++    void terminar();
++    void siguientePosicion();
++
++    /*!
++     * Pone las posiciones de la etapa en la direccion que empieza mas cerca de
++     * donde esta la lente. Mismas medidas, mismo resultado, menos recorrido.
++     */
++    void ordenarDesdeDondeEsta();
++
++    void setEnfocando(bool valor);
++    void setPosicion(int valor);
++    void setLogrado(bool valor);
++
++    bool m_enfocando = false;
++    bool m_disponible = false;
++    bool m_logrado = false;
++    int m_posicion = -1;
++    QPointF m_punto{0.5, 0.5};
++    int m_giro = 0;
++
++    //! El punto tocado, llevado a las coordenadas de la imagen sin girar.
++    QPointF puntoEnElSensor() const;
++
++    //! Posiciones que faltan en la etapa actual, y lo medido hasta ahora.
++    QList<int> m_pendientes;
++    QList<QPair<int, double>> m_medidas;
++    int m_etapa = 0;
++
++    /*!
++     * Fotogramas que se tiran tras mover la lente.
++     *
++     * Hacen falta por dos motivos que se suman: el actuador tarda en llegar, y
++     * la tuberia de la camara va con retraso -el fotograma que entra ahora se
++     * capturo hace varios-. Medir sin esperar mezcla la nitidez de la posicion
++     * vieja con la nueva, y eso no da una curva mas ruidosa: da una curva
++     * DESPLAZADA, que es peor porque parece buena.
++     */
++    int m_porTirar = 0;
++    static constexpr int kFotogramasDeEspera = 4;
++};
+diff -ruN a/src/plasmacameramanager.cpp b/src/plasmacameramanager.cpp
+--- a/src/plasmacameramanager.cpp
++++ b/src/plasmacameramanager.cpp
+@@ -507,6 +507,13 @@
+     }
+ 
+     m_currentFrame = image;
++
++    // El autoenfoque mide sobre ESTE fotograma, antes de girarlo: la rotacion
++    // se aplica al QVideoFrame de abajo, no a la imagen. Por eso se le pasa el
++    // giro aparte, para que sepa traducir el punto que toco el usuario.
++    m_enfocador.setGiro(int(outputOrientationDegrees()));
++    m_enfocador.nuevoFotograma(image);
++
+     QVideoFrame frame = QVideoFrame(image);
+ 
+     // Do software rotation
+diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
+--- a/src/plasmacameramanager.h
++++ b/src/plasmacameramanager.h
+@@ -13,6 +13,7 @@
+ #include <libcamera/camera_manager.h>
+ 
+ #include "plasmacamera.h"
++#include "plasmacamera/enfocador.h"
+ 
+ /*!
+  * \brief Manages the libcamera camera controller (similar to QMediaCaptureSession)
+@@ -37,6 +38,8 @@
+     // preview and video recording
+     Q_PROPERTY(PlasmaCamera *plasmaCamera READ plasmaCamera WRITE setPlasmaCamera NOTIFY plasmaCameraChanged)
+     Q_PROPERTY(QVideoSink *videoSink READ videoSink WRITE setVideoSink NOTIFY videoSinkChanged)
++    //! El autoenfoque. Vive aqui porque aqui es donde pasan los fotogramas.
++    Q_PROPERTY(Enfocador *enfocador READ enfocador CONSTANT)
+     Q_PROPERTY(QMediaRecorder *recorder READ recorder WRITE setRecorder NOTIFY recorderChanged)
+     Q_PROPERTY(bool audioRecordingEnabled READ audioRecordingEnabled WRITE setAudioRecordingEnabled NOTIFY audioRecordingEnabledChanged)
+     Q_PROPERTY(QAudioInput *audioInput READ audioInput WRITE setAudioInput NOTIFY audioInputChanged)
+@@ -149,6 +152,11 @@
+      */
+     Q_INVOKABLE void stopRecordingVideo();
+ 
++    Enfocador *enfocador()
++    {
++        return &m_enfocador;
++    }
++
+ Q_SIGNALS:
+     void errorChanged();
+     void errorOccurred(int id, Error error, const QString &errorString);
+@@ -259,6 +267,8 @@
+     // preview and video recording
+     PlasmaCamera *m_plasmaCamera = nullptr;
+ 
++    Enfocador m_enfocador;
++
+     QImage m_currentFrame;
+     QVideoFrame m_videoFrame;
+     QVideoSink *m_videoSink = nullptr;

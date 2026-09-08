@@ -1,0 +1,113 @@
+# LOCAL SURYA APORT -- not Alpine's as-is. Two patches, both needed to bring the
+# sensor registry up; see README.md for the whole story.
+#
+# 0001 maps /mnt/vendor/persist/sensors/registry to the REAL sensors/ directory
+# instead of a virtual one with a single child. Without it the DSP's request for
+# '.../registry/registry/../sns_reg_version' -- note the '..' -- resolves that
+# '..' up the VIRTUAL tree, lands outside anything mapped and returns ENOENT no
+# matter where the file is put.
+#
+# 0002 serves writable files. The DSP writes 'temp.json' next to the registry
+# before it can initialise it, and 0.4.0 refuses every write-mode fopen().
+#
+# 0003 grows the listener's 256-byte input buffer, which cannot hold the payload
+# of a write, and makes a rejected call say which one it was.
+#
+# 0004 implements the rename the DSP uses to move each registry entry into
+# place. Without it nothing it writes is ever kept.
+#
+# Either one missing: registry init fails, the sensor PD dies, it drags the ADSP
+# with it, and the sound card goes with the ADSP.
+#
+# Upstream issues: https://github.com/linux-msm/hexagonrpc/issues/19 and /21
+#
+# Contributor: Dylan Van Assche <dylan@postmarketos.org>
+# Maintainer: Dylan Van Assche <dylan@postmarketos.org>
+_orig=hexagonrpcd
+pkgname=$_orig-utsugi
+pkgver=0.4.0
+pkgrel=8
+# FORK of hexagonrpcd. Same files as upstream, so it claims upstream's name with a
+# versioned provides and a replaces: apk then refuses to have both installed and
+# every package that depends on "hexagonrpcd" is satisfied by this one.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="Qualcomm HexagonFS daemon"
+url="https://github.com/linux-msm/hexagonrpc"
+# s390x: fails on 1 test. Hexagonrpcd is specific to Qualcomm ARM SoCs, so let's ignore it for now.
+arch="all !s390x"
+license="GPL-3.0-or-later"
+makedepends="linux-headers meson"
+install="$pkgname.pre-install"
+subpackages="$pkgname-doc $pkgname-openrc $pkgname-systemd $pkgname-udev"
+
+source="$_orig-$pkgver.tar.gz::https://github.com/linux-msm/hexagonrpc/archive/refs/tags/v$pkgver.tar.gz
+	10-fastrpc.rules
+	$_orig-adsp-rootpd.initd
+	$_orig-adsp-sensorspd.initd
+	$_orig-sdsp.initd
+	systemd-services.patch
+	0001-rpcd_builder-map-persist-registry-to-sensors-dir.patch
+	0002-apps_std-serve-writable-files.patch
+	0003-listener-fit-a-write-and-name-what-it-cannot-serve.patch
+	0004-apps_std-move-the-registry-entry-the-DSP-just-wrote.patch
+	"
+builddir="$srcdir/hexagonrpc-$pkgver"
+
+build() {
+	abuild-meson -Db_lto=true . output
+	meson compile -C output
+}
+
+check() {
+	meson test -C output
+}
+
+package() {
+	DESTDIR="$pkgdir" meson install --no-rebuild -C output
+
+	# Allow access for FastRPC node for FastRPC user/group
+	install -Dm644 "$srcdir"/10-fastrpc.rules -t "$pkgdir"/usr/lib/udev/rules.d/
+
+	install -Dm755 "$srcdir"/$_orig-adsp-rootpd.initd "$pkgdir"/etc/init.d/$_orig-adsp-rootpd
+	install -Dm755 "$srcdir"/$_orig-adsp-sensorspd.initd "$pkgdir"/etc/init.d/$_orig-adsp-sensorspd
+	install -Dm755 "$srcdir"/$_orig-sdsp.initd "$pkgdir"/etc/init.d/$_orig-sdsp
+}
+
+
+doc() {
+	default_doc
+	provides="hexagonrpcd-doc=$pkgver-r$pkgrel"
+	replaces="hexagonrpcd-doc"
+}
+
+openrc() {
+	default_openrc
+	provides="hexagonrpcd-openrc=$pkgver-r$pkgrel"
+	replaces="hexagonrpcd-openrc"
+}
+
+systemd() {
+	default_systemd
+	provides="hexagonrpcd-systemd=$pkgver-r$pkgrel"
+	replaces="hexagonrpcd-systemd"
+}
+
+udev() {
+	default_udev
+	provides="hexagonrpcd-udev=$pkgver-r$pkgrel"
+	replaces="hexagonrpcd-udev"
+}
+
+sha512sums="
+18ebe4beeed97018243bec5043b8395c07c76f1174085e41a32648fd481485076fefffa091700ca1f72163687405456e5537aa538bc4f08fecacb3f83e3a82d8  hexagonrpcd-0.4.0.tar.gz
+f931cf5f901a7c17ffb0eb194b5de2c532fd238692898bf264c484b13b93119c9727bd8f8daf6a7d1668cc9108a9a0662231d300c6f1376e3e4edd3ce41d235d  10-fastrpc.rules
+934fda348f8b8896d15fa892e81e6dea022144c9bfcb557c0938898ac452ee3ab6a39f7ceaa54ede2ea78711f3516375c01746f8c55d1acec5ec1f1d9c9f816b  hexagonrpcd-adsp-rootpd.initd
+429f4f76e527b4289f95628603e4cee8b8d048d9a2a594ee367e5765b7554f494848c1f1aa0a7da84c193a698cd885e9325323fb6239293f1718775015cd3df0  hexagonrpcd-adsp-sensorspd.initd
+c88d3a813aa92298c3585c33111389c7175c67240497f2aeeb413228ccd8b991ed2e5edd2ffd4603389cfc9c8af6dfc5cd4c94c9979919e3efdd5bd5f547c9bd  hexagonrpcd-sdsp.initd
+2ebd6709180f2c60e355770d091c61d95e012727c94101d5e3e451c91af43f4334ef02ebd85c8ad1f99d3adc7fcb27ff5db1afaeec71cddc638db95b626128ad  systemd-services.patch
+bbf73334d29a8781ca50abfcd6c5a0aecc2be3d613190b431058f2a0ca27531b0dd91958bc414938a1b6378d58dfeb0af1ac506f2fdb8a1300ea82591f7691e0  0001-rpcd_builder-map-persist-registry-to-sensors-dir.patch
+33be0480799a5588ca6e45db9e5b2cfdff0211f9294ee0a4e8932f7ffee0e3bf0a32a1c85fb57d999174c833502ea2f5300d5268b9a94ac553caa1898892686c  0002-apps_std-serve-writable-files.patch
+a34bd094bef1a3efdb26d7429671edd842ca615977e6b30eca21a10e846543403dcd30985bda3dd4f7a695e62949f96b3801261cf292405abab80c1b6ddfd205  0003-listener-fit-a-write-and-name-what-it-cannot-serve.patch
+e93f98e9a1f5a2b61f6ad57343c116bd8fb40f77be8b38f8d5d960bd932a548c1959e1f3f320f1e96e28e8f8c172d0aec0394fc9392c956d1e6673fffbde2ddd  0004-apps_std-move-the-registry-entry-the-DSP-just-wrote.patch
+"

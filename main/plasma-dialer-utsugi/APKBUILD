@@ -1,0 +1,97 @@
+# LOCAL SURYA APORT -- not Alpine's as-is. One patch; see README.md.
+#
+# 0001 makes the dialpad answer the press instead of the click. Qt promotes a
+# second tap inside mouseDoubleClickInterval (400 ms) to a double click, even
+# across different keys, and AbstractButton then drops clicked() -- so dialling
+# at any normal speed loses most of the digits. Measured: six taps 150 ms
+# apart gave one clicked() and six pressed().
+#
+# pkgrel is one above Alpine's on purpose, so this build wins. It only wins
+# until Alpine publishes a higher one: after that 'apk upgrade' puts the
+# unpatched dialer back WITHOUT SAYING ANYTHING. That is what
+# ajustes/marcador.d/marcador-esta-parcheado is for -- it makes
+# 'surya-setup --estado' notice.
+#
+# The group tag is just to easily find this APKBUILD by some scripts for automation
+# group=kde-plasma
+maintainer="team/kde <bribbers@disroot.org>"
+_orig=plasma-dialer
+pkgname=$_orig-utsugi
+pkgver=6.7.4
+pkgrel=2
+# FORK of plasma-dialer. Same files as upstream, so it claims upstream's name with a
+# versioned provides and a replaces: apk then refuses to have both installed and
+# every package that depends on "plasma-dialer" is satisfied by this one.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="A dialer for Plasma Mobile"
+# armhf blocked by qt6-qtdeclarative
+arch="all !armhf"
+url="https://invent.kde.org/plasma-mobile/plasma-dialer"
+license="GPL-2.0-or-later"
+depends="
+	kirigami-addons
+	kirigami
+	oxygen-sounds
+	"
+makedepends="
+	extra-cmake-modules
+	callaudiod-dev
+	kcontacts-dev
+	kcoreaddons-dev
+	kdbusaddons-dev
+	ki18n-dev
+	kio-dev
+	kirigami-addons-dev
+	knotifications-dev
+	kpeople-dev
+	libphonenumber-dev
+	modemmanager-qt-dev
+	pulseaudio-qt-dev
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	reuse
+	samurai
+	"
+subpackages="$pkgname-lang"
+
+case "$pkgver" in
+	*.*.9*) _rel=unstable;;
+	*) _rel=stable;;
+esac
+
+_repo_url="https://invent.kde.org/plasma-mobile/plasma-dialer.git"
+source="https://download.kde.org/$_rel/plasma/$pkgver/plasma-dialer-$pkgver.tar.xz
+	0001-dialpad-answer-the-press-not-the-click.patch
+	"
+# abuild would default this to $pkgname-$pkgver; the tarball unpacks to the
+# upstream name, which is no longer the package name.
+builddir="$srcdir/$_orig-$pkgver"
+options="!check" # No tests
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+}
+
+check() {
+	ctest --test-dir build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+lang() {
+	default_lang
+	provides="plasma-dialer-lang=$pkgver-r$pkgrel"
+	replaces="plasma-dialer-lang"
+}
+
+sha512sums="
+885e0d8607542201399942864c7a4e173857615c7f6a01e961f36904d99193d2b1e98ba039c05e17954f68babce5fafa6084c039652c55e31221001a26aa9a0b  plasma-dialer-6.7.4.tar.xz
+de59253393e7d05e250d2277f58003eb5bbdd035cc2476ad66f10c0a70388e32a8233768e537b9da69cc90beb0caa4252de50f4cb9328afc87bbd6c1d0ecefe3  0001-dialpad-answer-the-press-not-the-click.patch
+"

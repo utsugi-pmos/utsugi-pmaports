@@ -1,0 +1,103 @@
+# LOCAL SURYA APORT -- Alpine's community/iio-sensor-proxy with one patch on
+# top. Everything else is byte-for-byte Alpine's 3.9-r2, including the initd
+# and both upstream checksums.
+#
+# 0002 starts a sensor whose Claim arrived before find_sensors() found it. The
+# claim was recorded and answered OK, but nothing was ever started, so rotation
+# stayed dead until something made KWin release and re-claim.
+#
+# 0001 makes a new orientation hold for 400 ms before it is emitted. Without it
+# a single accelerometer sample rotates the screen, and a phone flicked to
+# landscape reports the OPPOSITE landscape for 79 ms on the way there. While
+# the handset moves, the accelerometer reads the hand and not gravity.
+#
+# The 400 ms is measured, not guessed: see README.md, and the replay bench in
+# banco/, which reproduces the daemon's real output to the millisecond and
+# scores candidate values against a recorded trace.
+#
+# These patches are deliberately NOT sent upstream: they stay in this repo.
+# surya-setup builds and installs them on its own -- see README.md.
+#
+# Contributor: Rasmus Thomsen <oss@cogitri.dev>
+# Maintainer: Natanael Copa <ncopa@alpinelinux.org>
+_orig=iio-sensor-proxy
+pkgname=$_orig-utsugi
+pkgver=3.9
+pkgrel=5
+# FORK of iio-sensor-proxy. Same files as upstream, so it claims upstream's name with a
+# versioned provides and a replaces: apk then refuses to have both installed and
+# every package that depends on "iio-sensor-proxy" is satisfied by this one.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="IIO sensors to D-Bus proxy"
+url="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy"
+arch="all"
+license="GPL-2.0-or-later"
+depends="dbus"
+makedepends="
+	eudev-dev
+	glib-dev
+	libgudev-dev
+	meson
+	polkit-dev
+	libssc-dev
+	"
+subpackages="$pkgname-openrc $pkgname-systemd $pkgname-udev $pkgname-dbg"
+source="https://gitlab.freedesktop.org/hadess/iio-sensor-proxy/-/archive/$pkgver/iio-sensor-proxy-$pkgver.tar.gz
+	iio-sensor-proxy.initd
+	0001-accel-settle-the-orientation-before-believing-it.patch
+	0002-honour-claims-that-arrived-before-the-sensor-was-found.patch
+	"
+# abuild would default this to $pkgname-$pkgver; the tarball unpacks to the
+# upstream name, which is no longer the package name.
+builddir="$srcdir/$_orig-$pkgver"
+
+build() {
+	abuild-meson \
+		-Db_lto=true \
+		-Dssc-support=enabled \
+		-Dsystemdsystemunitdir=/usr/lib/systemd/system \
+		. output
+	meson compile -C output
+}
+
+check() {
+	meson test --print-errorlogs -C output
+}
+
+package() {
+	DESTDIR="$pkgdir" meson install --no-rebuild -C output
+
+	install -Dm755 "$srcdir"/$_orig.initd "$pkgdir"/etc/init.d/$_orig
+}
+
+openrc() {
+	default_openrc
+	provides="iio-sensor-proxy-openrc=$pkgver-r$pkgrel"
+	replaces="iio-sensor-proxy-openrc"
+}
+
+systemd() {
+	default_systemd
+	provides="iio-sensor-proxy-systemd=$pkgver-r$pkgrel"
+	replaces="iio-sensor-proxy-systemd"
+}
+
+udev() {
+	default_udev
+	provides="iio-sensor-proxy-udev=$pkgver-r$pkgrel"
+	replaces="iio-sensor-proxy-udev"
+}
+
+dbg() {
+	default_dbg
+	provides="iio-sensor-proxy-dbg=$pkgver-r$pkgrel"
+	replaces="iio-sensor-proxy-dbg"
+}
+
+sha512sums="
+a89c842f8db2a1a36c1c7c990434bb57fd905224459170cba2ec56e79f1272acc4cac4221937704d5e9247f957d86fde716d25e2d1ccb80d88fa643b47edfda6  iio-sensor-proxy-3.9.tar.gz
+b25df94e249ca46fe96926e5a866c20dc913fa52a2d9259fb7a3594861c6b2f246fc7fef8a21f5b021f3a71401f734ae27210137b0b1917a7daaffb5e3221f2e  iio-sensor-proxy.initd
+da740641120cbeccf3bbc53c769036e5042265cc4a368e7aeb4be7d209df6303fbc34c98c4482e5d964d03abf93d6b972758e3704130f211a508f7d13bf9daad  0001-accel-settle-the-orientation-before-believing-it.patch
+5853e825934eba9b9eb196428f2fec99caf4dbf035098a33da2f5ddc980325bf4cd61201834b1ef68fc665b313ce7d2703a50861c6a37792959bc14dfdb7f0fe  0002-honour-claims-that-arrived-before-the-sensor-was-found.patch
+"

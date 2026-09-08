@@ -1,0 +1,339 @@
+Implement frename, and the method-31 escape it arrives through
+
+The sensor registry is not written in place. The DSP writes one entry into a
+scratch file next to the registry,
+
+    .../registry/registry/../temp.json  ->  {"sns_basic_gestures":{...}}
+
+and then asks for that file to be moved over the real entry,
+
+    .../registry/registry/sns_basic_gestures
+
+It walks the whole registry that way -- around 193 entries here -- and with no
+rename it writes the scratch file, fails to move it, and starts again: some
+1900 rejected calls per boot, and nothing kept.
+
+The call arrives as method 31 with three input buffers, and method 31 is not a
+method. REMOTE_SCALARS_METHOD() masks the method field of `sc` with 0x1f, so it
+can only name methods 0 to 30; an interface with more than that puts 31 there
+and sends the real method number as the first word of the first input buffer.
+Qualcomm's own generated skeleton is explicit about it:
+
+      case 31:
+      {
+         uint32_t* _mid;
+         if(REMOTE_SCALARS_INBUFS(_sc) < 1 || _pra[0].buf.nLen < 4) { return AEE_EBADPARM; }
+         _mid = (uint32_t*)_pra[0].buf.pv;
+         return _skel_invoke(*_mid, _sc, _pra);
+      }
+
+    -- qualcomm/fastrpc, src/apps_std_skel.c
+
+apps_std has 37 methods and uses the escape for the last six. That also explains
+the leading number apps_std_stat appears to take and never use: it is the method
+id, 31, and stat reaches its handler the same way.
+
+So the escape is handled where it belongs, in the listener, for any interface
+with more than 32 methods; apps_std's table grows to 37 entries; and frename
+goes in at 33, where it belongs. Dispatching by buffer shape would have worked
+for these two and quietly mis-served ftrunc (32) or fopen_fd (34).
+
+hexagonfs had no rename, so this adds one: a renameat op, implemented for
+mapped directories only, and a hexagonfs_rename() that splits each path into
+the parent directory and the name -- openat() resolves a whole path down to the
+file, and renameat() wants the two halves apart.
+
+diff -urN base-0003/hexagonrpcd/apps_std.c src/hexagonrpc-0.4.0/hexagonrpcd/apps_std.c
+--- a/hexagonrpcd/apps_std.c	2026-08-22 21:36:32.185871189 +0200
++++ b/hexagonrpcd/apps_std.c	2026-08-23 00:58:06.705910363 +0200
+@@ -255,6 +255,43 @@
+ 	return 0;
+ }
+ 
++/*
++ * The sensor registry is not written in place: the DSP writes one entry into a
++ * scratch file and then asks for it to be moved over the real one. Without
++ * this the scratch file is written over and over -- once per registry entry,
++ * some 1900 calls on this device -- and nothing is ever kept.
++ *
++ * inbufs[0] holds the method id and the two path lengths; the paths themselves
++ * are the other two buffers.
++ */
++static uint32_t apps_std_frename(void *data,
++				 const struct fastrpc_io_buffer *inbufs,
++				 struct fastrpc_io_buffer *outbufs)
++{
++	struct apps_std_ctx *ctx = data;
++	const char *oldname = inbufs[1].p;
++	const char *newname = inbufs[2].p;
++	int ret;
++
++	// Both names must be NULL-terminated
++	if (oldname[inbufs[1].s - 1] != 0
++	 || newname[inbufs[2].s - 1] != 0)
++		return AEE_EBADPARM;
++
++	ret = hexagonfs_rename(ctx->fds, ctx->rootfd, oldname, newname);
++	if (ret) {
++		fprintf(stderr, "Could not rename %s to %s: %s\n",
++				oldname, newname, strerror(-ret));
++		return AEE_EFAILED;
++	}
++
++#ifdef HEXAGONRPC_VERBOSE
++	printf("rename(%s, %s)\n", oldname, newname);
++#endif
++
++	return 0;
++}
++
+ static uint32_t apps_std_opendir(void *data,
+ 				 const struct fastrpc_io_buffer *inbufs,
+ 				 struct fastrpc_io_buffer *outbufs)
+@@ -519,10 +556,22 @@
+ 		.def = &apps_std_stat_def,
+ 		.impl = apps_std_stat,
+ 	},
++	{ .def = NULL, .impl = NULL, },			/* 32 ftrunc */
++	{
++		.def = &apps_std_frename_def,
++		.impl = apps_std_frename,
++	},
++	{ .def = NULL, .impl = NULL, },			/* 34 fopen_fd */
++	{ .def = NULL, .impl = NULL, },			/* 35 fclose_fd */
++	{ .def = NULL, .impl = NULL, },			/* 36 fopen_with_env_fd */
+ };
+ 
+ const struct fastrpc_interface apps_std_interface = {
+ 	.name = "apps_std",
+-	.n_procs = 32,
++	/*
++	 * 37, not 32: the last six are only reachable through the method-31
++	 * escape, and the listener needs to know they exist to allow it.
++	 */
++	.n_procs = 37,
+ 	.procs = apps_std_procs,
+ };
+diff -urN base-0003/hexagonrpcd/hexagonfs.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs.c
+--- a/hexagonrpcd/hexagonfs.c	2026-08-22 21:36:32.185672195 +0200
++++ b/hexagonrpcd/hexagonfs.c	2026-08-23 00:58:42.556504322 +0200
+@@ -246,6 +246,83 @@
+ 	return fd->ops->read(fd, size, ptr);
+ }
+ 
++/*
++ * Opens the directory a path names a file in, and points `base` at the file
++ * name inside `path`. Renaming needs the two halves apart: openat() resolves a
++ * whole path down to the file, and renameat() wants the parent and the name.
++ */
++static int open_parent_dir(struct hexagonfs_fd **fds, int rootfd,
++			   const char *path, const char **base)
++{
++	const char *slash;
++	char *dir;
++	int ret;
++
++	slash = strrchr(path, '/');
++
++	/* No directory part, or the parent is the root itself. */
++	if (slash == NULL || slash == path) {
++		*base = slash == NULL ? path : slash + 1;
++		return rootfd;
++	}
++
++	dir = strndup(path, slash - path);
++	if (dir == NULL)
++		return -ENOMEM;
++
++	ret = hexagonfs_openat(fds, rootfd, rootfd, dir, 0);
++
++	free(dir);
++
++	*base = slash + 1;
++
++	return ret;
++}
++
++int hexagonfs_rename(struct hexagonfs_fd **fds, int rootfd,
++		     const char *oldpath, const char *newpath)
++{
++	const char *oldbase, *newbase;
++	int olddir, newdir, ret;
++
++	olddir = open_parent_dir(fds, rootfd, oldpath, &oldbase);
++	if (olddir < 0)
++		return olddir;
++
++	newdir = open_parent_dir(fds, rootfd, newpath, &newbase);
++	if (newdir < 0) {
++		ret = newdir;
++		goto out_close_old;
++	}
++
++	if (*oldbase == '\0' || *newbase == '\0') {
++		ret = -EINVAL;
++		goto out_close_new;
++	}
++
++	/*
++	 * Only two real directories can be renamed between. Anything else --
++	 * a virtual directory, or one side of each -- has no name to move.
++	 */
++	if (fds[olddir]->ops != fds[newdir]->ops
++	 || fds[olddir]->ops->renameat == NULL) {
++		ret = -EXDEV;
++		goto out_close_new;
++	}
++
++	ret = fds[olddir]->ops->renameat(fds[olddir], oldbase,
++					 fds[newdir], newbase);
++
++out_close_new:
++	if (fds[newdir] != fds[rootfd])
++		hexagonfs_close(fds, newdir);
++out_close_old:
++	if (fds[olddir] != fds[rootfd])
++		hexagonfs_close(fds, olddir);
++
++	return ret;
++}
++
+ ssize_t hexagonfs_write(struct hexagonfs_fd **fds, int fileno,
+ 			size_t size, const void *ptr)
+ {
+diff -urN base-0003/hexagonrpcd/hexagonfs.h src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs.h
+--- a/hexagonrpcd/hexagonfs.h	2026-08-22 21:36:32.185628543 +0200
++++ b/hexagonrpcd/hexagonfs.h	2026-08-23 00:58:42.556466882 +0200
+@@ -40,6 +40,8 @@
+ 		      int create_flags,
+ 		      struct hexagonfs_fd **out);
+ 	int (*readdir)(struct hexagonfs_fd *fd, size_t size, char *out);
++	int (*renameat)(struct hexagonfs_fd *olddir, const char *oldname,
++			struct hexagonfs_fd *newdir, const char *newname);
+ 	ssize_t (*read)(struct hexagonfs_fd *fd, size_t size, void *ptr);
+ 	ssize_t (*write)(struct hexagonfs_fd *fd, size_t size, const void *ptr);
+ 	int (*stat)(struct hexagonfs_fd *fd, struct stat *stats);
+@@ -75,6 +77,8 @@
+ int hexagonfs_openat(struct hexagonfs_fd **fds, int rootfd, int dirfd,
+ 		     const char *name, int create_flags);
+ int hexagonfs_close(struct hexagonfs_fd **fds, int fileno);
++int hexagonfs_rename(struct hexagonfs_fd **fds, int rootfd,
++		     const char *oldpath, const char *newpath);
+ ssize_t hexagonfs_write(struct hexagonfs_fd **fds, int fileno,
+ 			size_t size, const void *ptr);
+ 
+diff -urN base-0003/hexagonrpcd/hexagonfs_mapped.c src/hexagonrpc-0.4.0/hexagonrpcd/hexagonfs_mapped.c
+--- a/hexagonrpcd/hexagonfs_mapped.c	2026-08-22 21:36:32.185792201 +0200
++++ b/hexagonrpcd/hexagonfs_mapped.c	2026-08-23 00:58:42.556545800 +0200
+@@ -24,6 +24,7 @@
+ #include <fcntl.h>
+ #include <unistd.h>
+ #include <stdbool.h>
++#include <stdio.h>
+ #include <stdlib.h>
+ #include <string.h>
+ #include <sys/types.h>
+@@ -178,6 +179,24 @@
+ 	return ret;
+ }
+ 
++static int mapped_renameat(struct hexagonfs_fd *olddir,
++			   const char *oldname,
++			   struct hexagonfs_fd *newdir,
++			   const char *newname)
++{
++	struct mapped_ctx *old_ctx = olddir->data;
++	struct mapped_ctx *new_ctx = newdir->data;
++
++	if (old_ctx == NULL || new_ctx == NULL
++	 || old_ctx->fd == -1 || new_ctx->fd == -1)
++		return -EBADF;
++
++	if (renameat(old_ctx->fd, oldname, new_ctx->fd, newname))
++		return -errno;
++
++	return 0;
++}
++
+ static int mapped_readdir(struct hexagonfs_fd *fd, size_t size, char *out)
+ {
+ 	struct mapped_ctx *ctx = fd->data;
+@@ -370,6 +389,7 @@
+ 	.read = mapped_read,
+ 	.write = mapped_write,
+ 	.readdir = mapped_readdir,
++	.renameat = mapped_renameat,
+ 	.seek = mapped_seek,
+ 	.stat = mapped_stat,
+ };
+diff -urN base-0003/hexagonrpcd/interfaces/apps_std.def src/hexagonrpc-0.4.0/hexagonrpcd/interfaces/apps_std.def
+--- a/hexagonrpcd/interfaces/apps_std.def	2026-08-22 21:34:52.737463248 +0200
++++ b/hexagonrpcd/interfaces/apps_std.def	2026-08-23 00:58:06.705844920 +0200
+@@ -34,6 +34,12 @@
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(26, apps_std_opendir, 0, 1, 2, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(27, apps_std_closedir, 2, 0, 0, 0)
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(28, apps_std_readdir, 2, 0, 66, 0)
++/*
++ * The leading number of every method from here on is the method id itself:
++ * these travel through the method-31 escape, not in the method field of `sc`.
++ * See the comment in listener.c.
++ */
+ HEXAGONRPC_DEFINE_REMOTE_METHOD(31, apps_std_stat, 1, 1, 24, 0)
++HEXAGONRPC_DEFINE_REMOTE_METHOD(33, apps_std_frename, 1, 2, 0, 0)
+ 
+ #endif /* INTERFACE_APPS_STD_DEF */
+diff -urN base-0003/hexagonrpcd/listener.c src/hexagonrpc-0.4.0/hexagonrpcd/listener.c
+--- a/hexagonrpcd/listener.c	2026-08-22 22:34:28.906505265 +0200
++++ b/hexagonrpcd/listener.c	2026-08-23 00:58:06.705809744 +0200
+@@ -38,6 +38,9 @@
+  */
+ #define LISTENER_INBUF_SIZE	(64 * 1024)
+ 
++/* See the comment in invoke_requested_procedure(). */
++#define HEXAGONFS_METHOD_ESCAPE	31
++
+ /*
+  * Everything known about a call that could not be served. A method number on
+  * its own is a dead end: it does not say which interface it belongs to, and
+@@ -287,6 +290,41 @@
+ 		return 1;
+ 	}
+ 
++	/*
++	 * Method 31 is not a method: it is QAIC's escape hatch. The method field
++	 * of `sc` is five bits wide -- REMOTE_SCALARS_METHOD() masks with 0x1f --
++	 * so it can only name methods 0 to 30. An interface with more than that
++	 * puts 31 there instead, and the real method number travels as the first
++	 * word of the first input buffer.
++	 *
++	 * apps_std has 37 methods and uses it: this is how a DSP asks for
++	 * frename (33), and also how it asks for stat (31), which is why stat
++	 * appears to take a leading number it never uses. That number is the
++	 * method id, in every one of them.
++	 *
++	 * Interfaces small enough not to need the escape are left alone: for
++	 * them 31 is either a real method or out of range.
++	 */
++	if (method == HEXAGONFS_METHOD_ESCAPE
++	 && ifaces[handle]->n_procs > HEXAGONFS_METHOD_ESCAPE + 1) {
++		if (REMOTE_SCALARS_INBUFS(sc) < 1 || decoded[0].s < 4) {
++			report_unserved_call("Escaped call with no method id",
++					     handle, sc, decoded);
++			*result = AEE_EBADPARM;
++			return 1;
++		}
++
++		method = *(const uint32_t *) decoded[0].p;
++
++		if (method >= ifaces[handle]->n_procs) {
++			report_unserved_call("Escaped method out of range",
++					     handle, sc, decoded);
++			fprintf(stderr, "  escaped method %" PRIu32 "\n", method);
++			*result = AEE_EUNSUPPORTED;
++			return 1;
++		}
++	}
++
+ 	impl = &ifaces[handle]->procs[method];
+ 
+ 	if (impl->def == NULL || impl->impl == NULL) {

@@ -1,0 +1,80 @@
+Arranca el watchdog del SoC en el sondeo del driver, no solo si el gestor de
+arranque lo dejo encendido.
+
+EL PROBLEMA
+-----------
+El surya se cuelga arrancando ~1 de cada 4 veces, y el modo mas frecuente mata
+el kernel ANTES de que aparezca el gadget USB (unos 18 s). En esa ventana no
+hay ni red ni userspace, asi que:
+
+  - el flujo de /dev/kmsg al PC no llega a abrirse,
+  - y el watchdog de systemd (RuntimeWatchdogSec) todavia no existe, porque lo
+    arma PID 1 y PID 1 aun no ha arrancado.
+
+Resultado: el movil se queda tumbado hasta que una persona aprieta el boton
+10-12 s. Comprobado el 2026-08-15: con RuntimeWatchdogSec=60 puesto, un cuelgue
+"no reenumera" NO se recupera solo; uno posterior a systemd si.
+
+LO QUE YA HAY
+-------------
+El driver trae justo el mecanismo que hace falta, pero condicionado:
+
+    if (qcom_wdt_is_running(&wdt->wdd)) {
+            qcom_wdt_start(&wdt->wdd);
+            set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
+    }
+
+Con WDOG_HW_RUNNING puesto y CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED=y (que este
+kernel tiene), el nucleo de watchdog alimenta el perro desde un hilo propio
+hasta que userspace abra /dev/watchdog. Si el kernel se cuelga, ese hilo deja
+de alimentar y el hardware resetea.
+
+Pero U-Boot no deja el watchdog encendido, asi que qcom_wdt_is_running() da
+falso y no se activa nunca.
+
+QUE HACE ESTE PARCHE
+--------------------
+Quitar la condicion: arrancarlo siempre. Desde el primer segundo del kernel
+hasta que systemd coge /dev/watchdog, el perro esta vivo y lo alimenta el
+nucleo. Un cuelgue en esa ventana se convierte en un reset automatico de <=30 s.
+
+Dos ventajas, y por eso importa mas que la comodidad:
+
+  1. El movil deja de necesitar una persona para volver. Eso es lo que
+     PENDIENTES.md señala como lo que lo hace inservible como movil de diario.
+  2. El reset del watchdog es CALIENTE, asi que la memoria de ramoops
+     sobrevive y el arranque siguiente puede traer la traza del cuelgue, que
+     es justo lo que hoy no se puede ver de este modo de fallo.
+
+Riesgo: si algo dejara al nucleo sin poder ejecutar su hilo de alimentacion
+durante mas de 30 s por una razon legitima, resetearia. En un arranque normal
+eso no pasa; y si pasara, seria en si mismo el fallo que buscamos.
+
+--- a/drivers/watchdog/qcom-wdt.c
++++ b/drivers/watchdog/qcom-wdt.c
+@@ -285,15 +285,17 @@
+ 	watchdog_init_timeout(&wdt->wdd, 0, dev);
+ 
+ 	/*
+-	 * If WDT is already running, call WDT start which
+-	 * will stop the WDT, set timeouts as bootloader
+-	 * might use different ones and set running bit
+-	 * to inform the WDT subsystem to ping the WDT
++	 * Arrancarlo SIEMPRE, no solo si el gestor de arranque lo dejo puesto.
++	 *
++	 * U-Boot no lo deja encendido, asi que con la condicion original el
++	 * perro no existia hasta que systemd lo armaba, y los cuelgues del
++	 * arranque temprano -los mas frecuentes en el surya- se quedaban sin
++	 * nadie que resetease. Con WDOG_HW_RUNNING y
++	 * CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED el nucleo lo alimenta desde aqui
++	 * hasta que userspace abra /dev/watchdog.
+ 	 */
+-	if (qcom_wdt_is_running(&wdt->wdd)) {
+-		qcom_wdt_start(&wdt->wdd);
+-		set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
+-	}
++	qcom_wdt_start(&wdt->wdd);
++	set_bit(WDOG_HW_RUNNING, &wdt->wdd.status);
+ 
+ 	ret = devm_watchdog_register_device(dev, &wdt->wdd);
+ 	if (ret)

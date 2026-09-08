@@ -1,0 +1,37 @@
+#!/bin/sh
+# Compare every fork in this tree against the version upstream currently ships.
+#
+# This is the alarm for the one failure mode a fork cannot detect on its own:
+# upstream releases a NEWER version than the one our fork claims, and from then
+# on anything that merely depends on the upstream name prefers theirs. The
+# metapackages name the forks explicitly so a phone keeps ours, but that is the
+# moment to rebase.
+#
+# Run it before every publish.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+. "$REPO/scripts/lib.sh"
+
+IDX="$WORK/cache_apk_$ARCH"
+[ -d "$IDX" ] || die "no downloaded indexes in $IDX (build something first)"
+
+upstream_version() {
+	for f in "$IDX"/APKINDEX.*.tar.gz; do
+		tar -xOzf "$f" APKINDEX 2>/dev/null
+	done | awk -v n="$1" -F: '
+		/^P:/ { p = $2 } /^V:/ { if (p == n) print $2 }' | sort -V | tail -1
+}
+
+printf '%-40s %-24s %-24s %s\n' PACKAGE OURS UPSTREAM STATUS
+for pkg in $(all_aports); do
+	orig="$(apkbuild_get "$pkg" _orig 2>/dev/null || true)"
+	[ -n "$orig" ] || continue           # not a fork: nothing to compare against
+	ours="$(apkbuild_version "$pkg")"
+	theirs="$(upstream_version "$orig")"
+	if [ -z "$theirs" ]; then status="upstream has no such package"
+	elif [ "$(printf '%s\n%s\n' "$ours" "$theirs" | sort -V | tail -1)" = "$ours" ] \
+	     && [ "$ours" != "$theirs" ]; then status="ok"
+	elif [ "$ours" = "$theirs" ]; then status="TIE -- bump pkgrel"
+	else status="BEHIND -- rebase the fork"; fi
+	printf '%-40s %-24s %-24s %s\n' "$orig" "$ours" "${theirs:--}" "$status"
+done

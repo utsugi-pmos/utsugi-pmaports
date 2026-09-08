@@ -1,0 +1,55 @@
+clk: qcom: gcc-sm7150: keep the QUPv3 wrapper AHB clocks always on
+
+On the POCO X3 NFC (surya) the SoC stops dead, with no trace at all, within
+a few seconds of gcc_qupv3_wrap_0_{m,s}_ahb_clk being gated. Measured on
+2026-09-08: the wrapper's last active serial engine is the Bluetooth UART;
+when it closes (bluetoothd powering the adapter off, rfkill, bootmac's MAC
+cycle) and its siblings (touchscreen SPI, haptics and NFC I2C) are
+runtime-suspended, geni_se_resources_off() drops the wrapper AHB clocks and
+the phone freezes until the watchdog fires - sometimes not even that.
+Keeping any sibling runtime-active (so the AHB clocks stay on) makes the very
+same sequence survive; putting the siblings back to runtime-suspend, with no
+bus traffic at all, kills it within 3 s. The persistent console of an
+instrumented run ends exactly at the clk_disable of those two clocks.
+
+The wrapper is a client of apps_smmu (iommus = <&apps_smmu 0x203 0x0>); a
+master that cannot respond while the SMMU broadcasts TLB invalidations for
+the display, GPU, camera and modem is the most plausible way to hang every
+CPU silently. Until that is understood properly, mark the wrapper AHB clocks
+critical, as several other gcc drivers do for bus clocks whose gating is not
+safe. The cost is two AHB clocks per QUP wrapper never gating.
+
+--- a/drivers/clk/qcom/gcc-sm7150.c
++++ b/drivers/clk/qcom/gcc-sm7150.c
+@@ -2001,6 +2001,7 @@
+ 		.hw.init = &(const struct clk_init_data) {
+ 			.name = "gcc_qupv3_wrap_0_m_ahb_clk",
+ 			.ops = &clk_branch2_ops,
++			.flags = CLK_IS_CRITICAL,
+ 		},
+ 	},
+ };
+@@ -2016,6 +2017,7 @@
+ 		.hw.init = &(const struct clk_init_data) {
+ 			.name = "gcc_qupv3_wrap_0_s_ahb_clk",
+ 			.ops = &clk_branch2_ops,
++			.flags = CLK_IS_CRITICAL,
+ 		},
+ 	},
+ };
+@@ -2029,6 +2031,7 @@
+ 		.hw.init = &(const struct clk_init_data) {
+ 			.name = "gcc_qupv3_wrap_1_m_ahb_clk",
+ 			.ops = &clk_branch2_ops,
++			.flags = CLK_IS_CRITICAL,
+ 		},
+ 	},
+ };
+@@ -2044,6 +2047,7 @@
+ 		.hw.init = &(const struct clk_init_data) {
+ 			.name = "gcc_qupv3_wrap_1_s_ahb_clk",
+ 			.ops = &clk_branch2_ops,
++			.flags = CLK_IS_CRITICAL,
+ 		},
+ 	},
+ };

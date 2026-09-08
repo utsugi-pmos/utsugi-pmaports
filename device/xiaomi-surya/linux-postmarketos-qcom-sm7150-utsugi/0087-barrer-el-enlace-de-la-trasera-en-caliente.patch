@@ -1,0 +1,99 @@
+Barrer el enlace de la trasera en caliente, sin recompilar
+
+El link_freq de 435,2 MHz de la trasera esta DEDUCIDO de los PLL del fichero de
+fabrica (19,2/3 x 272 / 2 / 2 = 435,2 MHz DDR), no medido. Si el sensor emite a
+un ritmo distinto del que se le declara al CSIPHY no hay sincronismo posible y
+el CSID no ve nada, que es exactamente lo que pasa:
+
+    el sensor emite            0x0100 = 0x01, doce registros de doce
+                               coincidiendo con fabrica
+    el CSID no recibe          paquetes=0, crc=0, bytes_rdi0=0
+
+Y ya estan descartados, con instrumentos validados:
+
+    los relojes                csiphy0_clk 400 MHz, cphy_rx 400,
+                               csi0phytimer 300, ife_0_csid 300; los cuatro
+                               que pide el nodo de fabrica y a sus tasas
+    el asentamiento            barrido de 20 a 48, que cubre la ventana de la
+                               norma (27 a 47), sin mover un bit
+    la tabla de MediaTek       comparada con la de fabrica: cero registros
+                               en comun, no pisa nada
+
+Esto anade cuatro parametros de modulo -op_pll_mult, op_pre_div, op_sys_div y
+carriles- que se escriben DESPUES de la tabla del modo, que es quien programa
+los PLL, y antes de arrancar la transmision. Con la frontal el mismo mecanismo
+permitio barrer ocho velocidades en una tarde en vez de una por compilacion.
+
+Se anade tambien el numero de carriles porque es la otra cosa que el CSIPHY y
+el sensor tienen que tener de acuerdo, y probar 2 contra 3 sin recompilar
+separa "el sensor no emite bien" de "el PHY escucha mal".
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -403,6 +403,40 @@
+ 	},
+ };
+ 
++/*
++ * BARRER EL ENLACE EN CALIENTE
++ * ---------------------------
++ * El link_freq de 435,2 MHz esta DEDUCIDO de los PLL del fichero de fabrica
++ * (19,2/3 x 272 / 2 / 2), no medido. Si el sensor emite a otro ritmo del que
++ * se le dice al CSIPHY, no hay sincronismo posible y el CSID no ve nada, que
++ * es exactamente lo que pasa.
++ *
++ * Con la frontal esto mismo permitio barrer ocho velocidades en una tarde en
++ * vez de una por compilacion. Se escribe justo despues de la tabla del modo y
++ * antes de arrancar la transmision, que es el unico punto donde vale.
++ *
++ * 0 = dejar el valor de la tabla de fabrica.
++ */
++static int op_pll_mult;
++module_param(op_pll_mult, int, 0644);
++MODULE_PARM_DESC(op_pll_mult,
++	"Multiplicador del PLL de salida (0x030e/0x030f). 0 = tabla (272).");
++
++static int op_pre_div;
++module_param(op_pre_div, int, 0644);
++MODULE_PARM_DESC(op_pre_div,
++	"Predivisor del PLL de salida (0x030d). 0 = tabla (3).");
++
++static int op_sys_div;
++module_param(op_sys_div, int, 0644);
++MODULE_PARM_DESC(op_sys_div,
++	"Divisor de sistema de salida (0x030b). 0 = tabla (2).");
++
++static int carriles;
++module_param(carriles, int, 0644);
++MODULE_PARM_DESC(carriles,
++	"Carriles que se le declaran al sensor en 0x0114. 0 = tabla (3).");
++
+ static const s64 imx682_link_freqs[] = {
+ 	IMX682_LINK_FREQ,
+ };
+@@ -641,6 +675,26 @@
+ 	if (ret)
+ 		return ret;
+ 
++	/*
++	 * Los ajustes de barrido van DESPUES de la tabla del modo, que es
++	 * quien programa los PLL, y antes de arrancar la transmision.
++	 */
++	if (op_pre_div)
++		imx682_write(s, 0x030D, op_pre_div);
++	if (op_pll_mult) {
++		imx682_write(s, 0x030E, (op_pll_mult >> 8) & 0xff);
++		imx682_write(s, 0x030F, op_pll_mult & 0xff);
++	}
++	if (op_sys_div)
++		imx682_write(s, 0x030B, op_sys_div);
++	if (carriles)
++		imx682_write(s, 0x0114, carriles - 1);
++
++	if (op_pre_div || op_pll_mult || op_sys_div || carriles)
++		dev_info(&s->client->dev,
++			 "barrido: pre=%d mult=%d div=%d carriles=%d\n",
++			 op_pre_div, op_pll_mult, op_sys_div, carriles);
++
+ 	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
+ 	if (ret)
+ 		return ret;
