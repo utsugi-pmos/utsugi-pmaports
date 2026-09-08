@@ -13,16 +13,11 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 
 ## Status
 
-The repository is live and the packages below are published and signed. What is
-**not** there yet are the `utsugi-surya-base` / `utsugi-surya-full`
-metapackages and the tweak packages they pull in, so for now packages are
-installed one by one:
-
-```sh
-sudo apk add linux-postmarketos-qcom-sm7150-utsugi hexagonrpcd-utsugi \
-             iio-sensor-proxy-utsugi alsa-ucm-conf-qcom-sm7150-utsugi \
-             libcamera-utsugi plasma-camera-utsugi plasma-dialer-utsugi
-```
+The repository is live: 54 signed packages, including the metapackages. What is
+still missing are the six own applications (poconav, screenglaze, appsvivas,
+app-usage, smart-unlock, lost-phone), which get their own repositories and then
+join `utsugi-surya-full`. The mobiletaskswitcher patch that keeps applications
+alive ships with `appsvivas`, so it arrives with them.
 
 ## Install it on a phone
 
@@ -31,7 +26,7 @@ KEY=utsugi-pmaports-6aa024e2.rsa.pub
 sudo wget -qO /etc/apk/keys/$KEY https://utsugi-pmos.github.io/utsugi-pmaports/keys/$KEY
 echo https://utsugi-pmos.github.io/utsugi-pmaports/main | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add utsugi-surya-full     # not published yet, see Status above
+sudo apk add utsugi-surya-full
 ```
 
 Two levels, pick one:
