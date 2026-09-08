@@ -73,8 +73,8 @@ runs:
           echo
           echo '[mirrors]'
           # Only if something is already published: pmbootstrap aborts on a 404 index.
-          if curl -fsI https://pmaports.cidwel.com/main/aarch64/APKINDEX.tar.gz >/dev/null 2>&1; then
-            echo 'pmaports_custom = https://pmaports.cidwel.com'
+          if curl -fsI https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz >/dev/null 2>&1; then
+            echo 'pmaports_custom = https://utsugi-pmos.github.io/utsugi-pmaports'
           fi
         } > .local/pmbootstrap-release.cfg
 

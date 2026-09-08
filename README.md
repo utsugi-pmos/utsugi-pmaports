@@ -15,8 +15,8 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 
 ```sh
 KEY=<the key file name, see the repository index page>
-sudo wget -qO /etc/apk/keys/$KEY https://pmaports.cidwel.com/keys/$KEY
-echo https://pmaports.cidwel.com/main | sudo tee -a /etc/apk/repositories
+sudo wget -qO /etc/apk/keys/$KEY https://utsugi-pmos.github.io/utsugi-pmaports/keys/$KEY
+echo https://utsugi-pmos.github.io/utsugi-pmaports/main | sudo tee -a /etc/apk/repositories
 sudo apk update
 sudo apk add utsugi-surya-full
 ```

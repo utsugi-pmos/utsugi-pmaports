@@ -25,11 +25,11 @@ for pkg in "$@"; do
 	case "$MODE" in
 	pkgrel)
 		old="$(sed -n 's/^pkgrel=//p' "$d/APKBUILD" | head -1)"
-		sed -i "0,/^pkgrel=/s//pkgrel=$((old + 1))/" "$d/APKBUILD"
+		sed -i "0,/^pkgrel=/s/^pkgrel=.*/pkgrel=$((old + 1))/" "$d/APKBUILD"
 		grey "  $pkg: pkgrel $old -> $((old + 1))" ;;
 	pkgver)
-		sed -i "0,/^pkgver=/s//pkgver=$NEWVER/" "$d/APKBUILD"
-		sed -i "0,/^pkgrel=/s//pkgrel=0/" "$d/APKBUILD"
+		sed -i "0,/^pkgver=/s/^pkgver=.*/pkgver=$NEWVER/" "$d/APKBUILD"
+		sed -i "0,/^pkgrel=/s/^pkgrel=.*/pkgrel=0/" "$d/APKBUILD"
 		grey "  $pkg: pkgver -> $NEWVER, pkgrel -> 0" ;;
 	esac
 

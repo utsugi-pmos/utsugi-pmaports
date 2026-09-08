@@ -77,9 +77,6 @@ green "  signed by $KEY"
 
 cp "$REPO"/keys/*.rsa.pub "$SITE/keys/"
 touch "$SITE/.nojekyll"                      # without it GitHub runs Jekyll over the tree
-# A domain we control, so a future GitHub account rename cannot break the URL
-# that every installed phone carries in /etc/apk/repositories.
-echo "${REPO_URL#https://}" > "$SITE/CNAME"
 git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$SITE/VERSION"
 cat > "$SITE/index.html" <<HTML
 <!doctype html><meta charset=utf-8><title>utsugi-pmaports</title>
@@ -88,7 +85,7 @@ cat > "$SITE/index.html" <<HTML
 <pre>sudo wget -qO /etc/apk/keys/$KEY.pub $REPO_URL/keys/$KEY.pub
 echo $REPO_URL/$CHANNEL_DIR | sudo tee -a /etc/apk/repositories
 sudo apk update &amp;&amp; sudo apk add utsugi-surya-full</pre>
-<p><a href="https://github.com/jjolmo/utsugi-pmaports">Source and documentation</a></p>
+<p><a href="https://github.com/utsugi-pmos/utsugi-pmaports">Source and documentation</a></p>
 HTML
 green "  site ready: $SITE ($(du -sh "$SITE" | cut -f1))"
 

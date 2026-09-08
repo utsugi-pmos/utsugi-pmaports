@@ -9,9 +9,9 @@
 # The .pub next to this file is a copy of ../../keys/. Do not edit it here.
 pkgname=utsugi-keys
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Public key of the utsugi-pmaports apk repository"
-url="https://github.com/jjolmo/utsugi-pmaports"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
