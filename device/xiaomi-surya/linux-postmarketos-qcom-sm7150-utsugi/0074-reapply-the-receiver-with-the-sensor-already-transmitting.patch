@@ -1,0 +1,104 @@
+DIAGNOSTIC: re-apply the receiver configuration with the sensor already emitting
+
+WHY
+---
+There is a difference in ORDER with the vendor that had not been looked at:
+
+    mainline      VFE -> CSID -> CSIPHY -> sensor
+    Qualcomm      CSIPHY -> CSID -> sensor
+
+In mainline, video_start_streaming() walks the chain from the video node towards
+the sensor calling s_stream(1), so the CSID starts listening BEFORE the CSIPHY
+is powered up, and well before the sensor emits.
+
+If the receiver latches its interface with the PHY at the moment it starts,
+doing it too early would leave it looking at a dead cable forever. And it fits
+everything that was measured: the CSID configuration is CORRECT -read back on
+stop: rx_cfg0=0x00132103, rx_cfg1=0x00000041, rdi_cfg0=0x802bf007,
+rdi_ctrl=0x00000001- and even so it does not count a single packet.
+
+WHAT IT DOES
+------------
+A parameter that, when written 1, re-applies __csid_configure_rx() and the RDI
+start command, that is WITH THE SENSOR ALREADY TRANSMITTING.
+
+That way the test does not depend on guessing a delay: capture is started, the
+sensor is given time to be really emitting, and only then is it re-applied.
+
+    packets start arriving      -> the fault is one of ORDER, and it is fixed
+                                   by moving the receiver configuration to
+                                   after the PHY start
+    still nothing arrives       -> order is not it, and it is ruled out
+
+This does NOT fix anything on its own: it is for deciding.
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:58:26.885167533 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:58:26.903814367 +0200
+@@ -49,6 +49,31 @@
+  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
+  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  */
++/*
++ * REAPLICAR LA CONFIGURACION DEL RECEPTOR, A MANO Y CUANDO YO QUIERA.
++ *
++ * mainline arranca la cadena en este orden:  VFE -> CSID -> CSIPHY -> sensor
++ * y el fabricante en este otro:              CSIPHY -> CSID -> sensor
++ *
++ * O sea que aqui el CSID se pone a escuchar ANTES de que el PHY exista. Si el
++ * receptor engancha su interfaz con el PHY en el momento de arrancar, hacerlo
++ * antes de tiempo lo dejaria mirando a un cable muerto para siempre.
++ *
++ * Escribiendo 1 en este parametro se vuelve a aplicar la configuracion del
++ * receptor y la orden de arranque del RDI, con el sensor ya transmitiendo. Si
++ * entonces empiezan a llegar paquetes, el fallo es de orden.
++ */
++static struct csid_device *diag_csid_guardado;
++static int diag_reaplicar_set(const char *val, const struct kernel_param *kp);
++static const struct kernel_param_ops diag_reaplicar_ops = {
++	.set = diag_reaplicar_set,
++	.get = param_get_int,
++};
++static int diag_reaplicar;
++module_param_cb(diag_reaplicar, &diag_reaplicar_ops, &diag_reaplicar, 0644);
++MODULE_PARM_DESC(diag_reaplicar,
++	"Escribir 1 para reaplicar la configuracion del receptor con el sensor ya transmitiendo.");
++
+ static unsigned int diag_pkts;
+ module_param(diag_pkts, uint, 0644);
+ MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
+@@ -244,6 +269,8 @@
+ static void __csid_configure_rx(struct csid_device *csid,
+ 				struct csid_phy_config *phy, int vc)
+ {
++	diag_csid_guardado = csid;
++
+ 	u8 lane_cnt = csid->phy.lane_cnt;
+ 	int val;
+ 
+@@ -511,6 +538,27 @@
+  *
+  * Return IRQ_HANDLED on success
+  */
++static int diag_reaplicar_set(const char *val, const struct kernel_param *kp)
++{
++	struct csid_device *csid = diag_csid_guardado;
++	int ret, i;
++
++	ret = param_set_int(val, kp);
++	if (ret || !diag_reaplicar || !csid)
++		return ret;
++
++	dev_info(csid->camss->dev, "csid%d: reaplicando la configuracion del receptor\n",
++		 csid->id);
++
++	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
++		if (csid->phy.en_vc & BIT(i)) {
++			__csid_configure_rx(csid, &csid->phy, i);
++			__csid_ctrl_rdi(csid, 1, i);
++		}
++
++	return 0;
++}
++
+ static irqreturn_t csid_isr(int irq, void *dev)
+ {
+ 	struct csid_device *csid = dev;

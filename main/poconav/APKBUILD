@@ -1,6 +1,6 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=poconav
-pkgver=1.0
+pkgver=1.1
 pkgrel=0
 pkgdesc="Car navigation with neural-network voice, made for the dashboard"
 url="https://github.com/utsugi-pmos/poconav"
@@ -26,6 +26,8 @@ makedepends="
 	qt6-qtpositioning-dev
 	qt6-qttools-dev
 	"
+# A tag is immutable: re-tagging the same version leaves the OLD tarball in the
+# distfile cache under the same name, and the build then silently uses it.
 source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
 
 build() {
@@ -38,8 +40,8 @@ build() {
 
 package() {
 	DESTDIR="$pkgdir" cmake --install build
-	install -Dm755 poconav-rutas mapas-locales -t "$pkgdir"/usr/bin/
+	install -Dm755 poconav-routes local-maps -t "$pkgdir"/usr/bin/
 }
 sha512sums="
-4efe851c1c243636ee736bbb25ee8cb37378bca862742573c3a6de68731c02f03e9ffc34b9587e69ba66ea89f2aeedee3180d276ff6321db3479aaf6c5b52dc6  poconav-1.0.tar.gz
+8da7c9fc050c122f4095e5e9e0dcc4bcfa058f18d5c3eafc6b6a5650491400f63dbfa589ac16916f3898ffbd1aea15240cfeb4fc9948e8a3a5aee70a0d677cc4  poconav-1.1.tar.gz
 "

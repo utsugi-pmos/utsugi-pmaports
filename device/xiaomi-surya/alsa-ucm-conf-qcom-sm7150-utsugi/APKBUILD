@@ -4,7 +4,7 @@ maintainer="Danila Tikhonov <danila@jiaxyga.com>"
 _orig=alsa-ucm-conf-qcom-sm7150
 pkgname=$_orig-utsugi
 pkgver=1.2.15.3_git20260513
-pkgrel=6
+pkgrel=7
 # FORK of alsa-ucm-conf-qcom-sm7150. Same files as upstream, so it claims upstream's name with a
 # versioned provides and a replaces: apk then refuses to have both installed and
 # every package that depends on "alsa-ucm-conf-qcom-sm7150" is satisfied by this one.
@@ -17,7 +17,7 @@ replaces="$_orig alsa-ucm-conf"
 provider_priority=1
 _commit="4821070589906c1d80c83210639591678c245369"
 source="$_orig-$_commit.tar.gz::https://github.com/sm7150-mainline/alsa-ucm-conf/archive/$_commit.tar.gz
-	0001-surya-microfono-en-el-ucm.patch
+	0001-surya-microphone-in-the-ucm.patch
 	"
 options="!check"
 builddir="$srcdir/alsa-ucm-conf-$_commit"
@@ -30,5 +30,5 @@ package() {
 
 sha512sums="
 a9ceda049459bf8e228ac34ddc97ee69187ad7183f48a8bb3df0d513dd6066f0d10cb86e40e5b6e24c88f5152d47fec81f872db9ef6c1e027090198b5ddb1d09  alsa-ucm-conf-qcom-sm7150-4821070589906c1d80c83210639591678c245369.tar.gz
-ecef47027bda51db3c232d5076342bdb151839c1d94b0533d981528ab0ae5ae4895fb75f91c5d9fc70f23ca63f65b88f59289ce94f1df0930b975fe8d5bf8486  0001-surya-microfono-en-el-ucm.patch
+1e89aff928603a0199da73aca589a15bba9faeda8b9dfdce638cf3a99ee4eb98d14fbb7b8e88e671b5c647115109679e3e0223f16c1a7e4c1f600c97ef2988db  0001-surya-microphone-in-the-ucm.patch
 "

@@ -1,0 +1,97 @@
+DIAGNOSTIC: read the CSI-2 receiver's hardware counters
+
+WHY
+---
+The whole conclusion of this investigation -"not one symbol reaches the CSID"-
+rests on ONE single instrument: the bits of CSI2_RX_IRQ_STATUS. It is validated
+with a positive control (the CSID's pattern generator marks SOT and EOT on all
+four lanes), but it is still a single instrument.
+
+Qualcomm's CSID register map (cam_ife_csid170.h) declares hardware counters that
+mainline NEVER reads:
+
+    0x160   csid_csi2_rx_total_pkts_rcvd    total packets received
+    0x168   csid_csi2_rx_total_crc_err      total CRC errors
+    0x130   csid_csi2_rx_captured_long_pkt_0
+    0x134   csid_csi2_rx_captured_long_pkt_1
+    0x3e0   csid_rdi_byte_cntr_ping         bytes counted by RDI0
+
+They are an INDEPENDENT route to the same question:
+
+  packet counter other than zero -> they do arrive, and the fault is further
+                                   down; the whole investigation would have
+                                   been looking at the wrong place
+  counter at zero               -> it confirms it by a second route
+
+And if packets do arrive but with bad CRC, the CRC counter says so and that
+points straight at lane order or polarity.
+
+They are read on the stop path, next to the interrupt status that was already
+being read there, and are exposed as module parameters so they can be consulted
+without depending on the kernel log.
+
+This does NOT fix anything: it is for looking, and above all for not trusting a
+single instrument.
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.785071748 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.805631597 +0200
+@@ -49,6 +49,23 @@
+  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
+  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  */
++static unsigned int diag_pkts;
++module_param(diag_pkts, uint, 0644);
++MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
++
++static unsigned int diag_crc;
++module_param(diag_crc, uint, 0644);
++MODULE_PARM_DESC(diag_crc, "Paquetes con CRC malo (contador de hardware, 0x168).");
++
++static unsigned int diag_pkt_hdr0;
++module_param(diag_pkt_hdr0, uint, 0644);
++static unsigned int diag_pkt_hdr1;
++module_param(diag_pkt_hdr1, uint, 0644);
++
++static unsigned int diag_bytes_rdi0;
++module_param(diag_bytes_rdi0, uint, 0644);
++MODULE_PARM_DESC(diag_bytes_rdi0, "Bytes contados por el RDI0 (0x3e0).");
++
+ static int cgc_en_reset = 1;
+ module_param(cgc_en_reset, int, 0644);
+ MODULE_PARM_DESC(cgc_en_reset,
+@@ -422,6 +439,36 @@
+ 				dev_info(csid->camss->dev,
+ 					 "csid%d al parar: rx=0x%08x rdin%d=0x%08x\n",
+ 					 csid->id, rx, i, rdi);
++
++				/*
++				 * LOS CONTADORES DE HARDWARE.
++				 *
++				 * El mapa de registros del CSID de Qualcomm
++				 * (cam_ife_csid170.h) declara contadores que
++				 * mainline no lee NUNCA:
++				 *
++				 *   0x160  total de paquetes recibidos
++				 *   0x168  total de errores de CRC
++				 *   0x130  cabecera del ultimo paquete largo
++				 *   0x134  idem, segunda palabra
++				 *   0x3e0  bytes contados por el RDI0
++				 *
++				 * Son un instrumento INDEPENDIENTE de los bits
++				 * de interrupcion: si el contador de paquetes
++				 * no es cero, es que si llegan y el fallo esta
++				 * mas abajo. Y si es cero, lo confirma por un
++				 * segundo camino.
++				 */
++				diag_pkts = readl_relaxed(csid->base + 0x160);
++				diag_crc = readl_relaxed(csid->base + 0x168);
++				diag_pkt_hdr0 = readl_relaxed(csid->base + 0x130);
++				diag_pkt_hdr1 = readl_relaxed(csid->base + 0x134);
++				diag_bytes_rdi0 = readl_relaxed(csid->base + 0x3e0);
++				dev_info(csid->camss->dev,
++					 "csid%d contadores: paquetes=%u crc_malo=%u cabecera=0x%08x/0x%08x bytes_rdi0=%u\n",
++					 csid->id, diag_pkts, diag_crc,
++					 diag_pkt_hdr0, diag_pkt_hdr1,
++					 diag_bytes_rdi0);
+ 			}
+ 
+ 			__csid_configure_rdi_stream(csid, enable, i);

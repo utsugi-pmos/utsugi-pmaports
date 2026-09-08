@@ -1,0 +1,51 @@
+DIAGNOSTIC: read back the CSID configuration, not just the CSIPHY one
+
+WHY
+---
+For the CSIPHY it was verified that the 110 writes of the lane table land
+(patch 0064). For the CSID not a SINGLE one had been verified.
+
+And it is a gap that matters: if CSI2_RX_CFG0 does not keep what was written to
+it -for example because it is written before the block comes out of reset- the
+receiver would be listening to a different PHY, or with a different lane count,
+and EVERYTHING else would be consistent with what was measured: the PHY hears
+the sensor, the CSID answers on registers, and not a packet arrives.
+
+Read on stop, next to the counters from 0072:
+
+    CSI2_RX_CFG0    lanes, lane mapping, which PHY it listens to, PHY type
+    CSI2_RX_CFG1    ECC correction, MISR, virtual channel mode
+    RDI_CFG0        format, data type, virtual channel, enable
+    RDI_CTRL        start/stop command
+
+What is expected for the front camera, with 4 lanes on CSIPHY1:
+
+    rx_cfg0 = 0x00132103    (4-1) | 0x3210<<4 | 1<<20 | 0<<24
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:44:26.193495273 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:44:26.210457264 +0200
+@@ -469,6 +469,25 @@
+ 					 csid->id, diag_pkts, diag_crc,
+ 					 diag_pkt_hdr0, diag_pkt_hdr1,
+ 					 diag_bytes_rdi0);
++
++				/*
++				 * Y RELEER LA CONFIGURACION.
++				 *
++				 * Del CSIPHY se comprobo que las 110 escrituras
++				 * aterrizan; del CSID no se habia comprobado
++				 * ninguna. Si CSI2_RX_CFG0 no guarda lo que se
++				 * le escribio -por ejemplo porque se escribe
++				 * antes de que el bloque salga del reset- el
++				 * receptor estaria escuchando a otro sitio y
++				 * todo lo demas seria coherente con lo medido.
++				 */
++				dev_info(csid->camss->dev,
++					 "csid%d config: rx_cfg0=0x%08x rx_cfg1=0x%08x rdi_cfg0=0x%08x rdi_ctrl=0x%08x\n",
++					 csid->id,
++					 readl_relaxed(csid->base + CSID_CSI2_RX_CFG0),
++					 readl_relaxed(csid->base + CSID_CSI2_RX_CFG1),
++					 readl_relaxed(csid->base + CSID_RDI_CFG0(i)),
++					 readl_relaxed(csid->base + CSID_RDI_CTRL(i)));
+ 			}
+ 
+ 			__csid_configure_rdi_stream(csid, enable, i);

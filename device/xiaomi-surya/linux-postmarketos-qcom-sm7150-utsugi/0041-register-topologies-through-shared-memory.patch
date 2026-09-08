@@ -1,0 +1,353 @@
+Send the topology block through shared memory, not in band
+
+The upstream patch declares the fields for shared memory
+(payload_addr_lsw/msw, mem_map_handle), leaves them at ZERO and sticks the
+topology block right behind the APR packet. The DSP answers ADSP_EBADPARAM (2):
+
+    qcom-q6core aprsvc:service:4:3: registering topologies: 1316 bytes
+      from .../Global_cal.acdb (adsp ready)
+    qcom-q6core aprsvc:service:4:3: the DSP refuses to register the topologies: 2
+
+With the ADSP already ready, so it is not a boot race: it is the format.
+Qualcomm's code sends this command leaving the block in memory and passing a
+handle, which is what is done here:
+
+  1. dma_alloc_coherent for the block.
+  2. AVCS_CMD_SHARED_MEM_MAP_REGIONS and wait for the
+     AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS, which brings the mem_map_handle.
+  3. AVCS_CMD_REGISTER_TOPOLOGIES with address and handle filled in.
+  4. Unmap and free.
+
+Along the way the missing wait for the reply is added: the original did
+apr_send_pkt() and walked away without looking, so a rejection went unnoticed and
+
+WARNING: the registration is NOT done at boot. If it leaves the ADSP in a bad
+state, the next boot ends up without an audio domain and the phone comes up
+WITH NO SOUND CARD. It happened on 2026-08-11 with r67 and the kernel had to be
+reinstalled over fastboot. It is triggered by hand, which also allows testing
+without rebooting:
+
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
+
+--- a/sound/soc/qcom/qdsp6/q6core.c
++++ b/sound/soc/qcom/qdsp6/q6core.c
+@@ -11,6 +11,8 @@
+ #include <linux/of_platform.h>
+ #include <linux/jiffies.h>
+ #include <linux/firmware.h>
++#include <linux/dma-mapping.h>
++#include <linux/sizes.h>
+ #include <linux/soc/qcom/apr.h>
+ #include "q6core.h"
+ #include "q6dsp-errno.h"
+@@ -22,6 +24,12 @@
+ #define AVCS_GET_VERSIONS       0x00012905
+ #define AVCS_GET_VERSIONS_RSP   0x00012906
+ #define AVCS_CMD_REGISTER_TOPOLOGIES	0x00012923
++#define AVCS_CMD_SHARED_MEM_MAP_REGIONS		0x00012924
++#define AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS	0x00012925
++#define AVCS_CMD_SHARED_MEM_UNMAP_REGIONS	0x00012926
++
++/* Pool de 4 KiB, el que usan el resto de servicios para esto. */
++#define ADSP_MEMORY_MAP_SHMEM8_4K_POOL		3
+ #define AVCS_CMD_DEREGISTER_TOPOLOGIES	0x0001292a
+ #define AVCS_CMD_GET_FWK_VERSION	0x001292c
+ #define AVCS_CMDRSP_GET_FWK_VERSION	0x001292d
+@@ -50,6 +58,26 @@
+ 	uint32_t api_branch_version;
+ } __packed;
+ 
++struct avcs_cmd_shared_mem_map_regions {
++	u16 mem_pool_id;
++	u16 num_regions;
++	u32 property_flag;
++} __packed;
++
++struct avcs_shared_map_region_payload {
++	u32 shm_addr_lsw;
++	u32 shm_addr_msw;
++	u32 mem_size_bytes;
++} __packed;
++
++struct avcs_cmdrsp_shared_mem_map_regions {
++	u32 mem_map_handle;
++} __packed;
++
++struct avcs_cmd_shared_mem_unmap_regions {
++	u32 mem_map_handle;
++} __packed;
++
+ struct avcs_cmd_register_topologies {
+ 	uint32_t payload_addr_lsw;
+ 	uint32_t payload_addr_msw;
+@@ -79,6 +107,7 @@
+ 	bool get_state_supported;
+ 	bool get_version_supported;
+ 	bool is_version_requested;
++	u32 mem_map_handle;
+ };
+ 
+ static struct q6core *g_core;
+@@ -104,6 +133,20 @@
+ 				core->fwk_version_supported = false;
+ 			core->resp_received = true;
+ 			break;
++		case AVCS_CMD_SHARED_MEM_MAP_REGIONS:
++			/*
++			 * Solo llega aqui si el mapeo FALLA: cuando va bien, la
++			 * respuesta es AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS, con
++			 * el asa. Sin este caso, un rechazo se veia como un
++			 * tiempo agotado y no se sabia cual de las dos cosas era.
++			 */
++			dev_err(&adev->dev, "el DSP rechaza mapear memoria: %d\n",
++				result->status);
++			core->resp_received = true;
++			break;
++		case AVCS_CMD_SHARED_MEM_UNMAP_REGIONS:
++			core->resp_received = true;
++			break;
+ 		case AVCS_CMD_REGISTER_TOPOLOGIES:
+ 			/*
+ 			 * Nadie miraba esta respuesta: q6core_register_topologies
+@@ -128,6 +171,13 @@
+ 		}
+ 		break;
+ 	}
++	case AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS: {
++		const struct avcs_cmdrsp_shared_mem_map_regions *rsp = data->payload;
++
++		core->mem_map_handle = rsp->mem_map_handle;
++		core->resp_received = true;
++		break;
++	}
+ 	case AVCS_CMDRSP_GET_FWK_VERSION: {
+ 		struct avcs_cmdrsp_get_fwk_version *fwk;
+ 
+@@ -268,36 +318,173 @@
+ 	return false;
+ }
+ 
++static int q6core_wait_resp(struct q6core *core)
++{
++	int rc;
++
++	/*
++	 * Q6_READY_TIMEOUT_MS son 100 ms, pensados para preguntas triviales.
++	 * Mapear memoria en el DSP puede tardar mas, y quedarse corto se
++	 * confunde con un rechazo.
++	 */
++	rc = wait_event_timeout(core->wait, core->resp_received,
++				msecs_to_jiffies(1000));
++	if (!rc)
++		return -ETIMEDOUT;
++
++	core->resp_received = false;
++	return 0;
++}
++
++/*
++ * El DSP no acepta el bloque de topologias pegado al paquete: hay que dejarlo
++ * en memoria y pasarle un asa. Enviandolo en banda contesta ADSP_EBADPARAM (2),
++ * que es lo que pasaba con el parche tal cual venia de aguas arriba.
++ */
++static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)
++{
++	struct avcs_cmd_shared_mem_map_regions *cmd;
++	struct avcs_shared_map_region_payload *region;
++	struct apr_pkt *pkt;
++	int pkt_size, rc;
++
++	pkt_size = APR_HDR_SIZE + sizeof(*cmd) + sizeof(*region);
++	pkt = kzalloc(pkt_size, GFP_KERNEL);
++	if (!pkt)
++		return -ENOMEM;
++
++	cmd = (void *)pkt + APR_HDR_SIZE;
++	region = (void *)cmd + sizeof(*cmd);
++
++	pkt->hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
++					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
++	pkt->hdr.pkt_size = pkt_size;
++	pkt->hdr.opcode = AVCS_CMD_SHARED_MEM_MAP_REGIONS;
++
++	cmd->mem_pool_id = ADSP_MEMORY_MAP_SHMEM8_4K_POOL;
++	cmd->num_regions = 1;
++	cmd->property_flag = 0;
++
++	region->shm_addr_lsw = lower_32_bits(phys);
++	region->shm_addr_msw = upper_32_bits(phys);
++	region->mem_size_bytes = size;
++
++	core->mem_map_handle = 0;
++	core->resp_received = false;
++
++	rc = apr_send_pkt(core->adev, pkt);
++	kfree(pkt);
++	if (rc < 0)
++		return rc;
++
++	rc = q6core_wait_resp(core);
++	if (rc)
++		return rc;
++
++	return core->mem_map_handle ? 0 : -EIO;
++}
++
++static void q6core_unmap_memory(struct q6core *core)
++{
++	struct avcs_cmd_shared_mem_unmap_regions *cmd;
++	struct apr_pkt *pkt;
++	int pkt_size;
++
++	if (!core->mem_map_handle)
++		return;
++
++	pkt_size = APR_HDR_SIZE + sizeof(*cmd);
++	pkt = kzalloc(pkt_size, GFP_KERNEL);
++	if (!pkt)
++		return;
++
++	cmd = (void *)pkt + APR_HDR_SIZE;
++
++	pkt->hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
++					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
++	pkt->hdr.pkt_size = pkt_size;
++	pkt->hdr.opcode = AVCS_CMD_SHARED_MEM_UNMAP_REGIONS;
++	cmd->mem_map_handle = core->mem_map_handle;
++
++	core->resp_received = false;
++	if (apr_send_pkt(core->adev, pkt) >= 0)
++		q6core_wait_resp(core);
++
++	kfree(pkt);
++	core->mem_map_handle = 0;
++}
++
+ static int q6core_register_topologies(struct device *dev, u32 size, const void *data)
+ {
+ 	struct q6core *core = dev_get_drvdata(dev);
+-	struct apr_device *adev = core->adev;
+ 	struct avcs_cmd_register_topologies *cmd;
+ 	struct apr_pkt *pkt;
+-	void *p, *dest;
+-	int pkt_size;
++	dma_addr_t phys;
++	void *buf;
++	u32 map_size;
++	int pkt_size, rc;
++
++	/*
++	 * El dispositivo APR viene sin mascara de DMA, y dma_alloc_attrs()
++	 * avisa (WARNING en kernel/dma/mapping.c) y devuelve NULL. El DSP
++	 * direcciona en 32 bits para estas regiones.
++	 */
++	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
++	if (rc) {
++		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++		return rc;
++	}
+ 
+-	pkt_size = APR_HDR_SIZE + sizeof(*cmd) + size;
++	/*
++	 * El DSP solo mapea regiones de un multiplo de 4 KiB. El bloque de
++	 * topologias son 1316 bytes, y pedir ese tamano tal cual hace que
++	 * conteste ADSP_EBADPARAM (2). Se redondea la region hacia arriba; el
++	 * tamano REAL del bloque va aparte, en payload_size.
++	 */
++	map_size = ALIGN(size, SZ_4K);
+ 
+-	p = kzalloc(pkt_size, GFP_KERNEL);
+-	if (!p)
++	buf = dma_alloc_coherent(dev, map_size, &phys, GFP_KERNEL);
++	if (!buf)
+ 		return -ENOMEM;
+ 
+-	pkt = p;
+-	cmd = p + APR_HDR_SIZE;
+-	dest = p + APR_HDR_SIZE + sizeof(*cmd);
+-	if (!p)
+-		return -ENOMEM;
++	memcpy(buf, data, size);
++
++	rc = q6core_map_memory(core, phys, map_size);
++	if (rc) {
++		dev_err(dev, "no se pudo mapear la memoria del DSP: %d\n", rc);
++		goto libera;
++	}
++
++	pkt_size = APR_HDR_SIZE + sizeof(*cmd);
++	pkt = kzalloc(pkt_size, GFP_KERNEL);
++	if (!pkt) {
++		rc = -ENOMEM;
++		goto desmapea;
++	}
++
++	cmd = (void *)pkt + APR_HDR_SIZE;
+ 
+ 	pkt->hdr.hdr_field = APR_HDR_FIELD(APR_MSG_TYPE_SEQ_CMD,
+-				      APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
+-	pkt->hdr.pkt_size = APR_HDR_SIZE + sizeof(*cmd) + size;
++					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
++	pkt->hdr.pkt_size = pkt_size;
+ 	pkt->hdr.opcode = AVCS_CMD_REGISTER_TOPOLOGIES;
+-	cmd->payload_size = size;
+ 
+-	memcpy(dest, data, size);
++	cmd->payload_addr_lsw = lower_32_bits(phys);
++	cmd->payload_addr_msw = upper_32_bits(phys);
++	cmd->mem_map_handle = core->mem_map_handle;
++	cmd->payload_size = size;
+ 
+-	return apr_send_pkt(adev, pkt);
++	core->resp_received = false;
++	rc = apr_send_pkt(core->adev, pkt);
++	kfree(pkt);
++	if (rc >= 0)
++		q6core_wait_resp(core);
++
++desmapea:
++	q6core_unmap_memory(core);
++libera:
++	dma_free_coherent(dev, map_size, buf, phys);
++	return rc < 0 ? rc : 0;
+ }
+ 
+ /**
+@@ -489,6 +676,17 @@
+ 	return 0;
+ }
+ 
++static ssize_t registrar_topologias_store(struct device *dev,
++					  struct device_attribute *attr,
++					  const char *buf, size_t count)
++{
++	int rc = q6core_load_and_register_topologies(dev);
++
++	dev_info(dev, "registro a peticion: %d\n", rc);
++	return rc ? rc : count;
++}
++static DEVICE_ATTR_WO(registrar_topologias);
++
+ static int q6core_probe(struct apr_device *adev)
+ {
+ 	g_core = kzalloc_obj(*g_core);
+@@ -509,7 +707,18 @@
+ 	 * el movil arrancaba con "--- no soundcards ---" y ni un dispositivo
+ 	 * en el bus apr. Paso el 2026-08-11 y dejo el telefono mudo.
+ 	 */
+-	q6core_load_and_register_topologies(&adev->dev);
++	/*
++	 * NO se registra al arrancar. Si el registro deja al ADSP tocado, el
++	 * arranque siguiente se queda sin dominio de audio y el movil aparece
++	 * SIN TARJETA DE SONIDO; recuperarse de eso cuesta reinstalar el kernel
++	 * y reiniciar. Paso el 2026-08-11 con r67.
++	 *
++	 * Ademas asi se puede probar cuantas veces haga falta sin reiniciar:
++	 *
++	 *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
++	 */
++	if (device_create_file(&adev->dev, &dev_attr_registrar_topologias))
++		dev_warn(&adev->dev, "sin disparador de registro en sysfs\n");
+ 
+ 	return 0;
+ }

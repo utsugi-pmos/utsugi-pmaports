@@ -1,0 +1,106 @@
+DIAGNOSTIC: dump the CSIPHY WHILE RUNNING, not on stop
+
+THE MEASUREMENT FLAW IT CORRECTS
+--------------------------------
+The dump from patch 0079 is done in csiphy_lanes_disable(), that is WHEN THE
+SENSOR HAS ALREADY STOPPED EMITTING.
+
+For the ERROR bits it makes no difference: they stay latched and survive. But
+not for the STATUS ones: they reflect the end of the transmission, not the
+transmission.
+
+And a wrong conclusion was drawn from that. It was observed that the status
+register of the CLOCK lane (0x794) read 0x01 both while emitting and while
+silent -"it does not flinch"- whereas the data lane ones did change, and that
+was taken as an indication that the sensor was not providing a high-speed clock.
+
+But in BOTH cases it was being looked at when there was nothing left to see. It
+was not a measurement: it was the instrument looking too late.
+
+WHAT IT DOES
+------------
+A parameter that dumps the CSIPHY space AT ANY MOMENT from user space. That way
+it can be read with the sensor really transmitting, which is the only way to
+answer the question that is still alive:
+
+    does the clock lane ever enter high speed?
+
+If with the sensor emitting the clock lane's status stays the same as at rest,
+the sensor is not providing a clock and the problem is in the physical link. If
+it changes, the clock arrives and the fault is in the sampling of the data
+lanes.
+
+It is the first measurement that separates those two things.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:08:57.514907994 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:09:22.934201082 +0200
+@@ -1060,6 +1060,61 @@
+ MODULE_PARM_DESC(pulso_terminacion,
+ 	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
+ 
++/*
++ * VOLCAR EL PHY EN MARCHA, NO AL PARAR.
++ *
++ * El volcado del 0079 se hace en csiphy_lanes_disable(), o sea CUANDO EL SENSOR
++ * YA HA DEJADO DE EMITIR. Los bits de ERROR sobreviven enclavados, pero los de
++ * ESTADO -como el del carril de reloj- reflejan el final, no la transmision.
++ *
++ * Por eso el registro del carril de reloj salia igual emitiendo que mudo: se
++ * estaba mirando en los dos casos cuando ya no habia nada. Es un fallo de la
++ * medida, no un dato.
++ *
++ * Con esto se puede volcar EN CUALQUIER MOMENTO desde el espacio de usuario,
++ * con el sensor transmitiendo de verdad, que es la unica forma de ver si el
++ * carril de reloj llega a entrar en alta velocidad.
++ */
++static struct csiphy_device *phy_guardado;
++
++static void volcar_phy(struct csiphy_device *csiphy, const char *cuando)
++{
++	int a;
++
++	for (a = 0; a < 0x900; a += 32)
++		dev_info(csiphy->camss->dev,
++			 "csiphy%d %s %03x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
++			 csiphy->id, cuando, a,
++			 readl_relaxed(csiphy->base + a + 0x00),
++			 readl_relaxed(csiphy->base + a + 0x04),
++			 readl_relaxed(csiphy->base + a + 0x08),
++			 readl_relaxed(csiphy->base + a + 0x0c),
++			 readl_relaxed(csiphy->base + a + 0x10),
++			 readl_relaxed(csiphy->base + a + 0x14),
++			 readl_relaxed(csiphy->base + a + 0x18),
++			 readl_relaxed(csiphy->base + a + 0x1c));
++}
++
++static int volcar_ahora_set(const char *val, const struct kernel_param *kp)
++{
++	int ret = param_set_int(val, kp);
++
++	if (!ret && phy_guardado)
++		volcar_phy(phy_guardado, "EN MARCHA");
++
++	return ret;
++}
++
++static const struct kernel_param_ops volcar_ahora_ops = {
++	.set = volcar_ahora_set,
++	.get = param_get_int,
++};
++
++static int volcar_ahora;
++module_param_cb(volcar_ahora, &volcar_ahora_ops, &volcar_ahora, 0644);
++MODULE_PARM_DESC(volcar_ahora,
++	"Escribir cualquier cosa para volcar el CSIPHY AHORA, con el sensor emitiendo.");
++
+ static int volcado_csiphy;
+ module_param(volcado_csiphy, int, 0644);
+ MODULE_PARM_DESC(volcado_csiphy,
+@@ -1298,6 +1353,8 @@
+ 	u8 val, ctrl5;
+ 	int i;
+ 
++	phy_guardado = csiphy;
++
+ 	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
+ 
+ 	val = CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;

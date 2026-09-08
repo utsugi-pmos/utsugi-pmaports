@@ -1,0 +1,127 @@
+The battery gauge said 0% and the phone shut itself down
+
+WHAT HAPPENED
+-------------
+On 2026-08-22, in the middle of a work session, the phone shut itself down. It
+was not the cable: `qcom_qg` was reporting capacity 0 with the cell at 3.57 V
+-which in lithium is 25-30%- and UPower presented it as
+
+    state:      empty
+    percentage: 0
+
+that is, a flat battery, hence the critical battery action. And the worst part is
+that it feeds back on itself: when powering up from off, the gauge reads the same
+thing again.
+
+THE TWO CAUSES
+--------------
+1. THE CAPACITY IS COMPUTED FROM A DIFFERENT REGISTER THAN THE VOLTAGE.
+
+   `qcom_qg_get_capacity()` interpolates linearly between the design voltages
+   -the driver itself admits it: "Yes, this function simply calculates the
+   capacity based on the current voltage"- but it reads the S2 AVERAGE (0x80),
+   whereas the sysfs `voltage_now` property reads the ADC's LAST SAMPLE (0xc0).
+   That is why this was seen, which looks contradictory and is not:
+
+       capacity    = 0
+       voltage_now = 3565555     (would give 16% with the same formula)
+
+   The average is accumulated by the hardware. After a COLD boot it does not have
+   samples yet and reads zero, and zero translates to 0%. Verified that a
+   `reboot` does NOT reproduce it: the PMIC does not power down and the average
+   survives -measured, `voltage_avg` identical byte for byte before and after
+   rebooting-. That is why the symptom only appeared after the power-off.
+
+2. THE STATUS WAS ALWAYS UNKNOWN.
+
+       case POWER_SUPPLY_PROP_STATUS:
+       	val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
+
+   Without looking at anything. UPower combines that with the percentage and
+   presents the battery as `empty`.
+
+THE FIX
+-------
+Neither of the two invents data:
+
+  - If the S2 average does not even reach the design minimum -that is, it is not
+    saying anything credible- the ADC's last sample is used, which is
+    instantaneous and valid from the very first moment. It is noisier, and that
+    is why it is only used then.
+
+  - The status is derived from the current, which the driver already reads and
+    which already comes with the sign the API expects: positive when charging. A
+    50 mA threshold so it does not dance between states with the idle noise.
+
+WHAT IS NOT VERIFIED
+--------------------
+I have not reproduced the transient. Doing so requires a COMPLETE power-off, and
+forcing one is exactly the risk this patch is trying to remove. What is measured
+is every link in the chain: the two different registers, the average surviving a
+reboot, the linear formula, and the unconditional UNKNOWN.
+
+The pending check is to look at `capacity` and `status` the next time the phone
+boots cold.
+
+--- a/drivers/power/supply/qcom_qg.c
++++ b/drivers/power/supply/qcom_qg.c
+@@ -95,6 +95,27 @@
+ 		return ret;
+ 	}
+ 
++	/*
++	 * "NO LO SE" NO ES "VACIA".
++	 *
++	 * El promedio S2 lo acumula el hardware, y tras un arranque EN FRIO
++	 * -no un reinicio, que conserva el PMIC- todavia no tiene muestras y
++	 * lee cero. Con cero, la regla de abajo da 0 %, el espacio de usuario
++	 * lo toma por bateria agotada y apaga el movil... que al encender
++	 * vuelve a leer cero. Circulo cerrado.
++	 *
++	 * La ultima lectura del ADC no tiene ese problema: es instantanea y
++	 * vale desde el primer momento. Es mas ruidosa que el promedio, y por
++	 * eso solo se usa cuando el promedio no dice nada creible.
++	 */
++	if (voltage_now < voltage_min) {
++		int ultimo;
++
++		if (!qcom_qg_get_voltage(chip, QG_LAST_ADC_V_DATA0_REG,
++					 &ultimo) && ultimo > voltage_now)
++			voltage_now = ultimo;
++	}
++
+ 	if (voltage_now <= voltage_min)
+ 		*val = 0;
+ 	else if (voltage_now >= voltage_max)
+@@ -127,11 +148,29 @@
+ 				union power_supply_propval *val)
+ {
+ 	struct qcom_qg_chip *chip = power_supply_get_drvdata(psy);
+-	int ret;
++	int ret, temp;
+ 
+ 	switch (psp) {
+ 	case POWER_SUPPLY_PROP_STATUS:
+-		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
++		/*
++		 * Decir siempre UNKNOWN tampoco es neutral: UPower lo combina
++		 * con el porcentaje y, si este es bajo o cero, presenta la
++		 * bateria como `empty` y dispara la accion de bateria critica.
++		 *
++		 * La corriente ya basta para saberlo, y el driver la lee: la
++		 * API la quiere positiva al cargar, y aqui ya viene invertida.
++		 * El umbral de 50 mA es para no bailar entre estados con el
++		 * ruido de la medida en reposo.
++		 */
++		ret = qcom_qg_get_current(chip, QG_LAST_ADC_I_DATA0_REG, &temp);
++		if (ret)
++			return ret;
++		if (temp > 50000)
++			val->intval = POWER_SUPPLY_STATUS_CHARGING;
++		else if (temp < -50000)
++			val->intval = POWER_SUPPLY_STATUS_DISCHARGING;
++		else
++			val->intval = POWER_SUPPLY_STATUS_NOT_CHARGING;
+ 		break;
+ 	case POWER_SUPPLY_PROP_TECHNOLOGY:
+ 		val->intval = POWER_SUPPLY_TECHNOLOGY_LION;

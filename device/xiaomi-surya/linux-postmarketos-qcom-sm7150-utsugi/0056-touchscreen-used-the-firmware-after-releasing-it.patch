@@ -1,0 +1,98 @@
+THIS IS THE CAUSE OF THE BOOT HANG (~1 out of 4).
+
+Found on 2026-08-15 with the full dump pstore gave after a watchdog reset. The
+trace, at 1.75 s of kernel:
+
+    Unable to handle kernel paging request at virtual address ffff8000811ff000
+    Internal error: Oops: 0000000096000007 [#1] PREEMPT SMP
+    CPU: 4 PID: 138 Comm: kworker/4:5   Tainted: G  W
+    Workqueue: events nt36xxx_download_firmware
+    pc : nt36xxx_download_firmware+0x6cc/0xb10
+    Call trace:
+     nt36xxx_download_firmware+0x6cc/0xb10
+     process_scheduled_works+0x1c0/0x494
+     worker_thread+0x28c/0x420
+
+It has nothing to do with audio, nor with the ADSP, nor with the LPI, which is
+where we had been looking since 2026-08-10. It is the touchscreen.
+
+THE FAULT
+---------
+In _nt36xxx_boot_download_firmware():
+
+    ts->fw_entry.data = devm_kmemdup(dev, fw_entry->data, fw_entry->size, ...);
+
+    release_firmware(fw_entry);          <- frees fw_entry AND fw_entry->data
+
+    if (!ts->fw_entry.data) { ... }
+    ts->fw_entry.size = fw_entry->size;                    <- USE AFTER FREE
+    WARN_ON(ts->fw_entry.data[0] != fw_entry->data[0]);    <- USE AFTER FREE
+
+It releases the firmware and afterwards reads its size and dereferences its
+pointer.
+
+WHY IT IS INTERMITTENT, AND WHY IT WAS SO HARD TO SEE
+-----------------------------------------------------
+Almost always the just-freed memory keeps the old values, so `size` comes out
+right and the boot goes through. But when something reuses that memory first
+-and at boot there is a huge amount of allocation activity-, `ts->fw_entry.size`
+comes out garbage. And then the loop below:
+
+    for (i = (ts->fw_entry.size / 4096); i > 0; i--)
+            strncmp(&ts->fw_entry.data[i * 4096 - 3], "NVT", 3)
+
+runs far past the end of the buffer until it leaves what is mapped: a paging
+fault at ffff8000811ff000, which is the exact address of the Oops.
+
+It happens at **1.75 s**, before the initramfs brings up the USB gadget
+(2.45 s). That is why the phone "does not re-enumerate": it dies before it has
+network, before journald and before the modules are loaded. It left no trace
+anywhere.
+
+THE FIX
+-------
+Save the size before releasing the firmware, and remove the WARN_ON, which
+dereferences freed memory just to compare one byte. That WARN_ON is also the
+"Tainted: [W]" that shows up in the trace.
+
+HOW IT IS CHECKED
+-----------------
+surya/arranque/bucle-reinicios 30. The failure rate before the patch was between
+25% and 40% depending on the run.
+
+--- a/drivers/input/touchscreen/nt36xxx_core.c
++++ b/drivers/input/touchscreen/nt36xxx_core.c
+@@ -709,6 +709,7 @@
+ static void _nt36xxx_boot_download_firmware(struct nt36xxx_ts *ts) {
+ 	int i, ret, retry = 0;
+ 	size_t fw_need_write_size = 0;
++	size_t fw_size;
+ 	const struct firmware *fw_entry;
+ 	u8 val[8 * 4] = {0};
+
+@@ -730,7 +731,13 @@
+ 	 * pm_resume need to re-upload fw for NT36675 IC
+ 	 *
+ 	 */
+-	ts->fw_entry.data = devm_kmemdup(ts->dev, fw_entry->data, fw_entry->size, GFP_KERNEL | GFP_DMA);
++	/*
++	 * Quedarse con el tamano ANTES de soltar el firmware: release_firmware()
++	 * libera fw_entry y su data, y lo de abajo los seguia leyendo.
++	 */
++	fw_size = fw_entry->size;
++
++	ts->fw_entry.data = devm_kmemdup(ts->dev, fw_entry->data, fw_size, GFP_KERNEL | GFP_DMA);
+
+ 	release_firmware(fw_entry);
+
+@@ -738,9 +745,7 @@
+ 		dev_err(ts->dev, "memdup fw_data fail\n");
+ 		goto exit;
+ 	}
+-	ts->fw_entry.size = fw_entry->size;
+-
+-	WARN_ON(ts->fw_entry.data[0] != fw_entry->data[0]);
++	ts->fw_entry.size = fw_size;
+
+ 	for (i = (ts->fw_entry.size / 4096); i > 0; i--) {
+ 		if (strncmp(&ts->fw_entry.data[i * 4096 - 3], "NVT", 3) == 0) {

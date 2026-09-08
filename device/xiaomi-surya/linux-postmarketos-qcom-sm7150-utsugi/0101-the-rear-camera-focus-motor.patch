@@ -1,0 +1,200 @@
+The rear camera's focus motor: it was missing an enable, not a driver
+
+WHAT WAS BELIEVED
+-----------------
+That the actuator did not exist or was not reachable. Scanning the sensor's CCI
+bus with the camera powered, only the sensor (0x1a) and the EEPROM (0x50)
+answered, and that was taken as conclusive. The last 2.8 V rail that was still
+off was even turned on (patch 0097) in case it was a lack of power, and it did
+not show up either.
+
+WHAT IT ACTUALLY WAS
+--------------------
+An unowned pin. In the SoC itself:
+
+    line 66: "64M_AF_EN"  input
+
+"64M" is the 64 MP camera, that is, the main rear one, and "AF_EN" is autofocus
+enable. `gpioinfo` reported it as an input, with no consumer: nobody was driving
+it.
+
+Driving it high, with the rear camera streaming:
+
+    before:  00:  -- -- -- -- -- -- -- --
+    after:   00:  -- -- -- -- 0c -- -- --
+
+0x0c is the classic address of Dongwoon VCMs. It shows up in BOTH scan modes
+-read and quick write- and accepts position commands with the two-byte protocol:
+0, 256, 512, 768 and 1023 were tried, all accepted.
+
+An unenabled chip does not answer however well you ask it, and the earlier scan
+was correct: it was the premise that failed, not the method.
+
+IT IS THE SAME FAULT THE WIDE ANGLE HAD
+---------------------------------------
+The wide angle was missing CAM_SW2_OE_2, another enable that nobody declared, and
+it turned up the same way: by reading the NAMES of the GPIO lines. The technique
+had already worked on this phone and had not been applied here.
+
+WHY dw9807-vcm AND NOT dw9714
+-----------------------------
+The first attempt used dw9714, which sends TWO RAW BYTES with the position. The
+chip acknowledged every write... and the lens did not move. The reason is that
+those two bytes land on registers 0x00 and 0x01, which are identification and
+control: the chip accepts them and does nothing with them.
+
+This chip speaks BY REGISTERS -address plus data- with the ten-bit position split
+between 0x03 (two high bits) and 0x04 (eight low ones). It was checked by
+reading: the registers return what is written to them, 0x00/0x00 for position 0
+and 0x03/0xff for 1023.
+
+And it was checked that it MOVES, which is what matters:
+
+    dw9714 protocol (two raw bytes):
+      sharpness varies by x1.01 at random between the two extremes
+
+    protocol by registers:
+      position    sharpness  contrast
+             0     85443.2      117
+           340     78526.2      119
+           680     67490.3       87
+          1023     66997.3       82
+
+Monotonic, and the contrast falls along with it. That is progressive defocus;
+noise does not do that.
+
+Mainline's dw9807-vcm writes exactly that format: register 0x03 followed by the
+two position bytes. That is why that driver is used and there is no need to write
+one.
+
+With this, V4L2_CID_FOCUS_ABSOLUTE appears, from 0 to 1023: MANUAL focus. The
+automatic one goes above, in whoever has the frames.
+
+AND lens-focus IS NEEDED IN THE SENSOR NODE
+-------------------------------------------
+With the actuator declared on its own, the driver binds to the chip -you can see
+it in /sys/bus/i2c/devices/12-000c/driver, and the regulator shows up with
+12-000c-vcc as consumer- but NO subdevice and NO focus control appears. Nobody
+puts it into the graph.
+
+The missing piece is the lens-focus property in the sensor node:
+v4l2_async_register_subdev_sensor(), which is what the IMX682 driver uses, reads
+it and creates the ancillary link. That is where the node comes from and, with
+it, V4L2_CID_FOCUS_ABSOLUTE.
+
+THE ENABLE HAS TO STAY ON
+-------------------------
+The driver turns off the actuator's regulator when suspending, and to wake up it
+needs to talk to the chip over i2c... but the CCI bus only lives while the SENSOR
+is streaming. Result: it suspends, is left without power and cannot come back.
+Measured: enable count 0 and runtime_status = error, with the subdevice refusing
+to open.
+
+With regulator-always-on the chip keeps its power and the driver depends only on
+the bus, which is a dependency that can be met: moving focus while capturing.
+
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -26,6 +26,49 @@
+ 		vin-supply = <&vreg_bob>;
+ 	};
+ 
++	/*
++	 * EL HABILITADOR DEL MOTOR DE ENFOQUE.
++	 *
++	 * La linea se llama "64M_AF_EN" en el propio SoC -64M es la camara de
++	 * 64 MP, o sea la principal trasera- y venia SIN DUENNO: `gpioinfo` la
++	 * daba como "input", sin conductor.
++	 *
++	 * Ese pin es la razon de que el actuador pareciera no existir. Con el
++	 * bajo, barrer el bus entero de su sensor no encuentra nada; poniendolo
++	 * alto, aparece 0x0c -la direccion clasica de los VCM Dongwoon- en los
++	 * DOS modos de barrido, y acepta ordenes de posicion.
++	 *
++	 * Es exactamente el mismo tipo de fallo que tenia el gran angular con
++	 * CAM_SW2_OE_2: un habilitador que nadie declaraba.
++	 */
++	vreg_cam_af_en: regulator-vreg-cam-af-en {
++		compatible = "regulator-fixed";
++		regulator-name = "cam_af_en";
++		regulator-min-microvolt = <2800000>;
++		regulator-max-microvolt = <2800000>;
++
++		gpio = <&tlmm 66 GPIO_ACTIVE_HIGH>;
++		enable-active-high;
++		startup-delay-us = <100>;
++
++		/*
++		 * SIEMPRE ENCENDIDO, y no es pereza.
++		 *
++		 * El driver del actuador apaga este regulador al suspenderse, y
++		 * para volver a encenderse necesita hablar con el chip por i2c.
++		 * Pero el bus CCI solo vive mientras el SENSOR transmite, asi que
++		 * en cuanto se suspendia se quedaba fuera: el regulador a cero, el
++		 * estado de energia en "error" y el subdispositivo sin abrirse.
++		 *
++		 * Medido: enable count 0 y /sys/.../power/runtime_status = error.
++		 *
++		 * Dejando el habilitador fijo, el chip conserva la corriente y el
++		 * driver solo depende del bus, que es una dependencia que si se
++		 * puede cumplir -moviendo el foco mientras se captura-.
++		 */
++		regulator-always-on;
++	};
++
+ 	vreg_uw_ldo_ois_drv: regulator-vreg-uw-ldo-ois-drv {
+ 		compatible = "regulator-fixed";
+ 		regulator-name = "uw_ldo_ois_drv";
+@@ -1134,11 +1177,52 @@
+ 	 * REACTIVADA para bisecar: hace falta un segundo sensor en otro CSIPHY
+ 	 * para separar "falla nuestra camara" de "falla CAMSS en este SoC".
+ 	 */
++	/*
++	 * EL MOTOR DE ENFOQUE de la principal.
++	 *
++	 * El fichero de fabrica lo llama "ofilm_dw9800", y este chip habla POR
++	 * REGISTROS: direccion mas dato, con la posicion de diez bits repartida
++	 * entre 0x03 (los dos bits altos) y 0x04 (los ocho bajos).
++	 *
++	 * NO es el protocolo del dw9714, que manda dos bytes crudos. Se probo
++	 * con ese driver primero y el resultado enganna: el chip CONFIRMA cada
++	 * escritura -porque cae sobre los registros 0x00 y 0x01, que son
++	 * identificacion y control- y la lente no se mueve. Medido: con dw9714
++	 * la nitidez variaba x1,01 al azar entre los dos extremos; escribiendo
++	 * por registros baja de forma monotona, 85443 -> 66997, y el contraste
++	 * cae con ella de 117 a 82. Eso es desenfoque progresivo.
++	 *
++	 * dw9807-vcm de mainline escribe exactamente eso: el registro 0x03
++	 * seguido de los dos bytes de posicion. Por eso se usa ese.
++	 *
++	 * Con esto sale V4L2_CID_FOCUS_ABSOLUTE de 0 a 1023, o sea enfoque
++	 * manual. El automatico va por encima, en quien tenga los fotogramas.
++	 */
++	cam_focus: focus@c {
++		compatible = "dongwoon,dw9807-vcm";
++		reg = <0x0c>;
++		vcc-supply = <&vreg_cam_af_en>;
++	};
++
+ 	camera@1a {
+ 		compatible = "sony,imx682";
+ 		reg = <0x1a>;
+ 
+ 		/*
++		 * EL MOTOR ES SUYO, Y HAY QUE DECIRLO AQUI.
++		 *
++		 * Sin esta referencia el driver del actuador engancha con el chip
++		 * -se ve en /sys/bus/i2c/devices/12-000c/driver- pero no aparece
++		 * ningun subdispositivo ni ningun control de enfoque: nadie lo
++		 * mete en el grafo.
++		 *
++		 * v4l2_async_register_subdev_sensor(), que es lo que usa este
++		 * driver, lee lens-focus y crea el enlace auxiliar. De ahi sale
++		 * el nodo y, con el, V4L2_CID_FOCUS_ABSOLUTE.
++		 */
++		lens-focus = <&cam_focus>;
++
++		/*
+ 		 * MEDIDO, no deducido: se puso el movil de pie apuntando a la
+ 		 * habitacion y se miro la captura en crudo. La imagen del sensor
+ 		 * hay que girarla 90 grados EN SENTIDO HORARIO para que quede

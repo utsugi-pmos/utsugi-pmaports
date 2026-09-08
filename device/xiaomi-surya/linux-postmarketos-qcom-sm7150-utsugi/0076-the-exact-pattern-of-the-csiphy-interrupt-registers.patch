@@ -1,0 +1,73 @@
+DIAGNOSTIC: the vendor's exact pattern in CTRL11..CTRL21 of the CSIPHY
+
+WHY
+---
+It is the last CSIPHY write left untested.
+
+From csiphy_irq_reg_1_2[] of the surya's own Android kernel, at 0x082c..0x0854,
+which are exactly the CTRL11..CTRL21 that mainline zeroes:
+
+    FF FF FB FF 7F FF FF EF FF FF FF
+
+Qualcomm calls them interrupt registers and the values look like masks -three of
+them with a single bit cleared-, but mainline writes ZERO to all eleven, and at
+this point in the investigation it is better to measure than to assume:
+everything else in the CSIPHY has been verified register by register against the
+vendor and it matches.
+
+0xff on all eleven was already tried (the PHY fires non-stop and not one piece
+of data arrives). The exact pattern is what is missing.
+
+    desenmascarar = 0   like mainline, everything zero
+                    1   everything 0xff
+                    2   the vendor's pattern
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 13:30:18.537681089 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 13:30:18.558003605 +0200
+@@ -1065,6 +1065,10 @@
+ MODULE_PARM_DESC(releer_registros,
+ 	"1 = releer los registros del CSIPHY tras configurarlo y avisar de los que no cuadren.");
+ 
++static const u8 patron_fabricante[11] = {
++	0xFF, 0xFF, 0xFB, 0xFF, 0x7F, 0xFF, 0xFF, 0xEF, 0xFF, 0xFF, 0xFF
++};
++
+ static int desenmascarar;
+ module_param(desenmascarar, int, 0644);
+ MODULE_PARM_DESC(desenmascarar,
+@@ -1395,8 +1399,35 @@
+ 	 * enciende cuando se quiere responder a la pregunta concreta de si el
+ 	 * PHY oye al sensor -que se contesta mirando /proc/interrupts-.
+ 	 */
++	/*
++	 * LOS ONCE REGISTROS QUE EL FABRICANTE NO DEJA A CERO.
++	 *
++	 * De csiphy_irq_reg_1_2[] del kernel Android del propio surya, en
++	 * 0x082c..0x0854, que son justo estos CTRL11..CTRL21:
++	 *
++	 *     FF FF FB FF 7F FF FF EF FF FF FF
++	 *
++	 * Mainline les escribe CERO a los once. Qualcomm los llama registros de
++	 * interrupcion, y los valores tienen pinta de mascaras -tres de ellos
++	 * con un bit suelto quitado-, pero es la ultima escritura del CSIPHY
++	 * que queda sin probar, y a estas alturas conviene medir en vez de
++	 * suponer.
++	 *
++	 *   desenmascarar = 0   como mainline: todo a cero
++	 *                   1   todo a 0xff (ya probado: el PHY dispara, sin datos)
++	 *                   2   el patron exacto del fabricante
++	 */
+ 	for (i = 11; i < 22; i++) {
+-		writel_relaxed(desenmascarar ? 0xff : 0, csiphy->base +
++		u8 v;
++
++		if (desenmascarar == 2)
++			v = patron_fabricante[i - 11];
++		else if (desenmascarar)
++			v = 0xff;
++		else
++			v = 0;
++
++		writel_relaxed(v, csiphy->base +
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, i));
+ 	}
+ 

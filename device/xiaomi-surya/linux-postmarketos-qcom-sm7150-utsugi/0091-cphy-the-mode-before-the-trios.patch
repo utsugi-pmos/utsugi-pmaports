@@ -1,0 +1,53 @@
+C-PHY: the three-phase mode goes in the common block, BEFORE the trios
+
+Measured with r132 (patch 0090 already in):
+
+    csiphy0: link_freq=435200000 settle_cnt=21 lane_mask=0x07 num_data=3 ctrl5=0x2a
+    packets = 0
+    CONTROL front camera in the same session = 3054 packets
+
+So the 0x2a did reach the hardware -it is the exact value the vendor computes
+for three trios- and it is not enough.
+
+WHAT WAS STILL WRONG IS THE ORDER
+
+The vendor has the mode in the COMMON BLOCK:
+
+    {0x0800, 0x03, 0x01, CSIPHY_DEFAULT_PARAMS},
+    {0x0800, 0x02, 0x00, CSIPHY_2PH_REGS},     <- D-PHY
+    {0x0800, 0x0E, 0x00, CSIPHY_3PH_REGS},     <- C-PHY
+
+and in cam_csiphy_core.c it writes that WHOLE block before the while (lane_mask)
+that applies the trios.
+
+In my implementation the 0x0E was set by the C-PHY table itself, at the end of
+each trio. The FINAL value matches, but the intermediate state does not: the PHY
+spends the whole configuration of the first trio believing it is in D-PHY
+(0x02), and only changes mode once it has thirty registers written.
+
+This moves it to the vendor's place, where D-PHY sets its 0x02.
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+@@ -1583,7 +1583,21 @@
+ 		writel_relaxed(0x03, csiphy->base +
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
+ 		usleep_range(1000, 1200);
+-		writel_relaxed(0x02, csiphy->base +
++		/*
++		 * El modo va AQUI, en el bloque comun, y no al final de la
++		 * tabla de carriles. El fabricante lo tiene asi:
++		 *
++		 *     {0x0800, 0x03, 0x01, CSIPHY_DEFAULT_PARAMS},
++		 *     {0x0800, 0x02, 0x00, CSIPHY_2PH_REGS},
++		 *     {0x0800, 0x0E, 0x00, CSIPHY_3PH_REGS},
++		 *
++		 * y escribe TODO el bloque comun antes del while (lane_mask)
++		 * que aplica los trios. Escribiendolo despues -que es lo que
++		 * hacia la tabla C-PHY, con un 0x0E al final de cada trio- el
++		 * valor final coincide pero el PHY pasa toda la configuracion
++		 * del primer trio creyendose en D-PHY.
++		 */
++		writel_relaxed(cfg->cphy ? 0x0E : 0x02, csiphy->base +
+ 			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
+ 	} else {
+ 		val = 0x00;

@@ -1,0 +1,58 @@
+Tell the kernel where the audio calibration database is
+
+Goes with 0037: that one adds the mechanism to register topologies in the DSP,
+and this one says which file to take them from.
+
+  - The q6core node of sm7150.dtsi gets a label, which it did not have.
+  - The path of the ACDB is given in surya's device tree.
+
+The path is relative to the firmware tree (/lib/firmware). Surya's own ACDB
+ALREADY comes in the firmware package, although hidden away:
+
+    /usr/share/qcom/sm7150/Xiaomi/surya/acdb/QRD/QRD_Global_cal.acdb
+
+(QRD is the commercial device variant; IDP is the development board and it
+carries a different codec, tavil/WCD9340, which is not ours). It has to be
+copied to the place this property names:
+
+    cp /usr/share/qcom/sm7150/Xiaomi/surya/acdb/QRD/QRD_Global_cal.acdb \
+       /lib/firmware/qcom/sm7150/xiaomi/surya/Global_cal.acdb
+
+It brings 30 topologies, and from the voice range (0x10010Fxx) exactly ONE:
+
+    0x10010f8b  with 15 modules   <- the device's transmit chain
+
+That it is the only one and that it has a long chain (echo cancellation, noise
+suppression) fits with it being the TX topology to use.
+
+--- a/arch/arm64/boot/dts/qcom/sm7150.dtsi	2026-08-10 23:53:16.227458691 +0200
++++ b/arch/arm64/boot/dts/qcom/sm7150.dtsi	2026-08-10 23:53:16.229668929 +0200
+@@ -2567,7 +2567,7 @@
+ 					#address-cells = <1>;
+ 					#size-cells = <0>;
+ 
+-					service@3 {
++					q6core: service@3 {
+ 						compatible = "qcom,q6core";
+ 						reg = <APR_SVC_ADSP_CORE>;
+ 
+diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-10 23:53:16.692356605 +0200
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-10 23:53:21.540621886 +0200
+@@ -464,3 +464,16 @@
+ &wifi {
+ 	qcom,ath10k-calibration-variant = "xiaomi_surya";
+ };
++
++/*
++ * Base de calibracion de audio. El DSP no acepta una topologia de voz que no
++ * se le haya registrado antes, y las topologias salen de aqui. Sin esto la
++ * sesion de voz se crea sin error y la transmision sale muda.
++ *
++ * De momento se usa la del Pixel 4a (sunfish), que lleva el mismo SoC: es la
++ * unica ACDB que trae el paquete de firmware. Lo suyo seria extraer la de
++ * surya de la particion vendor de Xiaomi.
++ */
++&q6core {
++	qcom,acdb-name = "qcom/sm7150/xiaomi/surya/Global_cal.acdb";
++};

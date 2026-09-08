@@ -1,0 +1,139 @@
+The sensor was never told to speak C-PHY, and its own silicon says what was being asked of it was impossible
+
+The whole C-PHY branch (patches 0088-0091) put the RECEIVER in three phases. The
+TRANSMITTER was told nothing: `imx682_global` still writes
+
+    { 0x0111, 0x02 },
+
+inherited from the MediaTek port. And that register is not a yes/no flag. The
+CCS standard defines it with values, and the definition is in the very kernel
+being compiled, drivers/media/i2c/ccs/ccs-regs.h:
+
+    #define CCS_R_CSI_SIGNALING_MODE           CCI_REG8(0x0111)
+    #define CCS_CSI_SIGNALING_MODE_CSI_2_DPHY    2U
+    #define CCS_CSI_SIGNALING_MODE_CSI_2_CPHY    3U
+
+So 0x02 is D-PHY. C-PHY is 0x03.
+
+I had read that 0x02 from the chip and taken it as "the sensor confirms it is
+C-PHY". It was the other way round, and besides it was not an answer from the
+sensor: it was my own write read back.
+
+WHAT THE SENSOR DOES ANSWER, AND IT CLOSES THE CASE
+
+The capability registers of the 0x1600 block are read-only, fixed by the
+silicon. Asked of the IMX682 with the I2C validated in the same session -the
+0x0016 identifier came out 0x0682, the correct one-:
+
+    0x1602 = 0x0C    BIT(2)|BIT(3)  ->  it knows D-PHY AND C-PHY
+    0x1601 = 0x0B    BIT(0)|BIT(1)|BIT(3)
+                     ->  in D-PHY it supports 1, 2 and 4 lanes. NOT THREE.
+    0x0111 = 0x02    ->  but it was set to D-PHY
+    0x0114 = 0x02    ->  with THREE lanes
+
+The combination that was being asked of it -three-lane D-PHY- is the only one
+that its own silicon declares it does NOT know how to do.
+
+And that ties up all the loose ends at once:
+
+  - The vendor file asks for three lanes (laneAssign = 0x0210, and the five mode
+    tables write 0x0114 = 0x02). If three-lane D-PHY does not exist, three can
+    only be C-PHY, where they are three TRIOS. The conclusion "the rear camera
+    is C-PHY" was right; the reasoning I sustained it with was not.
+
+  - It explains why three-lane D-PHY never worked either, which was the end
+    left dangling: it is not that it was badly tuned, it is that that
+    configuration does not exist in this chip.
+
+  - It explains the signature measured on round 26. The transmitter was in
+    D-PHY (wrong, with an impossible lane count) and the receiver was listening
+    in C-PHY. The PHY sees electrical activity and the frame boundary
+    transitions -four per frame-, does not latch a single header sync, and that
+    is why nothing reaches the CSID, not even an error.
+
+THE PARAMETER IS PART OF THE MEASUREMENT
+
+senal_phy allows forcing 2 or 3 at runtime. With it both configurations can be
+measured IN THE SAME BOOT, with the same pipeline and the same PHY, and then the
+difference is attributable to this register and to nothing else. A reboot in
+between always leaves the doubt that something else may have changed.
+
+    senal_phy = 0   the table's value (now 0x03, C-PHY)
+                2   D-PHY  -> nothing must arrive, still
+                3   C-PHY
+--- a/drivers/media/i2c/imx682.c
++++ b/drivers/media/i2c/imx682.c
+@@ -19,10 +19,11 @@
+  *    Si se cambia el reloj, hay que cambiarlo TAMBIEN en el device tree
+  *    (assigned-clock-rates) o el PLL quedara mal y no habra imagen.
+  *
+- * 2. D-PHY de 2 carriles. CAMSS solo admite D-PHY, y 2 carriles funciona tanto
+- *    si la placa tiene 2 como si tiene 4, porque los carriles 0 y 1 siempre
+- *    estan cableados. El sensor se configura para eso con 0x0111=0x02 y
+- *    0x0114=0x01, que ya vienen en las tablas.
++ * 2. C-PHY de 3 trios, que es como esta cableada la placa. Lo dice el propio
++ *    sensor en sus registros de capacidad, que son de solo lectura:
++ *    0x1602 = 0x0C (sabe D-PHY y C-PHY) y 0x1601 = 0x0B (en D-PHY admite 1, 2
++ *    y 4 carriles; el bit de TRES esta a cero). Se configura con 0x0111 = 0x03
++ *    y 0x0114 = 0x02.
+  *
+  * LO QUE ESTE DRIVER NO HACE
+  * --------------------------
+@@ -106,7 +107,17 @@
+ 	{ 0x0137, 0x33 },
+ 	{ 0x3C7E, 0x02 },
+ 	{ 0x3C7F, 0x0A },
+-	{ 0x0111, 0x02 },
++	/*
++	 * 0x0111 es CSI_SIGNALING_MODE de la norma CCS, y lleva un VALOR, no una
++	 * bandera: 2 = D-PHY, 3 = C-PHY. Esta definido en este mismo kernel, en
++	 * drivers/media/i2c/ccs/ccs-regs.h.
++	 *
++	 * El 0x02 venia del porte de MediaTek, que era D-PHY de dos carriles. Aqui
++	 * la placa tiene tres trios C-PHY, asi que con 0x02 se le estaba pidiendo al
++	 * sensor D-PHY de TRES carriles, que es justo lo unico que su registro de
++	 * capacidad 0x1601 = 0x0B dice que NO sabe hacer.
++	 */
++	{ 0x0111, 0x03 },
+ 	{ 0x380C, 0x00 },
+ 	{ 0x3C00, 0x10 },
+ 	{ 0x3C01, 0x10 },
+@@ -437,6 +448,20 @@
+ MODULE_PARM_DESC(carriles,
+ 	"Carriles que se le declaran al sensor en 0x0114. 0 = tabla (3).");
+ 
++/*
++ * Para medir D-PHY y C-PHY EN EL MISMO ARRANQUE. Con un reinicio de por medio
++ * siempre queda la duda de si cambio otra cosa; asi la unica diferencia entre
++ * las dos medidas es este registro.
++ *
++ *   0 = el valor de la tabla (0x03, C-PHY)
++ *   2 = D-PHY   (control negativo: tiene que seguir sin llegar nada)
++ *   3 = C-PHY
++ */
++static int senal_phy;
++module_param(senal_phy, int, 0644);
++MODULE_PARM_DESC(senal_phy,
++	"Enlace que se le declara al sensor en 0x0111. 2 = D-PHY, 3 = C-PHY, 0 = tabla.");
++
+ static const s64 imx682_link_freqs[] = {
+ 	IMX682_LINK_FREQ,
+ };
+@@ -689,11 +714,14 @@
+ 		imx682_write(s, 0x030B, op_sys_div);
+ 	if (carriles)
+ 		imx682_write(s, 0x0114, carriles - 1);
++	if (senal_phy)
++		imx682_write(s, 0x0111, senal_phy);
+ 
+-	if (op_pre_div || op_pll_mult || op_sys_div || carriles)
++	if (op_pre_div || op_pll_mult || op_sys_div || carriles || senal_phy)
+ 		dev_info(&s->client->dev,
+-			 "barrido: pre=%d mult=%d div=%d carriles=%d\n",
+-			 op_pre_div, op_pll_mult, op_sys_div, carriles);
++			 "barrido: pre=%d mult=%d div=%d carriles=%d senal=%d\n",
++			 op_pre_div, op_pll_mult, op_sys_div, carriles,
++			 senal_phy);
+ 
+ 	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
+ 	if (ret)

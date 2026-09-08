@@ -1,0 +1,143 @@
+The SM7150's CSIPHY clocks were incomplete and misaligned
+
+WHAT HAPPENS
+------------
+The SM7150's four CSIPHYs asked for clock lists that differed from one another
+and none of them complete:
+
+    CSIPHY0   4 clocks   cphy_rx_src, csiphy0, csiphy0_timer_src, csiphy0_timer
+    CSIPHY1   2 clocks   csiphy1, csiphy1_timer
+    CSIPHY2   2 clocks   csiphy2, csiphy2_timer
+    CSIPHY3   4 clocks   csiphy3, csiphy3_timer_src, csiphy3_timer, cphy_rx_src
+
+The sdm845 -which carries the same 3ph CSIPHY and DOES capture on mainline- asks
+for eight on all four: camnoc_axi, soc_ahb, slow_ahb_src, cpas_ahb, cphy_rx_src,
+csiphyN, csiphyN_timer_src and csiphyN_timer.
+
+So the SM7150 was missing camnoc_axi, slow_ahb_src, cpas_ahb, cphy_rx_src and
+csiphyN_timer_src. (soc_ahb does not exist in the SM7150's camcc; its equivalent
+is cpas_ahb, which is there.)
+
+The VFE and the CSID bring them up as a side effect, so WHILE it transmits they
+are on -checked by reading clk_summary while running-. But the CSIPHY needs them
+ALREADY when it powers itself up and reads its version register, which goes over
+the AHB bus. And in one test that register returned
+
+    CSIPHY 3PH HW Version = 0x00000000
+
+when the normal value is 0x40010000. A register that reads zero is the classic
+symptom of a bus with no clock.
+
+AND ON CSIPHY3, THE RATES WERE MISALIGNED AS WELL
+-------------------------------------------------
+clock_rate is paired by POSITION with clock. On CSIPHY3:
+
+    clock       = { "csiphy3", "csiphy3_timer_src", "csiphy3_timer", "cphy_rx_src" }
+    clock_rate  = { {0},       {300000000},         {0},             {384000000, ...} }
+
+The only rate actually used is the one for "csiphy3_timer" -it is the one that
+matches by name in rate_set, with an exact strcmp- and it had {0}, while the
+384/400 MHz ended up on "cphy_rx_src", which takes no rate at all.
+
+The SM7150 device tree already declares the seven names for the four PHYs, so
+this needs no changes outside the driver.
+--- a/drivers/media/platform/qcom/camss/camss.c	2026-08-16 23:45:31.172384584 +0200
++++ b/drivers/media/platform/qcom/camss/camss.c	2026-08-16 23:46:17.952560709 +0200
+@@ -1710,10 +1710,32 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+-		.clock = { "cphy_rx_src", "csiphy0", "csiphy0_timer_src", "csiphy0_timer" },
++		/*
++		 * Los cuatro CSIPHY pedian listas distintas y ninguna completa:
++		 * el 0 y el 3 cuatro relojes, el 1 y el 2 solo dos. El sdm845
++		 * -que es el CSIPHY hermano y SI captura en mainline- pide los
++		 * mismos siete en los cuatro. Faltaban camnoc_axi,
++		 * slow_ahb_src, cpas_ahb, cphy_rx_src y el csiphyN_timer_src.
++		 *
++		 * Los levantan de rebote el VFE y el CSID, asi que durante la
++		 * transmision estan encendidos, pero el CSIPHY los necesita YA
++		 * cuando se enciende a si mismo y lee su registro de version:
++		 * en una prueba ese registro devolvio 0x00000000 en vez de
++		 * 0x40010000, que es el sintoma exacto de un bus de registros
++		 * sin reloj.
++		 *
++		 * El device tree del SM7150 declara los siete nombres, asi que
++		 * esto no necesita nada mas.
++		 */
++		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
++			   "cphy_rx_src", "csiphy0", "csiphy0_timer_src",
++			   "csiphy0_timer" },
+ 		.clock_rate = { { 0 },
+-				{ 300000000, 384000000, 400000000 },
+-				{ 0 },	
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy0" },
+ 		.interrupt = { "csiphy0" },
+@@ -1729,8 +1751,15 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+-		.clock = { "csiphy1", "csiphy1_timer" },
+-		.clock_rate = { { 300000000, 384000000, 400000000 },
++		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
++			   "cphy_rx_src", "csiphy1", "csiphy1_timer_src",
++			   "csiphy1_timer" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy1" },
+ 		.interrupt = { "csiphy1" },
+@@ -1746,8 +1775,15 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+-		.clock = { "csiphy2", "csiphy2_timer" },
+-		.clock_rate = { { 19200000, 300000000, 384000000, 400000000 },
++		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
++			   "cphy_rx_src", "csiphy2", "csiphy2_timer_src",
++			   "csiphy2_timer" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy2" },
+ 		.interrupt = { "csiphy2" },
+@@ -1763,11 +1799,22 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+-		.clock = { "csiphy3", "csiphy3_timer_src", "csiphy3_timer", "cphy_rx_src" },
++		/*
++		 * Aqui ademas las tasas estaban DESCOLOCADAS respecto a los
++		 * nombres: la unica que se usa es la de "csiphy3_timer" -es la
++		 * que casa por nombre en rate_set- y tenia {0}, mientras los
++		 * 384/400 MHz iban a parar a "cphy_rx_src", que no lleva tasa.
++		 */
++		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
++			   "cphy_rx_src", "csiphy3", "csiphy3_timer_src",
++			   "csiphy3_timer" },
+ 		.clock_rate = { { 0 },
+-				{ 300000000 },
+ 				{ 0 },
+-				{ 384000000, 400000000, 400000000 } },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 300000000 } },
+ 		.reg = { "csiphy3" },
+ 		.interrupt = { "csiphy3" },
+ 		.csiphy = {

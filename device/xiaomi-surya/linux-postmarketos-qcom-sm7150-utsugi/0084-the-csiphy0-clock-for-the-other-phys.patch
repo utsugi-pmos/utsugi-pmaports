@@ -1,0 +1,140 @@
+The CSIPHY0 clock has to be on for the other three PHYs
+
+In the SM7150 vendor device tree (sdmmagpie-camera.dtsi) the node of EVERY
+CSIPHY asks for the CSIPHY0 clock, on top of its own. Verbatim, from the CSIPHY1
+node -not the 0 one-:
+
+    clocks = <&clock_camcc CAM_CC_CPHY_RX_CLK_SRC>,
+        <&clock_camcc CAM_CC_CSIPHY0_CLK>,          <-- this one
+        <&clock_camcc CAM_CC_CSIPHY1_CLK>,
+        <&clock_camcc CAM_CC_CSI1PHYTIMER_CLK_SRC>,
+        <&clock_camcc CAM_CC_CSI1PHYTIMER_CLK>;
+
+Mainline does not ask for it, so when CSIPHY1 is used the clock of the 0 stays
+off. Measured on the phone with clk_summary and the camera streaming:
+
+    camcc_csiphy1_clk   en=1   rate=19200000
+    camcc_csiphy0_clk   en=0   rate=19200000
+
+And there is a second bug in the same table: the four "csiphyN" had their rate
+at { 0 }, that is, no frequency was asked of them and they inherited the one of
+their shared source cphy_rx_clk_src. That is why csiphy1 measured 19,2 MHz, the
+crystal. The vendor runs these clocks at 384 MHz (svs) and 400 MHz (turbo):
+
+    clock-rates = <384000000 0 0 300000000 0>,
+                  <400000000 0 0 300000000 0>,
+                  <400000000 0 0 300000000 0>;
+
+WHAT SYMPTOM IT EXPLAINS
+------------------------
+The PHY with its clock at 19,2 MHz sees the low-power signalling -which is slow
+and rail to rail- but cannot deserialise high speed. Which is exactly what was
+measured throughout the investigation:
+
+    the five lanes leave rest on emit           <- LP, works
+    the PHY interrupts at the frame rate        <- LP, works
+    not a single sync is decoded                <- HS, does not work
+    not a packet reaches the CSID, nor a bad
+      CRC, nor a MISR signature, nor an error
+      bit                                       <- there is nothing to forward
+
+And it explains the dismissals that fitted nothing: sweeping the settle count
+from 12 to 44 gave the PHY state identical byte for byte -and the command DID
+reach the hardware, verified-, and the link rate, the lane count (2, 3 and 4),
+the PHY selector and the polarity did not move a bit either. They all adjust
+WHEN or HOW something is sampled that the PHY never gets to deserialise.
+
+It also explains why the REAR camera, on CSIPHY0 and with a different sensor,
+gave zero as well: its clock was at { 0 } too.
+
+Patch 0081 raised cphy_rx_clk_src to 400 MHz and dragged csiphy1 along with it,
+but by accident and not by request. This makes it explicit and also turns on the
+CSIPHY0 clock, which was still off.
+
+Found by comparing the vendor device tree with the resource table, after
+exhausting the CSID and CSIPHY register spaces.
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -1733,9 +1733,9 @@
+ 		.clock_rate = { { 0 },
+ 				{ 0 },
+ 				{ 0 },
+ 				{ 0 },
+-				{ 0 },
++				{ 384000000, 400000000 },
+ 				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy0" },
+ 		.interrupt = { "csiphy0" },
+@@ -1751,15 +1751,16 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+ 		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
+-			   "cphy_rx_src", "csiphy1", "csiphy1_timer_src",
+-			   "csiphy1_timer" },
+-		.clock_rate = { { 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
++			   "cphy_rx_src", "csiphy0", "csiphy1",
++			   "csiphy1_timer_src", "csiphy1_timer" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 384000000, 400000000 },
+ 				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy1" },
+ 		.interrupt = { "csiphy1" },
+@@ -1775,15 +1776,16 @@
+ 			{ .supply = "vdda-phy", .init_load_uA = 0 },
+ 			{ .supply = "vdda-pll", .init_load_uA = 0 }
+ 		},
+ 		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
+-			   "cphy_rx_src", "csiphy2", "csiphy2_timer_src",
+-			   "csiphy2_timer" },
+-		.clock_rate = { { 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
++			   "cphy_rx_src", "csiphy0", "csiphy2",
++			   "csiphy2_timer_src", "csiphy2_timer" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 384000000, 400000000 },
+ 				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy2" },
+ 		.interrupt = { "csiphy2" },
+@@ -1805,15 +1807,16 @@
+ 		 * que casa por nombre en rate_set- y tenia {0}, mientras los
+ 		 * 384/400 MHz iban a parar a "cphy_rx_src", que no lleva tasa.
+ 		 */
+ 		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
+-			   "cphy_rx_src", "csiphy3", "csiphy3_timer_src",
+-			   "csiphy3_timer" },
+-		.clock_rate = { { 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
+-				{ 0 },
++			   "cphy_rx_src", "csiphy0", "csiphy3",
++			   "csiphy3_timer_src", "csiphy3_timer" },
++		.clock_rate = { { 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 0 },
++				{ 384000000, 400000000 },
+ 				{ 0 },
+ 				{ 300000000 } },
+ 		.reg = { "csiphy3" },
+ 		.interrupt = { "csiphy3" },

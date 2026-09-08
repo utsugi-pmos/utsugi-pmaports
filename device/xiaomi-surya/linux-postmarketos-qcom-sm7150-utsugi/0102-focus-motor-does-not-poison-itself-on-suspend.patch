@@ -1,0 +1,144 @@
+The focus motor no longer poisons itself when suspending
+
+THE SYMPTOM
+-----------
+With patch 0101 applied, the driver binds, the node appears and the entity is in
+the graph:
+
+    /dev/v4l-subdev17 -> dw9807 12-000c
+    - entity 173: dw9807 12-000c (0 pad, 0 link)
+
+But the node CANNOT BE OPENED, not even with the sensor streaming:
+
+    Failed to open /dev/v4l-subdev17: Invalid argument
+    open('/dev/v4l-subdev17') -> errno 22
+
+And nothing appears in dmesg when trying. There is only one line, from boot:
+
+    [   12.486398] dw9807 12-000c: I2C write CTL fail ret = -110
+
+That silence is the important clue. If the problem were the bus, the failure
+would be -110 (timeout) or -6, and CCI would leave its "master 0 queue 0
+timeout". A mute 22 is not an i2c failure: it is the subsystem refusing before
+reaching the chip.
+
+THE CAUSE
+---------
+The whole chain fits in four lines of kernel.
+
+`dw9807_open()` does nothing but wake the chip up:
+
+    static int dw9807_open(struct v4l2_subdev *sd, struct v4l2_subdev_fh *fh)
+    {
+    	return pm_runtime_resume_and_get(sd->dev);
+    }
+
+`rpm_resume()` starts by rejecting any device whose power state is broken, and
+that is the 22:
+
+    if (dev->power.runtime_error) { retval = -EINVAL; goto out; }
+
+And `rpm_callback()` stores in `runtime_error` whatever the power function
+returns, be it for sleeping or for waking:
+
+    retval = __rpm_callback(cb, dev);
+    dev->power.runtime_error = retval;
+
+So all that is missing is whoever breaks it. It is `dw9807_vcm_suspend()`, which
+powers the chip down over i2c and returns the error if it cannot:
+
+    ret = i2c_master_send(client, tx_data, sizeof(tx_data));
+    if (ret < 0) {
+    	dev_err(&client->dev, "I2C write CTL fail ret = %d\n", ret);
+    	return ret;
+    }
+
+On this board that power-down ALWAYS fails when it comes on its own, because the
+sensor's CCI bus only lives while the sensor is streaming -a restriction already
+documented in patch 0101-. The driver suspends a few seconds after boot, the
+write gives -110, and from that instant on the state stays at `error` and every
+open returns 22. Forever, even if the bus works perfectly afterwards.
+
+It is permanent poisoning caused by a transient failure, and on top of that from
+the least important operation the driver performs.
+
+THE FIX
+-------
+Do not propagate the failure out of the power functions. It is still logged, but
+success is returned, which is the only thing that keeps `runtime_error` from
+getting stuck.
+
+It is the right thing in both directions:
+
+  - When SLEEPING, not being able to power the chip down is not a failure that
+    needs reporting upwards. The rail stays on anyway (`regulator-always-on` in
+    0101), the actuator's idle consumption is negligible, and there is nothing to
+    retry.
+
+  - When WAKING, likewise: the one that wants to move the lens is the
+    `focus_absolute` write, and that one DOES return its error to whoever made
+    it. So an attempt to focus with the camera stopped still gives EIO, visible
+    and in the right place. What is avoided is that failure killing the whole
+    node for all future uses.
+
+In short: the error stops being fatal and goes back to being what it was, a
+warning.
+
+HOW IT WAS CHECKED
+------------------
+By hand, before touching the driver, the state was cleared by rebinding it
+through sysfs with the sensor streaming:
+
+    power state BEFORE:  error
+    (unbind + bind with a capture running)
+    power state AFTER:   suspended
+
+And the node then opened first time, with its control:
+
+    focus_absolute 0x009a090a (int) : min=0 max=1023 step=1 default=0
+
+With positions going in and the chip's high register following them:
+
+    requested 300 -> v4l2 says 300, the chip says 0x01 ...
+    requested 600 -> v4l2 says 600, the chip says 0x02 ...
+    requested 900 -> v4l2 says 900, the chip says 0x03 ...
+
+This patch makes that manual rebind unnecessary on every boot.
+
+--- a/drivers/media/i2c/dw9807-vcm.c
++++ b/drivers/media/i2c/dw9807-vcm.c
+@@ -249,11 +249,17 @@
+ 
+ 	/* Power down */
+ 	ret = i2c_master_send(client, tx_data, sizeof(tx_data));
+-	if (ret < 0) {
++	if (ret < 0)
+ 		dev_err(&client->dev, "I2C write CTL fail ret = %d\n", ret);
+-		return ret;
+-	}
+ 
++	/*
++	 * No se propaga el fallo. En placas donde el bus del actuador solo vive
++	 * mientras el sensor transmite, este apagado falla siempre que llega
++	 * solo, y rpm_callback() guardaria el error en dev->power.runtime_error;
++	 * a partir de ahi rpm_resume() devuelve -EINVAL y el nodo no se puede
++	 * abrir nunca mas. No poder apagar el chip no merece eso: quien de
++	 * verdad necesita el bus es la escritura de posicion, y esa si informa.
++	 */
+ 	return 0;
+ }
+ 
+@@ -273,10 +279,10 @@
+ 
+ 	/* Power on */
+ 	ret = i2c_master_send(client, tx_data, sizeof(tx_data));
+-	if (ret < 0) {
++	if (ret < 0)
+ 		dev_err(&client->dev, "I2C write CTL fail ret = %d\n", ret);
+-		return ret;
+-	}
++
++	/* Mismo motivo que en la suspension: no envenenar el estado de energia. */
+ 
+ 	for (val = dw9807_dev->current_val % DW9807_CTRL_STEPS;
+ 	     val < dw9807_dev->current_val + DW9807_CTRL_STEPS - 1;

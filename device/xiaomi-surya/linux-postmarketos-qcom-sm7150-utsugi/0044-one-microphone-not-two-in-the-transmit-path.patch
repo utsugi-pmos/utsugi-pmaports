@@ -1,0 +1,250 @@
+One microphone, not two, in the voice transmit path
+
+## What was measured today
+
+Recording 3 seconds of the transmit port `TX_CODEC_DMA_TX_3`, channel by
+channel:
+
+    channel 0:  max=32768  rms=1457    <- the microphone
+    channel 1:  max=0      rms=0       <- EXACT digital silence
+
+The port carries 2 channels because `sm8250_be_hw_params_fixup()` forces every
+backend to 2, but only channel 0 has signal. The device has ONE microphone on
+the voice path.
+
+And the DSP was being told about **two microphones**.
+
+## The two things that were being confused
+
+`q6cvp` sends two different parameters, and 0031 gave them the same value:
+
+  - `VSS_PARAM_TX_PORT_ENDPOINT_MEDIA_INFO` describes **the AFE port**. There 2
+    channels is correct: the port carries 2.
+  - `VSS_PARAM_VOCPROC_TX_CHANNEL_INFO` describes **how many microphones the
+    vocproc has to process**. There 2 is false: there is one.
+
+And the topology we use, `VSS_IVOCPROC_TOPOLOGY_ID_TX_SM_ECNS`, is literally
+*Single Mic ECNS*: **one** microphone. Declaring two to it, with the second in
+absolute silence, is exactly the kind of thing that can leave the transmit path
+mute: a two-microphone noise suppressor handed a dead second microphone has
+every chance of cancelling the whole voice.
+
+It fits the complete symptom: reception is heard, transmission is not; the
+microphone reaches the port; and the DSP gives not a single error.
+
+## Why this deserves a try even though it looks already ruled out
+
+0031 raised the transmit path from 1 to 2 channels. The **later 0036**
+discovered that until that moment the format was being sent to the DSP with
+`sample_rate = 0`, because of writing into the wrong member of a union.
+
+That is: **the single-channel configuration has never been tried with a valid
+format.** The experiment that ruled it out was not valid. This is not going
+back over old ground, it is trying it for the first time.
+
+## What this patch does
+
+1. It separates the two concepts and leaves the three of them adjustable on the
+   fly, so several configurations can be swept in ONE single call:
+
+       /sys/module/q6cvp/parameters/tx_dev_channels   vocproc microphones     [1]
+       /sys/module/q6cvp/parameters/tx_ep_channels    AFE port channels       [2]
+       /sys/module/q6cvp/parameters/tx_rate           port sample rate        [48000]
+
+   The default becomes **1 microphone, 2-channel port**, which is the
+   combination consistent with the hardware.
+
+2. It traces in `dmesg` what is sent to the DSP in each direction, so as not to
+   depend on deducing it again.
+
+3. **It fixes three uninitialised structures** that were being sent to the DSP
+   with stack garbage:
+
+     - `vss_ivocproc_cmd_create_full_control_session_v2_cmd.name[20]`: 20 bytes
+       of garbage in the field that identifies the session for passive
+       controllers, which is what the modem is.
+     - `vss_icommon_cmd_set_param_v2_cmd.mem_address`: 64 bits of garbage in an
+       address field, in the four SET_PARAM of the session.
+     - the mute command.
+
+   None of them gave an error, which is precisely what made them invisible.
+
+## How to test it
+
+With the `voz-puertos` trigger it can be checked without spending a call that
+the DSP still accepts the session and that the trace says `channel info TX: 1
+canales`. To know whether it is heard a call is needed, and in that same call
+the three combinations can be swept by recreating the session on the fly (see
+`prueba-canales-tx`).
+
+--- a/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 16:32:42.176789482 +0200
++++ b/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 16:34:21.413004463 +0200
+@@ -2,8 +2,10 @@
+ // Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
+ // Copyright (c) 2020, Stephan Gerhold
+ 
++#include <linux/device.h>
+ #include <linux/module.h>
+ #include <linux/of.h>
++#include <linux/string.h>
+ #include <linux/soc/qcom/apr.h>
+ #include "q6cvp.h"
+ #include "q6dsp-common.h"
+@@ -45,6 +47,44 @@
+ module_param(ec_ref_port, uint, 0644);
+ MODULE_PARM_DESC(ec_ref_port, "puerto AFE de referencia de eco (0xFFFF = ninguno)");
+ 
++/*
++ * Canales de la TRANSMISION, tambien ajustables en caliente. Son DOS cosas
++ * distintas y hasta ahora se las trataba como una sola:
++ *
++ *   tx_ep_channels  - cuantos canales trae el PUERTO del AFE.
++ *                     TX_CODEC_DMA_TX_3 trae 2, porque
++ *                     sm8250_be_hw_params_fixup() fuerza todos los backends a
++ *                     2. Medido: el canal 0 lleva el microfono y el canal 1 es
++ *                     silencio digital exacto (max=0 en una grabacion de 3 s).
++ *
++ *   tx_dev_channels - cuantos MICROFONOS tiene que procesar el vocproc.
++ *                     El aparato tiene uno solo en el camino de voz, y la
++ *                     topologia que usamos, TX_SM_ECNS, es literalmente
++ *                     "Single Mic ECNS": UN microfono.
++ *
++ * Declarar 2 microfonos a una cadena de un microfono, con el segundo en
++ * silencio absoluto, es justo lo que puede dejar la transmision muda: un
++ * supresor de ruido de dos microfonos al que se le da un segundo microfono
++ * muerto tiene todas las papeletas para cancelar la voz entera.
++ *
++ * OJO CON LA HISTORIA, que es lo que hace que esto merezca probarse: el 0031
++ * subio la transmision de 1 a 2 canales, pero el 0036 -POSTERIOR- descubrio
++ * que hasta entonces el formato se enviaba con sample_rate = 0. O sea que la
++ * configuracion de 1 canal NUNCA se ha probado con un formato valido: el
++ * experimento que la descarto no era valido.
++ */
++static unsigned int tx_ep_channels = 2;
++module_param(tx_ep_channels, uint, 0644);
++MODULE_PARM_DESC(tx_ep_channels, "canales del puerto AFE de transmision (1-8)");
++
++static unsigned int tx_dev_channels = 1;
++module_param(tx_dev_channels, uint, 0644);
++MODULE_PARM_DESC(tx_dev_channels, "microfonos que procesa el vocproc (1-8)");
++
++static unsigned int tx_rate = 48000;
++module_param(tx_rate, uint, 0644);
++MODULE_PARM_DESC(tx_rate, "frecuencia de muestreo del puerto de transmision");
++
+ #define VSS_IVOLUME_CMD_MUTE_V2				0x0001138B
+ #define VSS_IVOLUME_DIRECTION_RX			0
+ #define VSS_IVOLUME_DIRECTION_TX			1
+@@ -200,6 +240,9 @@
+ {
+ 	struct vss_ivocproc_cmd_create_full_control_session_v2_cmd cmd;
+ 
++	/* Sin esto, name[20] va con 20 bytes de basura de la pila. */
++	memset(&cmd, 0, sizeof(cmd));
++
+ 	cmd.hdr.pkt_size = sizeof(cmd);
+ 	cmd.hdr.opcode = VSS_IVOCPROC_CMD_CREATE_FULL_CONTROL_SESSION_V2;
+ 
+@@ -227,6 +270,9 @@
+ 	 */
+ 	struct vss_ivocproc_cmd_create_full_control_session_v2_cmd cmd;
+ 
++	/* Sin esto, name[20] va con 20 bytes de basura de la pila. */
++	memset(&cmd, 0, sizeof(cmd));
++
+ 	cmd.hdr.pkt_size = sizeof(cmd);
+ 	cmd.hdr.opcode = VSS_IVOCPROC_CMD_CREATE_FULL_CONTROL_SESSION_V3;
+ 
+@@ -248,6 +294,9 @@
+ {
+ 	struct vss_icommon_cmd_set_param_v2_cmd cmd;
+ 
++	/* mem_address (64 bits) nunca se rellenaba: iba basura de la pila. */
++	memset(&cmd, 0, sizeof(cmd));
++
+ 	cmd.hdr.pkt_size = offsetof(struct vss_icommon_cmd_set_param_v2_cmd, param_data.channel_info)
+ 			 + sizeof(struct vss_param_vocproc_dev_channel_info);
+ 	cmd.hdr.opcode = VSS_ICOMMON_CMD_SET_PARAM_V2;
+@@ -262,16 +311,22 @@
+ 	cmd.param_data.param_size = sizeof(struct vss_param_vocproc_dev_channel_info);
+ 	cmd.param_data.reserved = 0;
+ 
+-	/* Mismo motivo que en q6cvp_send_media_format: en esta placa los dos
+-	 * sentidos llevan 2 canales, porque sm8250_be_hw_params_fixup() fuerza
+-	 * todos los backends a 2. */
+-	cmd.param_data.channel_info.num_channels = 2;
++	/*
++	 * Esto NO es "cuantos canales trae el puerto": es cuantos microfonos
++	 * (o altavoces) tiene que procesar el vocproc. En transmision es
++	 * ajustable, ver el comentario de tx_dev_channels arriba.
++	 */
++	cmd.param_data.channel_info.num_channels = is_tx ? tx_dev_channels : 2;
+ 
+ 	cmd.param_data.channel_info.bits_per_sample = 16;
+ 
+ 	q6dsp_map_channels(cmd.param_data.channel_info.channel_mapping,
+ 			   cmd.param_data.channel_info.num_channels);
+ 
++	dev_info(cvp->dev, "channel info %s: %u canales\n",
++		 is_tx ? "TX" : "RX",
++		 cmd.param_data.channel_info.num_channels);
++
+ 	return q6voice_common_send(cvp, &cmd.hdr);
+ }
+ EXPORT_SYMBOL_GPL(q6cvp_send_channel_info);
+@@ -280,6 +335,9 @@
+ {
+ 	struct vss_icommon_cmd_set_param_v2_cmd cmd;
+ 
++	/* mem_address (64 bits) nunca se rellenaba: iba basura de la pila. */
++	memset(&cmd, 0, sizeof(cmd));
++
+ 	cmd.hdr.pkt_size = offsetof(struct vss_icommon_cmd_set_param_v2_cmd, param_data.media_format_info)
+ 			 + sizeof(struct vss_param_endpoint_media_format_info);
+ 	cmd.hdr.opcode = VSS_ICOMMON_CMD_SET_PARAM_V2;
+@@ -297,26 +355,23 @@
+ 	cmd.param_data.media_format_info.port_id = port_id;
+ 
+ 	/*
+-	 * Los DOS sentidos van a 2 canales, no solo el de recepcion.
+-	 *
+-	 * El driver original declaraba 1 canal en transmision, que es lo que
+-	 * le corresponde en la placa del Pixel 3a. Aqui no: sm8250.c fuerza
+-	 * TODOS los backends a 2 canales en sm8250_be_hw_params_fixup(), asi
+-	 * que el puerto TX_CODEC_DMA_TX_3 lleva 2 y declararle 1 al DSP le
+-	 * hace leer la trama con el reparto equivocado.
+-	 *
+-	 * Encaja con lo medido en llamadas reales: la recepcion, que ya
+-	 * declaraba 2 y coincidia, SI se oye; la transmision, que declaraba 1
+-	 * y no coincidia, no llega al otro extremo.
++	 * Esto SI describe el puerto del AFE tal cual es: 2 canales, porque
++	 * sm8250_be_hw_params_fixup() fuerza todos los backends a 2. Se deja
++	 * ajustable solo para poder barrerlo en la misma llamada.
+ 	 */
+-	cmd.param_data.media_format_info.num_channels = 2;
++	cmd.param_data.media_format_info.num_channels = is_tx ? tx_ep_channels : 2;
+ 
+ 	cmd.param_data.media_format_info.bits_per_sample = 16;
+-	cmd.param_data.media_format_info.sample_rate = 48000;
++	cmd.param_data.media_format_info.sample_rate = is_tx ? tx_rate : 48000;
+ 
+ 	q6dsp_map_channels(cmd.param_data.media_format_info.channel_mapping,
+ 			   cmd.param_data.media_format_info.num_channels);
+ 
++	dev_info(cvp->dev, "media format %s: puerto %#x, %u canales, %u Hz\n",
++		 is_tx ? "TX" : "RX", port_id,
++		 cmd.param_data.media_format_info.num_channels,
++		 cmd.param_data.media_format_info.sample_rate);
++
+ 	return q6voice_common_send(cvp, &cmd.hdr);
+ }
+ EXPORT_SYMBOL_GPL(q6cvp_send_media_format);
+@@ -332,6 +387,8 @@
+ {
+ 	struct vss_ivolume_cmd_mute_v2_cmd cmd;
+ 
++	memset(&cmd, 0, sizeof(cmd));
++
+ 	cmd.hdr.pkt_size = sizeof(cmd);
+ 	cmd.hdr.opcode = VSS_IVOLUME_CMD_MUTE_V2;
+ 

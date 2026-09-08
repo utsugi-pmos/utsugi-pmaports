@@ -1,0 +1,59 @@
+Turn on the spare 2.8 V rail, to see whether the focus motor lives there
+
+The phone's own factory file says the rear camera carries a focus actuator, a
+Dongwoon `ofilm_dw9800`. But scanning the CCI bus with the camera powered and a
+capture running, only two chips answer:
+
+    0x1a   the sensor, identifier 0x0682 confirmed
+    0x50   the EEPROM
+
+The motor does not respond at any of the typical Dongwoon addresses
+-0x0c, 0x0e, 0x0f, 0x18, 0x1c, 0x1e, 0x24, 0x28, 0x36, 0x51, 0x54-. An unpowered
+chip does not answer, so the first thing to do is rule that out.
+
+WHICH RAILS THERE ARE, AND WHICH ONE WAS LEFT
+
+The device tree declares four camera regulators that NOBODY uses, all at 2.8 V,
+which is the typical voltage for an actuator. And looking at their state on the
+phone:
+
+    cam_avdd1        2.8 V   already ON
+    cam_avdd2        2.8 V   already ON
+    uw_ldo_ois_drv   2.8 V   off          <- the only one missing
+    wide_ldo_avdd2   2.8 V   off, but that one is used by the sensor
+
+So the camera PMIC rails are already live and the motor is still silent. The only
+candidate left is `uw_ldo_ois_drv`, on TLMM GPIO 65.
+
+It is turned on with `regulator-always-on` because its GPIO is owned by the
+kernel and there is no way to drive it from user space.
+
+THIS IS AN EXPERIMENT, NOT THE SOLUTION. If a new chip appears on the bus with
+the rail on, that rail will become the declared supply of the actuator node and
+this goes away. If nothing appears, it also goes away, and the motor will have to
+be looked for on another bus.
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -31,6 +31,22 @@
+ 		regulator-name = "uw_ldo_ois_drv";
+ 		regulator-min-microvolt = <2800000>;
+ 		regulator-max-microvolt = <2800000>;
++		/*
++		 * ENCENDIDO PARA BUSCAR EL MOTOR DE ENFOQUE.
++		 *
++		 * El fichero de fabrica dice que la trasera lleva un actuador
++		 * -ofilm_dw9800- pero escaneando el bus CCI con la camara
++		 * alimentada solo contestan el sensor (0x1a) y la EEPROM (0x50).
++		 * Un chip sin alimentar no contesta, y este es el unico riel de
++		 * 2,8 V de camara que quedaba apagado: cam_avdd1 y cam_avdd2 ya
++		 * salen encendidos de fabrica.
++		 *
++		 * Se enciende siempre porque su GPIO lo posee el kernel y no hay
++		 * forma de moverlo desde el espacio de usuario. Es temporal: si
++		 * el motor aparece, pasara a ser la alimentacion declarada del
++		 * nodo del actuador; si no aparece, esto se quita.
++		 */
++		regulator-always-on;
+ 
+ 		gpio = <&tlmm 65 GPIO_ACTIVE_HIGH>;
+ 		startup-delay-us = <100>;

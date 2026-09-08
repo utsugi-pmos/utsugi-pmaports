@@ -1,0 +1,88 @@
+DIAGNOSTIC: dump the CSID register space on stop
+
+WHY
+---
+At this point going register by register is a waste of time: EVERYTHING the
+vendor writes has been verified one by one -CSIPHY lane table 115 of 115, common
+block, reset sequence, interrupt masks, CSID configuration read back bit by bit,
+sensor tables 244 of 244 and 66 of 66- and it matches.
+
+What is missing is what is NOT written and is not known to exist.
+
+So the whole CSID space (0x000 to 0x400) is dumped when the stream is stopped.
+What matters most are the registers that mainline never reads and that
+Qualcomm's maps declare:
+
+    0x350   csid_rdi_status          state of the RDI path
+    0x354   csid_rdi_misr_val0       signature of the received data
+    0x358   csid_rdi_misr_val1       (they would be non-zero if a SINGLE piece
+    0x35c   csid_rdi_misr_val2        of data had gone through the RDI)
+    0x360   csid_rdi_misr_val3
+    0x160   total packets received
+    0x168   total CRC errors
+
+The MISR is especially useful: mainline ENABLES it in CSI2_RX_CFG1 (bit 6) and
+then never reads it. It is an accumulated signature of what goes through the
+path; if it comes out non-zero, something has gone through even if the counters
+say it has not.
+
+It goes behind a parameter because it is 128 reads and 32 lines of register.
+
+This does NOT fix anything: it is to look at everything at once instead of
+guessing which register to read.
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 14:24:31.197685972 +0200
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 14:24:31.216609922 +0200
+@@ -74,6 +74,11 @@
+ MODULE_PARM_DESC(diag_reaplicar,
+ 	"Escribir 1 para reaplicar la configuracion del receptor con el sensor ya transmitiendo.");
+ 
++static int volcado_csid;
++module_param(volcado_csid, int, 0644);
++MODULE_PARM_DESC(volcado_csid,
++	"1 = volcar el espacio de registros del CSID al parar la transmision.");
++
+ static unsigned int diag_pkts;
+ module_param(diag_pkts, uint, 0644);
+ MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
+@@ -508,6 +513,41 @@
+ 				 * receptor estaria escuchando a otro sitio y
+ 				 * todo lo demas seria coherente con lo medido.
+ 				 */
++				/*
++				 * VOLCADO COMPLETO.
++				 *
++				 * A estas alturas ir registro a registro es
++				 * perder el tiempo: se ha comprobado uno por
++				 * uno todo lo que el fabricante escribe y
++				 * coincide. Lo que falta es lo que NO se
++				 * escribe y no se sabe que existe.
++				 *
++				 * Asi que se vuelca el espacio entero del CSID
++				 * al parar. Interesan sobre todo los que
++				 * mainline no lee nunca: el estado del RDI en
++				 * 0x350, sus firmas de datos MISR en
++				 * 0x354..0x360 -que serian distintas de cero
++				 * si hubiera pasado UN solo dato- y las marcas
++				 * de tiempo de los sincronismos.
++				 */
++				if (volcado_csid) {
++					int a;
++
++					for (a = 0; a < 0x400; a += 32) {
++						dev_info(csid->camss->dev,
++							 "csid%d %03x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
++							 csid->id, a,
++							 readl_relaxed(csid->base + a + 0x00),
++							 readl_relaxed(csid->base + a + 0x04),
++							 readl_relaxed(csid->base + a + 0x08),
++							 readl_relaxed(csid->base + a + 0x0c),
++							 readl_relaxed(csid->base + a + 0x10),
++							 readl_relaxed(csid->base + a + 0x14),
++							 readl_relaxed(csid->base + a + 0x18),
++							 readl_relaxed(csid->base + a + 0x1c));
++					}
++				}
++
+ 				dev_info(csid->camss->dev,
+ 					 "csid%d config: rx_cfg0=0x%08x rx_cfg1=0x%08x rdi_cfg0=0x%08x rdi_ctrl=0x%08x\n",
+ 					 csid->id,

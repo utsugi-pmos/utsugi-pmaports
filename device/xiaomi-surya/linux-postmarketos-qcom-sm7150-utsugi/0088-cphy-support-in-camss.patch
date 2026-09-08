@@ -1,0 +1,306 @@
+C-PHY support in CAMSS: the surya's rear camera speaks in three phases
+
+The surya's rear camera does not deliver a single packet to the CSID, and the
+reason is not a badly set option but that transmitter and receiver speak
+different languages: the IMX682 is wired in three-lane C-PHY and CAMSS only
+knows D-PHY.
+
+THE PROOF, by two independent paths and from the phone itself
+
+    laneAssign      IMX682 = 0x0210 (3)     the other cameras = 0x3210 (4)
+    all FIVE vendor mode tables write 0x0114 = 0x02
+
+On a Sony, three lanes is a C-PHY trio.
+
+And it fits EVERYTHING measured on the rear camera, each thing with its control:
+
+    the sensor emits        0x0100 = 0x01, and twelve registers out of twelve
+                            match the vendor file
+    the PHY hears           from 0 to 13.683 interrupts/s
+    the CSID receives none  packets=0, with the front camera marking 2805 in
+                            the same session as a positive control
+
+    link rate               8 values from 217 to 870 MHz DDR: nothing
+    lanes                   2 and 3: nothing
+    settle count            from 20 to 48, covers the standard's window: nothing
+    clocks                  the four of csiphy0 at the vendor rates
+    supplies                avdd and dvdd rise when transmitting
+
+If the receiver listens in the wrong language, no receiver setting can fix it.
+That is why nothing moved a bit.
+
+WHAT WAS NEEDED
+
+  1. camss.c rejected the link at the earliest possible place:
+         if (vep.bus_type != V4L2_MBUS_CSI2_DPHY)
+                 dev_err(dev, "Unsupported bus type %d\n", ...)
+     It now also accepts V4L2_MBUS_CSI2_CPHY and propagates it.
+
+  2. The CSID defines CSI2_RX_CFG0_PHY_TYPE_SEL (bit 24) and NEVER wrote it.
+     Measured before the patch: rx_cfg0 = 0x00002102, bit 24 zero.
+
+  3. The CSIPHY needs its three-phase table, which is ANOTHER one: it touches an
+     area at 0x900 / 0xA00 / 0xB00 that the D-PHY branch does not use, and sets
+     the common mode 0x0800 = 0x0E instead of 0x02. Copied from the phone's own
+     Android kernel (csiphy_3ph_v1_2_reg), 3 trios x 30 writes.
+
+  4. In C-PHY the settle count goes in TWO registers -0x010C low and 0x0108
+     high- whereas in D-PHY it is one. csiphy_gen2_config_lanes did not handle
+     CSIPHY_SETTLE_CNT_HIGHER_BYTE and took a u8, which is not enough for two
+     bytes.
+
+  5. The device tree declares bus-type = <MEDIA_BUS_TYPE_CSI2_CPHY> at both ends
+     of the rear camera's link.
+
+The table choice is made per LINK and not per SoC, because the same CSIPHY can
+serve a D-PHY sensor or a C-PHY one depending on which one it is connected to.
+The front camera carries on down the D-PHY branch without noticing.
+--- a/drivers/media/platform/qcom/camss/camss.h
++++ b/drivers/media/platform/qcom/camss/camss.h
+@@ -137,6 +137,8 @@
+ 
+ struct camss_camera_interface {
+ 	u8 csiphy_id;
++	/* enlace de tres fases (C-PHY) en vez de D-PHY */
++	u8 cphy;
+ 	struct csiphy_csi2_cfg csi2;
+ };
+ 
+--- a/drivers/media/platform/qcom/camss/camss.c
++++ b/drivers/media/platform/qcom/camss/camss.c
+@@ -4769,15 +4769,18 @@
+ 		return ret;
+ 
+ 	/*
+-	 * Most SoCs support both D-PHY and C-PHY standards, but currently only
+-	 * D-PHY is supported in the driver.
++	 * C-PHY tambien vale. La camara trasera del surya es de tres
++	 * carriles, o sea un trio C-PHY, y se rechazaba aqui mismo antes de
++	 * llegar a ninguna parte.
+ 	 */
+-	if (vep.bus_type != V4L2_MBUS_CSI2_DPHY) {
++	if (vep.bus_type != V4L2_MBUS_CSI2_DPHY &&
++	    vep.bus_type != V4L2_MBUS_CSI2_CPHY) {
+ 		dev_err(dev, "Unsupported bus type %d\n", vep.bus_type);
+ 		return -EINVAL;
+ 	}
+ 
+ 	csd->interface.csiphy_id = vep.base.port;
++	csd->interface.cphy = (vep.bus_type == V4L2_MBUS_CSI2_CPHY);
+ 
+ 	mipi_csi2 = &vep.bus.mipi_csi2;
+ 	lncfg->clk.pos = mipi_csi2->clock_lane;
+@@ -5134,6 +5137,7 @@
+ 	struct csiphy_device *csiphy = &camss->csiphy[id];
+ 
+ 	csiphy->cfg.csi2 = &csd->interface.csi2;
++	csiphy->cfg.cphy = csd->interface.cphy;
+ 	subdev->host_priv = csiphy;
+ 
+ 	return 0;
+--- a/drivers/media/platform/qcom/camss/camss-csiphy.h
++++ b/drivers/media/platform/qcom/camss/camss-csiphy.h
+@@ -44,6 +44,7 @@
+ 
+ struct csiphy_config {
+ 	u8 combo_mode;
++	u8 cphy;
+ 	u8 csid_id;
+ 	struct csiphy_csi2_cfg *csi2;
+ };
+--- a/drivers/media/platform/qcom/camss/camss-csid.h
++++ b/drivers/media/platform/qcom/camss/camss-csid.h
+@@ -66,6 +66,7 @@
+ 
+ struct csid_phy_config {
+ 	u8 csiphy_id;
++	u8 cphy;
+ 	u8 lane_cnt;
+ 	u32 lane_assign;
+ 	u32 en_vc;
+--- a/drivers/media/platform/qcom/camss/camss-csid.c
++++ b/drivers/media/platform/qcom/camss/camss-csid.c
+@@ -1341,6 +1341,7 @@
+ 			return -EPERM;
+ 
+ 		csid->phy.csiphy_id = csiphy->id;
++		csid->phy.cphy = csiphy->cfg.cphy;
+ 
+ 		lane_cfg = &csiphy->cfg.csi2->lane_cfg;
+ 		csid->phy.lane_cnt = lane_cfg->num_data;
+--- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c
++++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c
+@@ -292,6 +292,13 @@
+ 	 */
+ 	val |= (diag_phy_sel >= 0 ? (u32)diag_phy_sel : phy->csiphy_id)
+ 		<< CSI2_RX_CFG0_PHY_NUM_SEL;
++	/*
++	 * PHY_TYPE_SEL: 0 = D-PHY, 1 = C-PHY. Mainline define este bit y no
++	 * lo escribe NUNCA, asi que el receptor siempre esperaba D-PHY. Medido
++	 * en la trasera antes de esto: rx_cfg0 = 0x00002102, bit 24 a cero
++	 * mientras el sensor emitia en C-PHY.
++	 */
++	val |= (u32)phy->cphy << CSI2_RX_CFG0_PHY_TYPE_SEL;
+ 	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
+ 
+ 	val = 1 << CSI2_RX_CFG1_PACKET_ECC_CORRECTION_EN;
+--- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
++++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
+@@ -296,6 +296,109 @@
+ };
+ 
+ /* GEN2 1.2 2PH */
++/*
++ * 5nm 3PH v1.2 en C-PHY: tres trios de treinta escrituras. Copiada del
++ * kernel de Android del propio movil (csiphy_3ph_v1_2_reg), guardado en
++ * refs-stock/csiphy/cam_csiphy_1_2_hwreg.h.
++ *
++ * Dos diferencias con la rama D-PHY que importan:
++ *   - toca una zona propia en 0x900 / 0xA00 / 0xB00 que la otra no usa,
++ *   - el asentamiento va en DOS registros, byte bajo y byte alto.
++ */
++static const struct
++csiphy_lane_regs lane_regs_sm7150_cphy[] = {
++	{0x015C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0990, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0994, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0998, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x098C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0168, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x016C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0104, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x010C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x0108, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
++	{0x0114, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0150, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0188, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x018C, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0190, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0118, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x011C, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0120, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0124, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0128, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x012C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0144, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0160, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x01CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0164, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x01DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0984, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x09B0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x09B4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x035C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0A90, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0A94, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0A98, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0A8C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0368, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x036C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0304, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x030C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x0308, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
++	{0x0314, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0350, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0388, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x038C, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0390, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0318, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x031C, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0320, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0324, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0328, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x032C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0344, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0360, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x03CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0364, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x03DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0A84, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0AB0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0AB4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x055C, 0x46, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0B90, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0B94, 0x08, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0B98, 0x1A, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0B8C, 0xAF, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0568, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x056C, 0x25, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0504, 0x06, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x050C, 0x07, 0x00, CSIPHY_SETTLE_CNT_LOWER_BYTE},
++	{0x0508, 0x00, 0x00, CSIPHY_SETTLE_CNT_HIGHER_BYTE},
++	{0x0514, 0x20, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0550, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0588, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x058C, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0590, 0x7f, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0518, 0x3e, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x051C, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0520, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0524, 0x7F, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0528, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x052C, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0544, 0x22, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0560, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x05CC, 0x41, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0564, 0x33, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x05DC, 0x50, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0B84, 0xA0, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0BB0, 0x01, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0BB4, 0x02, 0x00, CSIPHY_DEFAULT_PARAMS},
++	{0x0800, 0x0E, 0x00, CSIPHY_DEFAULT_PARAMS},
++};
++
+ static const struct
+ csiphy_lane_regs lane_regs_sm7150[] = {
+ 	{0x0030, 0x00, 0x00, CSIPHY_DEFAULT_PARAMS},
+@@ -1252,16 +1355,28 @@
+ }
+ 
+ static void csiphy_gen2_config_lanes(struct csiphy_device *csiphy,
+-				     u8 settle_cnt)
++				     u16 settle_cnt)
+ {
+ 	const struct csiphy_lane_regs *r = csiphy->regs->lane_regs;
+ 	int i, array_size = csiphy->regs->lane_array_size;
++	/*
++	 * La eleccion es por ENLACE y no por SoC: el mismo CSIPHY puede
++	 * atender un sensor D-PHY o uno C-PHY segun a cual este conectado.
++	 */
++	if (csiphy->cfg.cphy && csiphy->camss->res->version == CAMSS_7150) {
++		r = &lane_regs_sm7150_cphy[0];
++		array_size = ARRAY_SIZE(lane_regs_sm7150_cphy);
++	}
+ 	u32 val;
+ 
+ 	for (i = 0; i < array_size; i++, r++) {
+ 		switch (r->csiphy_param_type) {
+ 		case CSIPHY_SETTLE_CNT_LOWER_BYTE:
+ 			val = settle_cnt & 0xff;
++			break;
++		case CSIPHY_SETTLE_CNT_HIGHER_BYTE:
++			/* C-PHY reparte el asentamiento en dos registros. */
++			val = (settle_cnt >> 8) & 0xff;
+ 			break;
+ 		case CSIPHY_SKEW_CAL:
+ 			/* TODO: support application of skew from dt flag */
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -241,6 +241,7 @@
+ 		port@0 {
+ 			csiphy0_ep: endpoint {
+ 				data-lanes = <0 1 2>;
++				bus-type = <MEDIA_BUS_TYPE_CSI2_CPHY>;
+ 				remote-endpoint = <&imx682_ep>;
+ 			};
+ 		};
+@@ -289,6 +290,7 @@
+ 		port {
+ 			imx682_ep: endpoint {
+ 				data-lanes = <1 2 3>;
++				bus-type = <MEDIA_BUS_TYPE_CSI2_CPHY>;
+ 				link-frequencies = /bits/ 64 <435200000>;
+ 				remote-endpoint = <&csiphy0_ep>;
+ 			};

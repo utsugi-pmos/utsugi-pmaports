@@ -1,0 +1,99 @@
+DIAGNOSTIC: re-enable the rear camera to bisect the fault
+
+WHY
+---
+The front one is in a dead end: the sensor emits, CSIPHY1 hears it on all five
+lanes, the whole CSIPHY is by now identical to the vendor's -lane table 115 out
+of 115, common block, clocks, reset- and not a single start-of-transmission sync
+reaches the CSID.
+
+The question that separates the two possibilities is still missing: is it OUR
+camera that fails, or is it CAMSS that fails on this SoC? And to answer it we
+need a second sensor on a different CSIPHY.
+
+We have one: the rear camera (IMX682) has had a driver since 0050 and goes to
+CSIPHY0. It was taken out of the device tree in 0051 because it was believed to
+be C-PHY, and that dismissal rests on reasoning that is NOT solid: "three lanes,
+therefore C-PHY". Three-lane D-PHY exists and is legal.
+
+What the two cameras' factory files actually say:
+
+    rear     laneAssign = 0x210    three nibbles, identity mapping
+    front    laneAssign = 0x3210   four nibbles
+
+and the register that REALLY tells D-PHY from C-PHY, 0x0111, DOES NOT APPEAR in
+either one's tables: both use the sensor's default value. On the front one that
+value, read live over I2C, is 0x02, that is, D-PHY.
+
+Besides, the rear camera's "no frames arrive" was measured in August BEFORE all
+the CSIPHY fixes from this investigation (0060, 0063, 0065, 0066). It has never
+been tried again since.
+
+WHAT IT DOES
+------------
+It puts the rear camera back into the device tree, in parallel with the front
+one, each on its own CSIPHY. Both at once, which is what the CAMSS async
+notifier requires.
+
+HOW TO READ THE RESULT
+----------------------
+  the rear one gives SOT on csiphy0  -> CAMSS works on this SoC and the problem
+                                        is in the front camera's path
+  it gives nothing either            -> the problem is CAMSS's or the SoC's, and
+                                        there is nothing special about the front
+                                        camera
+
+This does NOT fix anything: it is to separate two hypotheses that have been
+stuck together for the whole investigation.
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -227,5 +227,12 @@
+ 		 * /dev/media0. O los dos, o ninguno.
+ 		 */
++		port@0 {
++			csiphy0_ep: endpoint {
++				data-lanes = <0 1>;
++				remote-endpoint = <&imx682_ep>;
++			};
++		};
++
+ 		port@1 {
+ 			csiphy1_ep: endpoint {
+ 				clock-lanes = <7>;
+@@ -251,6 +258,36 @@
+ 	 *
+ 	 * Sony IMX682 Main @ 1a  (C-PHY, inutilizable con CAMSS)
+ 	 */
++
++	/*
++	 * REACTIVADA para bisecar: hace falta un segundo sensor en otro CSIPHY
++	 * para separar "falla nuestra camara" de "falla CAMSS en este SoC".
++	 */
++	camera@1a {
++		compatible = "sony,imx682";
++		reg = <0x1a>;
++
++		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
++		pinctrl-names = "default";
++		pinctrl-0 = <&cam_mclk1_active>;
++
++		clocks = <&camcc CAMCC_MCLK1_CLK>;
++		clock-names = "xvclk";
++		assigned-clocks = <&camcc CAMCC_MCLK1_CLK>;
++		assigned-clock-rates = <24000000>;
++
++		dovdd-supply = <&vreg_l13a_1p8>;
++		avdd-supply = <&vreg_wide_ldo_avdd2>;
++		dvdd-supply = <&wl_dvdd1>;
++
++		port {
++			imx682_ep: endpoint {
++				data-lanes = <1 2>;
++				link-frequencies = /bits/ 64 <1020000000>;
++				remote-endpoint = <&csiphy0_ep>;
++			};
++		};
++	};
+ };
+ 
+ &cci0_i2c1 {
