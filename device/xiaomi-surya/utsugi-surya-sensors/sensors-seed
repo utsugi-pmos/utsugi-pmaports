@@ -1,0 +1,54 @@
+#!/bin/sh
+# Seed the writable copy of the sensor firmware that hexagonrpcd serves.
+#
+# WHY A COPY AT ALL
+# The DSP does not only read: it writes 'temp.json' next to the registry before
+# it can initialise it, and sns_reg.conf points its 'output=' at the registry
+# directory itself. The daemon runs as 'fastrpc' and the firmware is owned by
+# root, so serving /usr/share/qcom directly leaves every write at EACCES no
+# matter that the binary knows how to write.
+#
+# SEEDED, NOT SYNCED. Whatever the DSP writes there has to survive reboots,
+# which is what the stock system does in /mnt/vendor/persist. Only files that do
+# not exist yet are added from the firmware.
+#
+# If this does not work the sensor domain dies, drags the ADSP down with it, and
+# the sound card goes with the ADSP.
+set -eu
+FW=/usr/share/qcom/sm7150/Xiaomi/surya
+ROOT=/var/lib/hexagonrpcd/surya
+
+for f in socinfo/soc_id sensors/config/sm7150_bmi220_0.json \
+         sensors/registry/bmi220_0_platform.config sensors/sns_reg.conf; do
+	[ -e "$FW/$f" ] || { echo "missing $FW/$f: install firmware-xiaomi-surya" >&2; exit 1; }
+done
+
+mkdir -p "$ROOT"
+# acdb, dsp and socinfo are only ever read: symlinks, not copies.
+for d in acdb dsp socinfo; do
+	ln -sfn "$FW/$d" "$ROOT/$d"
+done
+if [ -d "$ROOT/sensors" ]; then
+	cp -an "$FW/sensors/." "$ROOT/sensors/" 2>/dev/null || true
+else
+	cp -a "$FW/sensors" "$ROOT/sensors"
+fi
+chown -R fastrpc:fastrpc "$ROOT/sensors"
+
+# The version is READ from sns_reg.conf, never assumed: it is what the DSP
+# compares against, and a firmware bump would otherwise go unnoticed.
+VER="$(head -1 "$FW/sensors/sns_reg.conf")"
+case "$VER" in
+	version=*) ;;
+	*) echo "sns_reg.conf does not start with 'version=': $VER" >&2; exit 1 ;;
+esac
+if [ "$(cat "$ROOT/sensors/sns_reg_version" 2>/dev/null)" != "$VER" ]; then
+	printf '%s\n' "$VER" > "$ROOT/sensors/sns_reg_version"
+	chown fastrpc:fastrpc "$ROOT/sensors/sns_reg_version"
+fi
+
+# A real check: that 'fastrpc' can create a file there. Looking at the owner is
+# not enough, a parent directory without traverse permission fails the same way.
+su fastrpc -s /bin/sh -c "touch '$ROOT/sensors/.write-test'" 2>/dev/null || {
+	echo "'fastrpc' cannot write in $ROOT/sensors" >&2; exit 1; }
+rm -f "$ROOT/sensors/.write-test"

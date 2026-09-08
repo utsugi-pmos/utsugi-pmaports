@@ -1,0 +1,125 @@
+#!/bin/sh
+# What was left of the last hang.
+#
+#   caja-negra              the last hang, with a verdict
+#   caja-negra --lista      all saved traces
+#   caja-negra --latidos    the raw heartbeats, to inspect by hand
+#   caja-negra --estado     what is installed right now
+#
+# All of this lives in RAM that survives the reboot (ramoops). The files are
+# owned by root, so the script relaunches itself with sudo if needed.
+set -eu
+
+ARCHIVO=/var/log/caja-negra
+[ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
+
+# The most recent trace: first the archive itself, and if nothing has been
+# archived yet, whatever systemd-pstore has just left.
+ultimo() {
+	d="$(ls -1d "$ARCHIVO"/*/ 2>/dev/null | sort | tail -1)"
+	[ -n "$d" ] && { printf '%s\n' "${d%/}"; return 0; }
+	[ -e /var/lib/systemd/pstore/pmsg-ramoops-0 ] && { echo /var/lib/systemd/pstore; return 0; }
+	return 1
+}
+
+# The DISK heartbeat ('ultimo-latido') is the good source: on this phone it is the
+# only one that survives. The pmsg one carries the whole history, but it only
+# appears the day ramoops works here -- see the header of caja-negra-latido.
+latidos_de() {
+	grep -a '^caja-negra ' "$1/pmsg-ramoops-0" 2>/dev/null || true
+	grep -a '^caja-negra ' "$1/ultimo-latido" 2>/dev/null || true
+}
+
+campo() {  # campo <line> <name>  ->  the value, or empty
+	printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1
+}
+
+case "${1:-}" in
+--lista)
+	echo "Traces saved in $ARCHIVO:"
+	for d in "$ARCHIVO"/*/; do
+		[ -d "$d" ] || { echo "  (none yet)"; break; }
+		n="$(latidos_de "${d%/}" | wc -l)"
+		printf '  %-20s %s heartbeats%s\n' "$(basename "$d")" "$n" \
+			"$([ -e "${d%/}/dmesg-ramoops-0" ] && echo ', WITH panic dump')"
+	done
+	exit 0 ;;
+--latidos)
+	d="$(ultimo)" || { echo "No trace saved."; exit 1; }
+	latidos_de "$d"
+	exit 0 ;;
+--estado)
+	printf 'console awake on suspend        %s\n' \
+		"$(cat /sys/module/printk/parameters/console_suspend 2>/dev/null)  (N = yes, which is what we want)"
+	printf 'console level                   %s\n' "$(cut -f1 /proc/sys/kernel/printk)  (7 = everything)"
+	printf 'heartbeat timer                 %s\n' "$(systemctl is-active caja-negra-latido.timer 2>/dev/null)"
+	printf 'ramoops                         %s KB of console, %s KB of messages\n' \
+		"$(($(cat /sys/module/ramoops/parameters/console_size) / 1024))" \
+		"$(($(cat /sys/module/ramoops/parameters/pmsg_size) / 1024))"
+	# 'Finished', not 'Started': for a oneshot service systemd logs
+	# "Starting"/"Finished", so counting "Started" always gave zero.
+	printf 'sign of life right now          %s\n' \
+		"$(cut -d' ' -f2 /var/log/caja-negra/latido 2>/dev/null || echo 'none yet')"
+	printf 'heartbeats in this boot         %s\n' \
+		"$(journalctl -u caja-negra-latido.service -b --no-pager 2>/dev/null | grep -c Finished || true)"
+	exit 0 ;;
+esac
+
+d="$(ultimo)" || {
+	cat <<'FIN'
+No trace saved yet.
+
+That is good news: it means the phone has not hung since the black box was put
+in place. Come back here after the next hang.
+FIN
+	exit 0
+}
+
+echo "=== Trace of $(basename "$d") ==="
+echo
+
+# --- 1. how long it stayed alive -------------------------------------------
+ult="$(latidos_de "$d" | tail -1)"
+if [ -z "$ult" ]; then
+	echo "No heartbeats. Either the black box was not in place on that boot, or the"
+	echo "message area filled up and wrapped around."
+else
+	t="$(campo "$ult" t)"
+	arranque="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
+	# The line is: caja-negra <date> t=... up=...  -- the date is the 2nd field.
+	echo "Last heartbeat:  $(printf '%s\n' "$ult" | cut -d' ' -f2)"
+	echo "  the phone had been on for $(campo "$ult" up) s"
+	echo "  screen $(campo "$ult" luz), suspends $(campo "$ult" susp) (good/bad), charge $(campo "$ult" carga)"
+	if [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null; then
+		hueco=$((arranque - t))
+		if [ "$hueco" -gt 0 ]; then
+			echo "  and the phone did not boot again until $((hueco / 60)) min later"
+		fi
+	fi
+fi
+echo
+
+# --- 2. what the kernel said at the end -------------------------------------
+if [ -s "$d/console-ramoops-0" ]; then
+	echo "--- the last thing the kernel said on the console (ramoops) ---"
+	tail -40 "$d/console-ramoops-0"
+else
+	echo "--- no console saved ---"
+	echo "The kernel did not get to say anything, or the console was suspended."
+fi
+echo
+
+# --- 3. was there a panic? --------------------------------------------------
+if [ -s "$d/dmesg-ramoops-0" ]; then
+	echo "--- THERE WAS A KERNEL PANIC, and this is its tail ---"
+	tail -30 "$d/dmesg-ramoops-0"
+else
+	cat <<'FIN'
+--- there was no kernel panic ---
+There is no dmesg dump. The kernel did not enter a panic: either it got stuck
+unable to write, or it died all at once. A panic would have left the trace here
+with the exact function.
+FIN
+fi
+echo
+echo "The log of the previous boot: $d/diario-del-arranque-anterior.txt"

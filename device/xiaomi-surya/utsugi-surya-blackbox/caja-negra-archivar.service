@@ -1,0 +1,13 @@
+[Unit]
+Description=Archive the trace from the previous boot before the next one overwrites it
+# systemd-pstore is what pulls the files out of /sys/fs/pstore. If we run
+# before it, there is nothing to copy.
+After=systemd-pstore.service
+Requires=systemd-pstore.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utsugi-surya/caja-negra-archivar
+
+[Install]
+WantedBy=multi-user.target

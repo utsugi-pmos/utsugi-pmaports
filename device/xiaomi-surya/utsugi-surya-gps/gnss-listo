@@ -1,0 +1,202 @@
+#!/bin/sh
+# Makes the GNSS really usable: unlocks the engine, and gives it the assistance
+# without which a cold start may never finish.
+#
+# It runs at boot (see the drop-in installed by the 'gps' setting) and also
+# by hand. Needs root.
+#
+# WHY IT EXISTS, and why the pmaports service's ExecStart is not enough:
+#
+#   1. BOOT RACE. 'modem-gnss.service' is a oneshot that launches qmicli once.
+#      If the modem does not respond over QRTR yet -- and at boot it is slow --
+#      the command fails, nobody retries, and the engine stays with the factory
+#      lock until the next reboot. MEASURED: after a reboot the service came out
+#      'inactive', ModemManager answered
+#      "Couldn't start GPS engine: QMI protocol error (46)" and the position fell
+#      back to the IP -- 25 km of error -- without anything saying so. It is the
+#      SAME shape as the pmaports failure that this setting fixes: it tries once,
+#      swallows the error and does not retry.
+#
+#   2. WITHOUT ASSISTANCE THERE IS NO COLD FIX. With the engine freshly unlocked
+#      the receiver has no ephemeris, and has to download them FROM THE SATELLITES
+#      THEMSELVES at 50 bits per second: 12.5 minutes per satellite in the best
+#      case, and back to the start if the signal cuts out for an instant.
+#
+#      MEASURED here, eleven minutes straight: at 3 min it already saw 16
+#      satellites and at 4:30 it had four locked with SNR 26-34 -- meaning the
+#      antenna and the receiver work perfectly -- and even so it NEVER closed a
+#      position. That is not fixed by waiting longer: it is fixed by giving it the
+#      ephemeris over the network, which is what this script does.
+set -eu
+
+XTRA_URL="${XTRA_URL:-https://path1.xtracloud.net/xtra3grcej.bin}"
+XTRA="/var/cache/xtra.bin"
+# The XTRA data expires; Android renews it every few days. Below this it is not
+# downloaded again, so as not to spend data on every boot.
+HORAS_VALIDO="${HORAS_VALIDO:-48}"
+
+decir() { printf '   %s\n' "$*"; }
+
+# --- 0. wait for ModemManager, BEFORE touching the engine --------------------
+#
+# THE ORDER MATTERS AND IT WAS BACKWARDS. ModemManager, when initializing the
+# modem, UNDOES the engine unlock. Verified step by step:
+#
+#     systemctl restart ModemManager
+#     mmcli -m any --location-enable-gps-nmea  ->  QMI protocol error (46)
+#     qmicli --loc-set-engine-lock=mi          ->  Successfully set engine lock
+#     mmcli -m any --location-enable-gps-nmea  ->  successfully setup
+#
+# So unlocking before ModemManager finishes is useless: it gets overwritten. And
+# that is exactly what happened on every boot -- the service runs early, unlocks,
+# ModemManager starts afterwards and leaves it as it was. The engine stayed
+# locked the whole session and the position came from the cell antenna, with
+# kilometers of error.
+#
+# It is tried with qmicli available even if mmcli is not: if there is no
+# ModemManager, this loop blocks nothing and it goes on the same.
+if command -v mmcli >/dev/null 2>&1; then
+	espera=0
+	while [ "$espera" -lt 90 ]; do
+		mmcli -L 2>/dev/null | grep -q '/Modem/' && break
+		espera=$((espera + 2))
+		sleep 2
+	done
+	if [ "$espera" -ge 90 ]; then
+		decir "ModemManager did not find the modem in 90 s"
+	elif [ "$espera" -gt 0 ]; then
+		decir "modem ready after ${espera} s"
+	fi
+	# An extra breather: showing up in the list and having finished configuring
+	# are not the same, and it is in that configuration where the unlock is lost.
+	sleep 5
+fi
+
+# --- 1. the engine, with retries ---------------------------------------------
+# Up to a minute: that is how long the modem can take to bring up QRTR after a
+# cold start of the phone.
+desbloqueado=0
+i=0
+while [ "$i" -lt 30 ]; do
+	if qmicli -d qrtr://0 --loc-set-engine-lock=mi >/dev/null 2>&1; then
+		desbloqueado=1
+		break
+	fi
+	i=$((i + 1))
+	sleep 2
+done
+
+if [ "$desbloqueado" = 0 ]; then
+	decir "the modem did not respond in 60 s; the GNSS stays locked"
+	exit 1
+fi
+qmicli -d qrtr://0 --loc-set-nmea-types=all >/dev/null 2>&1 || true
+decir "GNSS engine unlocked"
+
+# It is not enough for the command to end well: 'mt' also ended well and the
+# GPS stayed dead. What is checked is that a REAL session starts.
+if timeout 25 qmicli -d qrtr://0 --loc-session-id=99 --loc-start >/dev/null 2>&1; then
+	timeout 12 qmicli -d qrtr://0 --loc-session-id=99 --loc-stop >/dev/null 2>&1 || true
+	decir "test session: starts"
+else
+	decir "the engine still does not start; check 'journalctl -u modem-gnss'"
+fi
+
+# --- 2. the assistance --------------------------------------------------------
+# The time, always. It is free, cannot be wrong -- the system clock gives it,
+# synced over the network -- and it saves the receiver having to read it from the
+# signal, which is one of the slowest things it does on a cold start.
+qmicli -d qrtr://0 --loc-inject-time >/dev/null 2>&1 \
+	&& decir "time injected" || true
+
+# The approximate position, ONLY if it is given to us. It is the other half of
+# the warm start: knowing roughly where it is, the receiver knows which
+# satellites to expect and with what Doppler shift, and stops searching blindly.
+#
+# And that is why it is NOT guessed. A position wrong by 250 km is WORSE than
+# none: it sends the receiver to look for satellites that are not in view. It is
+# passed by hand, or from something that really knows where you are.
+if [ -n "${LAT:-}" ] && [ -n "${LON:-}" ]; then
+	if qmicli -d qrtr://0 --loc-inject-position-latitude="$LAT" \
+		--loc-inject-position-longitude="$LON" >/dev/null 2>&1; then
+		decir "approximate position injected ($LAT, $LON)"
+	else
+		decir "the modem did not accept the approximate position"
+	fi
+fi
+
+command -v mmcli >/dev/null 2>&1 || { decir "no mmcli: no assistance"; exit 0; }
+
+# --- WAIT FOR MODEMMANAGER TO HAVE THE MODEM ---------------------------------
+#
+# Without this wait the fix was useless WHERE IT IS MOST NEEDED: at boot.
+#
+# The unlock above talks over QRTR directly with the modem, and that one responds
+# right away. But turning on the sources is requested through ModemManager, which
+# takes quite a bit longer to detect the device. Reproduced on purpose by
+# restarting ModemManager and this service at the same time:
+#
+#     GNSS engine unlocked
+#     could not enable acquisition: error: couldn't find modem
+#
+# That is: the engine unlocked and NO source turned on, which is exactly the
+# symptom being chased -- position from the cell antenna with kilometers of
+# error. And it was not seen testing by hand, because by hand ModemManager has
+# already been up for a while.
+# Whether ModemManager picks up, or there will be nowhere to get anything from.
+# With retry: even if the modem already shows in the list, it may take a bit
+# longer to accept commands.
+INTENTO=0
+while [ "$INTENTO" -lt 5 ]; do
+	if err="$(mmcli -m any --location-enable-gps-raw --location-enable-gps-nmea 2>&1)"; then
+		break
+	fi
+	# Error 46 means "engine locked", and at this point that can only be that
+	# ModemManager has just overwritten our unlock. It is repeated before trying
+	# again, instead of waiting for the sake of waiting.
+	qmicli -d qrtr://0 --loc-set-engine-lock=mi >/dev/null 2>&1 || true
+	INTENTO=$((INTENTO + 1))
+	sleep 3
+done
+if [ "$INTENTO" -ge 5 ]; then
+	decir "could not enable acquisition: $(printf '%s' "$err" | tail -1)"
+else
+	decir "satellite sources turned on"
+fi
+# MSB and not MSA: with 'based' the phone computes its own position using the
+# network's help, instead of sending its measurements out for them to compute it.
+# Same time benefit, without telling anyone where you are.
+if ! err="$(mmcli -m any --location-enable-agps-msb 2>&1)"; then
+	decir "no A-GPS MSB: $(printf '%s' "$err" | tail -1)"
+fi
+
+decir "supported assistance: $(mmcli -m any --location-status 2>/dev/null \
+	| sed -n 's/.*supported assistance: *//p' | head -1)"
+
+bajar=1
+if [ -s "$XTRA" ]; then
+	edad=$(( ($(date +%s) - $(date -r "$XTRA" +%s 2>/dev/null || echo 0)) / 3600 ))
+	[ "$edad" -lt "$HORAS_VALIDO" ] && bajar=0
+fi
+
+if [ "$bajar" = 1 ]; then
+	mkdir -p "$(dirname "$XTRA")"
+	if wget -q -T 45 -O "$XTRA.nuevo" "$XTRA_URL" && [ -s "$XTRA.nuevo" ]; then
+		mv "$XTRA.nuevo" "$XTRA"
+		decir "XTRA ephemeris downloaded ($(stat -c%s "$XTRA") bytes)"
+	else
+		rm -f "$XTRA.nuevo"
+		decir "could not download XTRA (no network?); the cold fix will be slow"
+	fi
+fi
+
+if [ -s "$XTRA" ]; then
+	if err="$(mmcli -m any --location-inject-assistance-data="$XTRA" 2>&1)"; then
+		decir "assistance injected: the cold fix goes from minutes to seconds"
+	else
+		# Say WHAT failed, not just that it failed. The first version swallowed
+		# the message and left the diagnosis half-done.
+		decir "the modem rejected the assistance:"
+		printf '     %s\n' "$(printf '%s' "$err" | tail -2)"
+	fi
+fi

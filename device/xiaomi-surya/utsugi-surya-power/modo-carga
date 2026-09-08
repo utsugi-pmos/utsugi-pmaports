@@ -1,0 +1,130 @@
+#!/bin/sh
+# The charging screen: what the phone shows when you plug it in while off.
+#
+# It does not start the graphical session -- Plasma is held from starting by a
+# condition, see the setting-- and instead this runs: Plymouth is thrown off the
+# screen and the battery is drawn on the framebuffer with 'pantalla-de-carga'.
+#
+# Plymouth would do for text, and that is how it started, but its drawing on this phone is
+# the postmarketOS logo: the first real test looked like a hung boot.
+#
+# Three rules, the same anyone who has used a phone expects:
+#   - unplugged          -> powers off
+#   - short press        -> the screen turns on for a while
+#   - long press         -> boots the whole phone
+#
+# And a fourth that is not ours and is worth knowing: holding the button ~10 s
+# makes the PMIC reboot by hardware, and that boot is no longer "by cable",
+# so the normal session comes up. It is the emergency exit if this fails.
+set -u
+
+RUN=/run/modo-carga
+QG=/sys/class/power_supply/qcom_qg
+CHG=/sys/class/power_supply/pm8150b-charger
+APAGAR_PANTALLA=45   # s without touching anything before turning off the screen
+LARGA=2              # s of button to boot the phone
+
+BL=$(ls -d /sys/class/backlight/* 2>/dev/null | head -1)
+MAXBL=$(cat "$BL/max_brightness" 2>/dev/null || echo 4095)
+TENUE=$(( MAXBL / 12 ))
+
+KEY=
+for d in /sys/class/input/event*; do
+	[ "$(cat "$d/device/name" 2>/dev/null)" = pm8941_pwrkey ] &&
+		KEY=/dev/input/$(basename "$d")
+done
+
+brillo() { [ -n "$BL" ] && echo "$1" > "$BL/brightness" 2>/dev/null; true; }
+
+# Repainted only when the value changes, or every minute in case the console has
+# written something over it. Repainting each loop would mean launching the Python
+# interpreter every few seconds all night long, to draw the same thing.
+ultimo=
+ultimo_t=0
+pintar() {
+	ahora=$(date +%s)
+	v="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
+	if [ "$v" != "$ultimo" ] || [ $(( ahora - ultimo_t )) -ge 60 ]; then
+		pantalla-de-carga 2>/dev/null
+		ultimo="$v"
+		ultimo_t="$ahora"
+	fi
+	true
+}
+
+arrancar_el_movil() {
+	rm -f "$RUN"
+	brillo "$TENUE"
+	# Screen to black before releasing it: otherwise, the drawn battery stays
+	# underneath until the compositor paints its first frame.
+	pantalla-de-carga --solo-limpiar 2>/dev/null
+	# Plasma was skipped by condition; now that the file is gone, it starts.
+	systemctl reset-failed plasma-mobile.service 2>/dev/null
+	systemctl start plasma-mobile.service
+	systemctl start graphical.target
+	exit 0
+}
+
+# The screen is ours from here: Plymouth goes and the logo is cleared.
+plymouth quit 2>/dev/null
+pantalla-de-carga --limpiar 2>/dev/null
+ultimo_t=$(date +%s)
+ultimo="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
+
+brillo "$TENUE"
+despierta=$(date +%s)
+pulsada=0
+sin_cable=0
+
+while :; do
+	# Unplugged: power off. Two readings in a row are required because a single
+	# reading of zero during a port renegotiation would power off the phone
+	# while it is still plugged in.
+	if [ "$(cat "$CHG/online" 2>/dev/null || echo 0)" = 1 ]; then
+		sin_cable=0
+	else
+		sin_cable=$(( sin_cable + 1 ))
+		if [ "$sin_cable" -ge 2 ]; then
+			pantalla-de-carga --solo-limpiar 2>/dev/null
+			exec systemctl poweroff
+		fi
+	fi
+
+	# An input event, or two seconds of waiting: the same loop serves
+	# both to handle the button and to watch the cable.
+	# The button wait is also the loop clock: a press comes back
+	# at once, and if there is none it times out on its own and it is time to check the cable.
+	# 5 s and not 2 because this runs all night: each loop is two processes,
+	# and the cable does not need looking at more often.
+	#
+	# The group with stderr to null is NOT decorative: on timeout, the
+	# interpreter announces "Terminated" on stderr, and that ends up in the journal each
+	# loop. A night of charging is tens of thousands of useless lines.
+	ev=
+	[ -n "$KEY" ] && ev=$( { timeout 5 dd if="$KEY" bs=24 count=1 status=none 2>/dev/null |
+		od -An -v -tu4 -j16 -N8; } 2>/dev/null )
+	[ -z "$ev" ] || {
+		# struct input_event: type and code in one u32, value in the next.
+		set -- $ev
+		tipo=$(( $1 & 65535 )); codigo=$(( $1 >> 16 )); valor=$2
+		if [ "$tipo" -eq 1 ] && [ "$codigo" -eq 116 ]; then
+			if [ "$valor" -eq 1 ]; then
+				pulsada=$(date +%s)
+			elif [ "$valor" -eq 0 ]; then
+				[ "$pulsada" -ne 0 ] &&
+					[ $(( $(date +%s) - pulsada )) -ge "$LARGA" ] &&
+					arrancar_el_movil
+				pulsada=0
+				brillo "$TENUE"
+				ultimo=          # on waking, always repaint
+				despierta=$(date +%s)
+			fi
+		fi
+	}
+
+	if [ $(( $(date +%s) - despierta )) -ge "$APAGAR_PANTALLA" ]; then
+		brillo 0
+	else
+		pintar
+	fi
+done

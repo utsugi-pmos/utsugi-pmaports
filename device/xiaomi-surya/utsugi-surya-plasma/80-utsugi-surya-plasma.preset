@@ -1,0 +1,4 @@
+enable geoclue-agent.service
+enable power-saving-agent.service
+enable sonido-avisos.service
+enable precalentar-marcador.service

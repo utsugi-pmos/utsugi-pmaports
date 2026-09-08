@@ -1,0 +1,17 @@
+[Unit]
+Description=Warm the dialer up in the page cache
+After=graphical-session.target
+PartOf=graphical-session.target
+
+[Service]
+Type=oneshot
+# Wait for the session to settle: warming up while competing with Plasma's own
+# boot would be counterproductive.
+ExecStartPre=/bin/sleep 25
+ExecStart=/usr/libexec/utsugi-surya/precalentar-marcador
+# Low priority on CPU and disk: this must never get in the way.
+Nice=15
+IOSchedulingClass=idle
+
+[Install]
+WantedBy=graphical-session.target

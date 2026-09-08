@@ -1,0 +1,15 @@
+# The screen never turned itself off, and it was not a wrong timeout: there was
+# none. PowerDevil ran with its factory values, which on mains are long or
+# simply absent.
+#
+# All THREE profiles are written. Writing only one leaves the phone awake in the
+# other two situations, which is how this goes unnoticed: you test with the
+# cable plugged in and it seems to work.
+[AC][Display]
+TurnOffDisplayIdleTimeoutSec=120
+
+[Battery][Display]
+TurnOffDisplayIdleTimeoutSec=120
+
+[LowBattery][Display]
+TurnOffDisplayIdleTimeoutSec=120

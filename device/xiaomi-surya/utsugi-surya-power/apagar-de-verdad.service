@@ -1,0 +1,16 @@
+[Unit]
+Description=Really power off: to the kernel before the teardown, which is where it hangs
+Documentation=file:///usr/libexec/utsugi-surya/apagar-de-verdad
+# Ordered after the whole session so that it is the FIRST unit stopped on the
+# way down; its ExecStop then hands the power-off to the kernel. See the script.
+After=graphical.target multi-user.target plasma-mobile.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/bin/true
+ExecStop=/usr/libexec/utsugi-surya/apagar-de-verdad
+TimeoutStopSec=90
+
+[Install]
+WantedBy=graphical.target

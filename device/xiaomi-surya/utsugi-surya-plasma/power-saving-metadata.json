@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "KPackage/GenericQML",
+    "KPlugin": {
+        "Description": "Power saving quick setting for Plasma Mobile",
+        "Description[es]": "Ajuste rápido de ahorro de energía para Plasma Mobile",
+        "Icon": "battery-profile-powersave",
+        "Id": "org.kde.plasma.quicksetting.powersaving",
+        "License": "LGPL-2.0-or-later",
+        "Name": "Power Saving",
+        "Name[es]": "Ahorro de energía"
+    }
+}

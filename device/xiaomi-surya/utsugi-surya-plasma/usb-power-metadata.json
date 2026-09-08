@@ -1,0 +1,12 @@
+{
+    "KPackageStructure": "KPackage/GenericQML",
+    "KPlugin": {
+        "Description": "USB power direction quick setting for Plasma Mobile: take power from the cable, or give it",
+        "Description[es]": "Ajuste rápido de la dirección de la energía por USB: pedir carga o dar carga",
+        "Icon": "battery-charging",
+        "Id": "org.kde.plasma.quicksetting.usbpower",
+        "License": "LGPL-2.0-or-later",
+        "Name": "USB power",
+        "Name[es]": "Energía USB"
+    }
+}

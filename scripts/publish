@@ -27,9 +27,15 @@ done
 KEY="$(keyname)"
 SITE="$WORK/site"
 DIR="$SITE/$CHANNEL_DIR/$ARCH"
+# pmbootstrap refreshes the index for the BUILD machine's architecture as well as
+# the target's, and treats a missing index as a fatal error. This repository only
+# ships aarch64, so the other architecture gets an empty (but signed) index
+# instead of a 404.
+EMPTY_ARCHES="x86_64"
 
 title "Collecting packages"
 rm -rf "$SITE"; mkdir -p "$DIR" "$SITE/keys"
+for a in $EMPTY_ARCHES; do mkdir -p "$SITE/$CHANNEL_DIR/$a"; done
 
 # Which files belong to us: each aport's own name plus its subpackages, at the
 # version the APKBUILD currently declares. Globbing '<pkg>-*' would be wrong
@@ -53,7 +59,8 @@ title "Index and signature"
 # apk and abuild come from a throwaway Alpine container: exactly the tools
 # pmbootstrap uses inside its own chroot, without needing one here.
 docker run --rm \
-	-v "$DIR:/r" -v "$WORK/config_abuild:/k:ro" \
+	-v "$SITE/$CHANNEL_DIR:/c" -v "$DIR:/r" -v "$WORK/config_abuild:/k:ro" \
+	-e EMPTY_ARCHES="$EMPTY_ARCHES" \
 	-e KEY="$KEY" -e UID="$(id -u)" -e GID="$(id -g)" \
 	-v "$REPO/keys:/pub:ro" \
 	alpine:edge sh -ec '
@@ -68,7 +75,14 @@ docker run --rm \
 			-o APKINDEX.tar.gz_ ./*.apk
 		abuild-sign -k "/k/$KEY" APKINDEX.tar.gz_
 		mv APKINDEX.tar.gz_ APKINDEX.tar.gz
-		chown -R "$UID:$GID" /r
+		for a in $EMPTY_ARCHES; do
+			cd "/c/$a"
+			apk index --rewrite-arch "$a" -d "utsugi-pmaports (no packages for this architecture)" \
+				-o APKINDEX.tar.gz_
+			abuild-sign -k "/k/$KEY" APKINDEX.tar.gz_
+			mv APKINDEX.tar.gz_ APKINDEX.tar.gz
+		done
+		chown -R "$UID:$GID" /r /c
 	'
 # The first member of a signed index is the signature, named after the key.
 first="$(tar -tzf "$DIR/APKINDEX.tar.gz" | head -1)"

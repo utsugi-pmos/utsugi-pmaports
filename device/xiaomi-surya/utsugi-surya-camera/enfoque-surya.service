@@ -1,0 +1,20 @@
+[Unit]
+# The rear camera's focus engine, alive between applications.
+#
+# It depends on nothing camera-related on purpose: it cannot open the node until
+# someone streams, so it starts up, waits on the pipe, and tries with the first
+# command that reaches it. Waiting on dependencies would gain nothing.
+Description=Rear camera focus engine (surya)
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/enfoque-surya
+Restart=always
+RestartSec=5
+# It dies and comes back without leaving the lens where it was, because when its
+# descriptor closes the driver returns it to the origin. That is correct: if the
+# service is not there, nobody guarantees the position, and pretending otherwise
+# would be worse.
+
+[Install]
+WantedBy=multi-user.target

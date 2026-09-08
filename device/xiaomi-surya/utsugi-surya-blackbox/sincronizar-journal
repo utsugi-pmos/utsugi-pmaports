@@ -1,0 +1,31 @@
+#!/bin/sh
+# Forces journald to flush to disk every second.
+#
+# WHY
+# ---
+# The boot bug happens when the kernel has already gone quiet: on a
+# HEALTHY boot there is not a single kernel message after ~24 s. That is,
+# who talks in that stretch is userspace, and the kernel log -which is the
+# only thing that survives in ramoops- cannot distinguish a good boot from a
+# bad one.
+#
+# The journal DOES have the userspace messages. Its problem is another: it writes
+# to cache and loses the last ~30 s when the reset is hard. Measured: each
+# failed cycle left 4 s of journal even though the phone lived 35 s.
+#
+# `journalctl --sync` forces journald to flush it to disk. Doing it every
+# second, after a freeze the journal contains almost everything up to the end.
+#
+# ADVANTAGE over everything else that was tried: it does not touch the console, does not change
+# `loglevel`, sends nothing over the serial port or framebuffer. The three attempts
+# that broke the phone on 2026-08-16 were from adding work to the
+# console path; this one does not touch it.
+#
+# COST: one fsync per second. Notable on flash, but this device already
+# reboots in a loop for the tests, so it is worth it.
+set -u
+
+while :; do
+	journalctl --sync 2>/dev/null || true
+	sleep 1
+done

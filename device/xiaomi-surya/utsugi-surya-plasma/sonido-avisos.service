@@ -1,0 +1,13 @@
+[Unit]
+Description=Notification sound, which Plasma Mobile does not play
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/sonido-avisos
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=graphical-session.target
