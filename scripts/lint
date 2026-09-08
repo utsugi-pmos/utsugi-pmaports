@@ -52,6 +52,13 @@ fi
 
 if command -v apkbuild-lint >/dev/null 2>&1; then
 	title "apkbuild-lint"
+	# atools does not know postmarketOS' own options and rejects them as invalid.
+	# This is the list pmaports' CI passes (.ci/lib/apkbuild_linting.py), plus the
+	# kconfigcheck categories this tree actually uses.
+	CUSTOM_VALID_OPTIONS="!pmb:crossdirect !pmb:kconfigcheck pmb:cross-native
+		pmb:cross-native2 pmb:drm pmb:generic-kernel pmb:strict pmb:systemd
+		pmb:systemd-never pmb:kconfigcheck-community"
+	export CUSTOM_VALID_OPTIONS
 	for pkg in $(all_aports); do
 		d="$(aport_dir "$pkg")"
 		apkbuild-lint "$d/APKBUILD" || rc=1

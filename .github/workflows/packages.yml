@@ -5,10 +5,13 @@ name: packages
 # Native aarch64 runners: free for public repositories, and they remove the
 # whole cross-compilation problem (crossdirect losing liblto_plugin.so) because
 # nothing is cross-compiled any more.
+# Manual only for now. The automatic push trigger is commented out until the
+# ABUILD_PRIVKEY secret exists: without it every build fails at the signing step,
+# after having compiled everything.
 on:
-  push:
-    branches: [main]
-    paths: ['main/**', 'device/**', 'upstream.lock', 'scripts/**']
+  # push:
+  #   branches: [main]
+  #   paths: ['main/**', 'device/**', 'upstream.lock', 'scripts/**']
   workflow_dispatch:
     inputs:
       packages:
