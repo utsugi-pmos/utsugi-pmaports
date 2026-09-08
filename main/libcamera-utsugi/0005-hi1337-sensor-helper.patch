@@ -57,32 +57,32 @@ gain raises both. Confusing them cost three wrong conclusions in a row.
 +	CameraSensorHelperHi1337()
 +	{
 +		/*
-+		 * Pedestal de 64 en diez bits, MEDIDO en este sensor: con la
-+		 * escena a oscuras todos los pixeles caen en 16 de los ocho bits
-+		 * altos, sin dispersion, que son los 64 de diez bits.
++		 * Pedestal of 64 in ten bits, MEASURED on this sensor: with the
++		 * scene in the dark all the pixels land at 16 of the eight high
++		 * bits, with no spread, which is the 64 in ten bits.
 +		 */
 +		blackLevel_ = 4096;
 +		/*
-+		 * Ganancia LINEAL con la unidad en 512: ganancia = codigo / 512.
++		 * LINEAR gain with unity at 512: gain = code / 512.
 +		 *
-+		 * MEDIDO, no de una hoja de datos. Con la exposicion fija y una
-+		 * escena quieta, mirando la senal sobre el pedestal Y el
-+		 * contraste, que es lo que separa una ganancia de un
-+		 * desplazamiento del negro:
++		 * MEASURED, not from a datasheet. With the exposure fixed and a
++		 * still scene, looking at the signal above the pedestal AND the
++		 * contrast, which is what tells a gain apart from a black
++		 * level offset:
 +		 *
 +		 *     codigo  senal   contraste
 +		 *        512   9,58        25,0
 +		 *       1024  19,57        49,0    (x2,04 y x1,96)
 +		 *       2048  39,49        96,0    (x4,12 y x3,84)
 +		 *
-+		 * Las dos magnitudes suben proporcionales al codigo, asi que la
-+		 * curva es una recta por el origen y 512 es 1x.
++		 * Both quantities rise proportionally to the code, so the
++		 * curve is a straight line through the origin and 512 is 1x.
 +		 *
-+		 * Ojo: la ganancia de este sensor son CUATRO registros, uno por
-+		 * canal de Bayer -0x0214, 0x0216, 0x0218 y 0x021a-, que el driver
-+		 * escribe juntos. El 0x0204 que hay al lado NO es ganancia: es el
-+		 * nivel de negro, y se distingue porque sube la media mientras
-+		 * BAJA el contraste.
++		 * Note: the gain of this sensor is FOUR registers, one per
++		 * Bayer channel -0x0214, 0x0216, 0x0218 and 0x021a-, which the driver
++		 * writes together. The 0x0204 next to them is NOT gain: it is the
++		 * black level, and it is told apart because it raises the mean while
++		 * it LOWERS the contrast.
 +		 */
 +		gain_ = AnalogueGainLinear{ 1, 0, 0, 512 };
 +	}

@@ -118,12 +118,12 @@ This patch makes that manual rebind unnecessary on every boot.
 -	}
  
 +	/*
-+	 * No se propaga el fallo. En placas donde el bus del actuador solo vive
-+	 * mientras el sensor transmite, este apagado falla siempre que llega
-+	 * solo, y rpm_callback() guardaria el error en dev->power.runtime_error;
-+	 * a partir de ahi rpm_resume() devuelve -EINVAL y el nodo no se puede
-+	 * abrir nunca mas. No poder apagar el chip no merece eso: quien de
-+	 * verdad necesita el bus es la escritura de posicion, y esa si informa.
++	 * The error is not propagated. On boards where the actuator bus only lives
++	 * while the sensor transmits, this power-off always fails when it comes
++	 * alone, and rpm_callback() would store the error in dev->power.runtime_error;
++	 * from then on rpm_resume() returns -EINVAL and the node can never be
++	 * opened again. Not being able to power the chip off does not deserve that: what
++	 * really needs the bus is the position write, and that one does report.
 +	 */
  	return 0;
  }
@@ -138,7 +138,7 @@ This patch makes that manual rebind unnecessary on every boot.
 -		return ret;
 -	}
 +
-+	/* Mismo motivo que en la suspension: no envenenar el estado de energia. */
++	/* Same reason as in suspend: do not poison the power state. */
  
  	for (val = dw9807_dev->current_val % DW9807_CTRL_STEPS;
  	     val < dw9807_dev->current_val + DW9807_CTRL_STEPS - 1;

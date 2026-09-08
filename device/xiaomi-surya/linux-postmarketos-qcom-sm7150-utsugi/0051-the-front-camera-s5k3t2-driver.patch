@@ -103,15 +103,15 @@ module parameters, and are tested with rmmod/insmod:
 -		port@0 {
 -			csiphy0_ep: endpoint {
 +		/*
-+		 * La trasera estaba en el port@0 y se ha quitado: ese sensor
-+		 * esta cableado en C-PHY y CAMSS solo admite D-PHY, asi que no
-+		 * puede funcionar. Medido en el fichero de fabrica; el porque
-+		 * esta en docs/CAMARA-04-la-trasera-es-cphy.md.
++		 * The rear one was on port@0 and has been removed: that sensor
++		 * is wired in C-PHY and CAMSS only supports D-PHY, so it
++		 * cannot work. Measured in the factory file; the why
++		 * is in docs/CAMARA-04-la-trasera-es-cphy.md.
 +		 *
-+		 * Y no basta con desactivar el nodo del sensor dejando aqui su
-+		 * puerto: el notificador asincrono de CAMSS se quedaria
-+		 * esperando un subdev que no llega nunca y se pierde
-+		 * /dev/media0. O los dos, o ninguno.
++		 * And it is not enough to disable the sensor node while leaving its
++		 * port here: the CAMSS async notifier would be left
++		 * waiting for a subdev that never arrives and it loses
++		 * /dev/media0. Either both, or neither.
 +		 */
 +		port@1 {
 +			csiphy1_ep: endpoint {
@@ -128,16 +128,16 @@ module parameters, and are tested with rmmod/insmod:
  
  &cci0_i2c0 {
  	/*
--	 * El 0x50 que decia el comentario de antes es la EEPROM de
--	 * calibracion del modulo, no el sensor: contesta incluso con la
--	 * camara sin alimentar. El 0x10 que dicen los drivers del mismo chip
--	 * para MediaTek tampoco vale aqui: medido con el sensor alimentado y
--	 * con reloj, en este movil aparece en 0x1a.
-+	 * Aqui vivia el IMX682 de 64 MP. Contesta, se identifica y transmite,
-+	 * pero esta cableado en C-PHY de 3 carriles y CAMSS solo habla D-PHY:
-+	 * no llega un solo fotograma y no hay forma de que llegue.
+-	 * The 0x50 that the earlier comment mentioned is the module
+-	 * calibration EEPROM, not the sensor: it answers even with the
+-	 * camera unpowered. The 0x10 that the drivers for the same chip
+-	 * on MediaTek give does not work here either: measured with the sensor powered and
+-	 * clocked, on this phone it shows up at 0x1a.
++	 * The 64 MP IMX682 used to live here. It answers, identifies itself and transmits,
++	 * but it is wired in 3-lane C-PHY and CAMSS only speaks D-PHY:
++	 * not a single frame arrives and there is no way for one to.
 +	 *
-+	 * Sony IMX682 Main @ 1a  (C-PHY, inutilizable con CAMSS)
++	 * Sony IMX682 Main @ 1a  (C-PHY, unusable with CAMSS)
 +	 */
 +};
 +
@@ -145,15 +145,15 @@ module parameters, and are tested with rmmod/insmod:
 +	/* OmniVision ov02b1b Depth @ 50 */
 +
 +	/*
-+	 * La frontal, un Samsung S5K3T2 de 20 MP. Segun el kernel Android del
-+	 * propio surya va en CCI0 master 1 -o sea este bus-, con MCLK0 en el
-+	 * pin 13 y el reset en el 23.
++	 * The front camera, a 20 MP Samsung S5K3T2. According to the Android kernel of
++	 * surya itself it sits on CCI0 master 1 -that is, this bus-, with MCLK0 on
++	 * pin 13 and the reset on 23.
 +	 *
-+	 * La direccion es provisional: el fichero de fabrica NO la trae (su
-+	 * unico slaveAddr es 0xa0, la EEPROM, la misma trampa que ya costo
-+	 * tiempo con la trasera). El driver la busca leyendo la
-+	 * identificacion y se recoloca solo, asi que este 0x10 solo tiene que
-+	 * ser una direccion libre.
++	 * The address is provisional: the factory file does NOT carry it (its
++	 * only slaveAddr is 0xa0, the EEPROM, the same trap that already cost
++	 * time with the rear one). The driver looks for it by reading the
++	 * ID and relocates itself, so this 0x10 only has to
++	 * be a free address.
  	 */
 -	camera@1a {
 -		compatible = "sony,imx682";
@@ -162,7 +162,7 @@ module parameters, and are tested with rmmod/insmod:
 +		compatible = "samsung,s5k3t2";
 +		reg = <0x10>;
  
--		/* CAM1_RST_N, segun los nombres de pin de este mismo fichero */
+-		/* CAM1_RST_N, per the pin names in this same file */
 -		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
 +		/* CAM3_RST_N */
 +		reset-gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
@@ -171,15 +171,15 @@ module parameters, and are tested with rmmod/insmod:
 +		pinctrl-0 = <&cam_mclk0_active>;
  
  		/*
--		 * 24 MHz, NO los 19,2 del Android de fabrica: las tablas de
--		 * registros del driver estan calculadas para 24 y adaptarlas
--		 * obligaria a recalcular el PLL del sensor. El camcc del
--		 * SM7150 admite las dos. Si se cambia aqui, hay que cambiarlo
--		 * tambien en el driver.
-+		 * 19,2 MHz, que es lo que usa el Android de fabrica. Aqui NO
-+		 * se sube a 24 como se hizo con la trasera: las tablas son las
-+		 * del propio movil y estan calculadas para 19,2. Si se cambia,
-+		 * hay que cambiarlo tambien en el driver.
+-		 * 24 MHz, NOT the 19.2 of the factory Android: the driver's
+-		 * register tables are calculated for 24 and adapting them
+-		 * would require recalculating the sensor PLL. The camcc of the
+-		 * SM7150 supports both. If it is changed here, it has to be changed
+-		 * in the driver too.
++		 * 19.2 MHz, which is what the factory Android uses. Here it is NOT
++		 * raised to 24 as was done with the rear one: the tables are
++		 * the phone's own and are calculated for 19.2. If it is changed,
++		 * it has to be changed in the driver too.
  		 */
 -		clocks = <&camcc CAMCC_MCLK1_CLK>;
 +		clocks = <&camcc CAMCC_MCLK0_CLK>;
@@ -197,10 +197,10 @@ module parameters, and are tested with rmmod/insmod:
 +		vddd-supply = <&wl_dvdd2>;
 +
 +		/*
-+		 * La frontal y el gran angular comparten el CSIPHY1 a traves
-+		 * de un conmutador MIPI. Que posicion corresponde a cual no
-+		 * esta medido, asi que el driver no lo toca salvo que se lo
-+		 * pidan por parametro (mipi_switch=0 o 1).
++		 * The front camera and the wide angle share CSIPHY1 through
++		 * a MIPI switch. Which position corresponds to which is not
++		 * measured, so the driver does not touch it unless it is
++		 * asked to by parameter (mipi_switch=0 or 1).
 +		 */
 +		mipi-switch-supply = <&vreg_camera_mipi_switch_en>;
  
@@ -208,12 +208,12 @@ module parameters, and are tested with rmmod/insmod:
 -			imx682_ep: endpoint {
 +			s5k3t2_ep: endpoint {
  				/*
--				 * Ojo, no es una errata: el lado del sensor
--				 * numera los carriles desde 1 y el de CAMSS
--				 * desde 0. Son los mismos dos cables.
-+				 * No es una errata: el lado del sensor numera
-+				 * los carriles desde 1 y el de CAMSS desde 0.
-+				 * Son los mismos cuatro cables.
+-				 * Careful, this is not a typo: the sensor side
+-				 * numbers the lanes from 1 and the CAMSS side
+-				 * from 0. They are the same two wires.
++				 * This is not a typo: the sensor side numbers
++				 * the lanes from 1 and the CAMSS side from 0.
++				 * They are the same four wires.
  				 */
 -				data-lanes = <1 2>;
 -				link-frequencies = /bits/ 64 <1020000000>;
@@ -281,61 +281,61 @@ module parameters, and are tested with rmmod/insmod:
 @@ -0,0 +1,1375 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Samsung S5K3T2: la camara frontal del Xiaomi POCO X3 NFC (surya).
++ * Samsung S5K3T2: the front camera of the Xiaomi POCO X3 NFC (surya).
 + *
-+ * POR QUE ESTE SENSOR Y NO EL TRASERO
++ * WHY THIS SENSOR AND NOT THE REAR ONE
 + * -----------------------------------
-+ * El de 64 MP de detras (IMX682) no se puede usar con CAMSS, y no por falta de
-+ * trabajo: esta cableado en C-PHY. Esta medido en el fichero de calibracion de
-+ * fabrica del propio movil, por dos caminos que coinciden:
++ * The 64 MP one at the back (IMX682) cannot be used with CAMSS, and not for lack of
++ * work: it is wired in C-PHY. This is measured in the factory calibration file
++ * of the phone itself, along two paths that agree:
 + *
-+ *   laneAssign = 0x0210            tres carriles -> trios C-PHY
-+ *   0x0114     = 0x02              tres carriles, en las cinco tablas de modo
++ *   laneAssign = 0x0210            tres lanes -> trios C-PHY
++ *   0x0114     = 0x02              three lanes, in the five mode tables
 + *
-+ * CAMSS solo admite D-PHY. El frontal, en cambio, dice laneAssign = 0x3210 y
-+ * 0x0114 = 0x0300: cuatro carriles D-PHY. Ver docs/CAMARA-04-la-trasera-es-cphy.md.
++ * CAMSS only supports D-PHY. The front one, in contrast, says laneAssign = 0x3210 and
++ * 0x0114 = 0x0300: four D-PHY lanes. See docs/CAMARA-04-la-trasera-es-cphy.md.
 + *
-+ * DE DONDE SALEN LAS TABLAS
++ * WHERE THE TABLES COME FROM
 + * -------------------------
-+ * Del fichero de fabrica de ESTE movil y ESTE modulo,
-+ * com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, leido con
-+ * surya/camara/leer-sensormodule.py. No son de otro telefono ni de otro
-+ * proveedor, asi que no hay que recalcular ningun PLL.
++ * From the factory file of THIS phone and THIS module,
++ * com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, read with
++ * surya/camara/leer-sensormodule.py. They are not from another phone nor another
++ * vendor, so there is no PLL to recalculate.
 + *
-+ * LAS CUENTAS DEL ENLACE, Y COMO SE COMPROBARON
++ * THE LINK ARITHMETIC, AND HOW IT WAS CHECKED
 + * ---------------------------------------------
-+ * Los registros del PLL de las tablas dan, con INCK = 19,2 MHz:
++ * The PLL registers in the tables give, with INCK = 19.2 MHz:
 + *
 + *   vt_pix_clk = 19,2 / 3 (0x0304) * 185 (0x0306) / 1 (0x0302) / 7 (0x0300)
 + *              = 169,14 MHz
-+ *   pixel_rate = vt_pix_clk * 4 pixeles por ciclo = 676,57 MHz
-+ *   link_freq  = pixel_rate * 10 bits / (2 * 4 carriles) = 845,71 MHz
++ *   pixel_rate = vt_pix_clk * 4 pixels per cycle = 676.57 MHz
++ *   link_freq  = pixel_rate * 10 bits / (2 * 4 lanes) = 845,71 MHz
 + *
-+ * El "4 pixeles por ciclo" no esta supuesto: se calibro con el driver hermano
-+ * s5k3m5.c de este mismo arbol, que declara 602,5 MHz y cuyas tablas dan
-+ * exactamente esa cifra con esta misma formula.
++ * The "4 pixels per cycle" is not assumed: it was calibrated against the sibling driver
++ * s5k3m5.c in this same tree, which declares 602.5 MHz and whose tables give
++ * exactly that figure with this same formula.
 + *
-+ * Y cuadra por un segundo camino, el fisico: en el modo completo caben
-+ * 5184 px x 10 bits / 4 carriles = 12960 bits por carril y linea, que a
-+ * 1691 Mbit/s tardan 7,66 us, dentro de los 8,04 us que dura la linea
-+ * (5440 / 676,57 MHz). Un 5 % de margen, que es justo lo que se espera.
++ * And it checks out along a second path, the physical one: in the full mode there fit
++ * 5184 px x 10 bits / 4 lanes = 12960 bits per lane and line, which at
++ * 1691 Mbit/s take 7.66 us, within the 8.04 us the line lasts
++ * (5440 / 676.57 MHz). A 5% margin, which is exactly what is expected.
 + *
-+ * Los dos modos salen a 30,1 fps, que es lo que declara quien ya ha hecho
-+ * capturar a este sensor en este mismo SoC (PR #59 de sm7150-mainline/linux).
++ * Both modes come out at 30.1 fps, which is what is declared by whoever has already made
++ * this sensor capture on this same SoC (PR #59 of sm7150-mainline/linux).
 + *
-+ * PARAMETROS DE MODULO, Y POR QUE EXISTEN
++ * MODULE PARAMETERS, AND WHY THEY EXIST
 + * ---------------------------------------
-+ * Quedan dos incognitas que no se pueden resolver leyendo, y este movil se
-+ * cuelga aproximadamente uno de cada cuatro arranques. Asi que en vez de
-+ * gastar un reinicio por hipotesis, van como parametros: se prueban con
-+ * rmmod/insmod, sin recompilar y sin reiniciar.
++ * Two unknowns remain that cannot be resolved by reading, and this phone hangs
++ * on roughly one out of every four boots. So instead of
++ * spending a reboot per hypothesis, they go as parameters: they are tried with
++ * rmmod/insmod, without recompiling and without rebooting.
 + *
-+ *   i2c_addr      la direccion del sensor no esta en el fichero de fabrica
-+ *                 (el unico slaveAddr que trae es 0xa0, o sea la EEPROM en
-+ *                 0x50, la misma trampa que ya costo tiempo con el trasero).
-+ *                 Por defecto el driver la BUSCA leyendo la identificacion.
-+ *   mipi_switch   el frontal y el gran angular comparten el CSIPHY1 a traves
-+ *                 de un conmutador MIPI, y no se sabe que posicion es cual.
++ *   i2c_addr      the sensor address is not in the factory file
++ *                 (the only slaveAddr it carries is 0xa0, that is the EEPROM at
++ *                 0x50, the same trap that already cost time with the rear one).
++ *                 By default the driver SEARCHES for it by reading the ID.
++ *   mipi_switch   the front camera and the wide angle share CSIPHY1 through
++ *                 a MIPI switch, and which position is which is not known.
 + */
 +
 +#include <linux/clk.h>
@@ -356,16 +356,16 @@ module parameters, and are tested with rmmod/insmod:
 +#define S5K3T2_DATA_LANES	4
 +#define S5K3T2_BPP		10
 +
-+/* 845,71 MHz. La cuenta, y como se comprobo, en el comentario de arriba. */
++/* 845.71 MHz. The arithmetic, and how it was checked, in the comment above. */
 +#define S5K3T2_LINK_FREQ	845714286ULL
 +
 +#define S5K3T2_REG_CHIP_ID	CCI_REG16(0x0000)
 +#define S5K3T2_CHIP_ID		0x3142
 +
 +/*
-+ * Un solo registro manda la transmision y los dos volteos a la vez. El Android
-+ * de fabrica arranca con 0x0103, o sea transmitiendo y con los dos volteos
-+ * puestos: el modulo va montado del reves, como es normal en una frontal.
++ * A single register drives streaming and both flips at once. The factory
++ * Android starts with 0x0103, that is streaming and with both flips
++ * set: the module is mounted upside down, as is normal in a front camera.
 + */
 +#define S5K3T2_REG_CTRL_MODE	CCI_REG16(0x0100)
 +#define S5K3T2_MODE_STREAMING	BIT(8)
@@ -397,12 +397,12 @@ module parameters, and are tested with rmmod/insmod:
 +static int i2c_addr = -1;
 +module_param(i2c_addr, int, 0444);
 +MODULE_PARM_DESC(i2c_addr,
-+	"Direccion I2C de 7 bits del sensor. -1 (por defecto) = buscarla.");
++	"7-bit I2C address of the sensor. -1 (default) = search for it.");
 +
 +static int mipi_switch = -1;
 +module_param(mipi_switch, int, 0444);
 +MODULE_PARM_DESC(mipi_switch,
-+	"Conmutador MIPI compartido con el gran angular: 0, 1, o -1 para no tocarlo.");
++	"MIPI switch shared with the wide angle: 0, 1, or -1 to leave it alone.");
 +
 +static const s64 s5k3t2_link_freq_menu[] = {
 +	S5K3T2_LINK_FREQ,
@@ -417,9 +417,9 @@ module parameters, and are tested with rmmod/insmod:
 +};
 +
 +/*
-+ * El reparto exacto de los cuatro LDOs del WL2866D entre los cinco sensores
-+ * todavia no se sabe, y por eso el device tree los deja siempre encendidos.
-+ * Aqui se piden los tres carriles que si estan identificados.
++ * The exact assignment of the four WL2866D LDOs among the five sensors
++ * is not known yet, and that is why the device tree leaves them always on.
++ * Here the three lanes that are identified are requested.
 + */
 +static const char * const s5k3t2_supply_names[] = {
 +	"vdda",		/* analogica */
@@ -885,10 +885,10 @@ module parameters, and are tested with rmmod/insmod:
 +static const struct s5k3t2_mode s5k3t2_supported_modes[] = {
 +	{
 +		/*
-+		 * El modo combinado. Va primero a proposito: es el que ya se
-+		 * ha visto capturar en este SoC, y 5 MP son un tamano que el
-+		 * revelado por software puede seguir. Los 20 MP de abajo
-+		 * piden lo mismo al enlace pero cuadruplican el trabajo del
++		 * The binned mode. It comes first on purpose: it is the one that has
++		 * been seen capturing on this SoC, and 5 MP is a size that
++		 * software processing can keep up with. The 20 MP below
++		 * ask the same of the link but quadruple the work of the
 +		 * revelado.
 +		 */
 +		.width = 2592,
@@ -915,9 +915,9 @@ module parameters, and are tested with rmmod/insmod:
 +};
 +
 +/*
-+ * El orden del mosaico de Bayer no se puede deducir del fichero de fabrica, y
-+ * equivocarse solo estropea el color, no impide la captura. Va como parametro
-+ * para poder corregirlo mirando la primera foto, sin recompilar.
++ * The Bayer order cannot be deduced from the factory file, and
++ * getting it wrong only spoils the color, it does not prevent capture. It goes as a parameter
++ * so it can be corrected by looking at the first photo, without recompiling.
 + */
 +static const u32 s5k3t2_bayer_codes[] = {
 +	MEDIA_BUS_FMT_SGRBG10_1X10,
@@ -928,7 +928,7 @@ module parameters, and are tested with rmmod/insmod:
 +
 +static int bayer;
 +module_param(bayer, int, 0444);
-+MODULE_PARM_DESC(bayer, "Orden del mosaico: 0=GRBG 1=RGGB 2=BGGR 3=GBRG");
++MODULE_PARM_DESC(bayer, "Bayer order: 0=GRBG 1=RGGB 2=BGGR 3=GBRG");
 +
 +static u32 s5k3t2_get_format_code(void)
 +{
@@ -949,7 +949,7 @@ module parameters, and are tested with rmmod/insmod:
 +	int ret;
 +
 +	if (ctrl->id == V4L2_CID_VBLANK) {
-+		/* La exposicion no puede pasar del alto total del fotograma. */
++		/* The exposure cannot exceed the total frame height. */
 +		exposure_max = mode->height + ctrl->val - S5K3T2_EXPOSURE_MARGIN;
 +		__v4l2_ctrl_modify_range(s5k3t2->exposure,
 +					 s5k3t2->exposure->minimum,
@@ -1004,8 +1004,8 @@ module parameters, and are tested with rmmod/insmod:
 +		return ret;
 +
 +	/*
-+	 * LINK_FREQ y PIXEL_RATE no son opcionales: sin ellos CAMSS aborta con
-+	 * "Cannot get CSI2 transmitter's link frequency" y no se enciende nada.
++	 * LINK_FREQ and PIXEL_RATE are not optional: without them CAMSS aborts with
++	 * "Cannot get CSI2 transmitter's link frequency" and nothing powers on.
 +	 */
 +	s5k3t2->link_freq = v4l2_ctrl_new_int_menu(hdl, &s5k3t2_ctrl_ops,
 +						   V4L2_CID_LINK_FREQ, 0, 0,
@@ -1052,7 +1052,7 @@ module parameters, and are tested with rmmod/insmod:
 +
 +	if (hdl->error) {
 +		ret = hdl->error;
-+		dev_err(s5k3t2->dev, "no pude crear los controles: %d\n", ret);
++		dev_err(s5k3t2->dev, "could not create the controls: %d\n", ret);
 +		goto error;
 +	}
 +
@@ -1087,8 +1087,8 @@ module parameters, and are tested with rmmod/insmod:
 +		return ret;
 +
 +	/*
-+	 * Reinicio por programa antes de nada. Va aqui y no en la tabla porque
-+	 * necesita una espera detras, y las tablas se escriben de un tiron.
++	 * Software reset before anything else. It goes here and not in the table because
++	 * it needs a wait after it, and the tables are written in one go.
 +	 */
 +	ret = 0;
 +	cci_write(s5k3t2->regmap, S5K3T2_REG_PAGE, 0x4000, &ret);
@@ -1101,7 +1101,7 @@ module parameters, and are tested with rmmod/insmod:
 +	ret = cci_multi_reg_write(s5k3t2->regmap, s5k3t2_init,
 +				  ARRAY_SIZE(s5k3t2_init), NULL);
 +	if (ret) {
-+		dev_err(s5k3t2->dev, "fallo la tabla de inicializacion\n");
++		dev_err(s5k3t2->dev, "the init table failed\n");
 +		goto err_rpm_put;
 +	}
 +
@@ -1109,7 +1109,7 @@ module parameters, and are tested with rmmod/insmod:
 +	ret = cci_multi_reg_write(s5k3t2->regmap, reg_list->regs,
 +				  reg_list->num_regs, NULL);
 +	if (ret) {
-+		dev_err(s5k3t2->dev, "fallo la tabla del modo\n");
++		dev_err(s5k3t2->dev, "the mode table failed\n");
 +		goto err_rpm_put;
 +	}
 +
@@ -1118,8 +1118,8 @@ module parameters, and are tested with rmmod/insmod:
 +		goto err_rpm_put;
 +
 +	/*
-+	 * Los dos volteos van puestos, como hace el Android de fabrica: el
-+	 * modulo esta montado del reves.
++	 * Both flips are set, as the factory Android does: the
++	 * module is mounted upside down.
 +	 */
 +	ret = cci_write(s5k3t2->regmap, S5K3T2_REG_CTRL_MODE,
 +			S5K3T2_MODE_STREAMING | S5K3T2_VFLIP | S5K3T2_HFLIP,
@@ -1305,7 +1305,7 @@ module parameters, and are tested with rmmod/insmod:
 +	.link_validate = v4l2_subdev_link_validate,
 +};
 +
-+/* Lee la identificacion en una direccion concreta, sin usar el regmap. */
++/* Reads the ID at a given address, without going through the regmap. */
 +static int s5k3t2_probe_id_at(struct i2c_client *client, u8 addr, u16 *id)
 +{
 +	u8 reg[2] = { 0x00, 0x00 };
@@ -1326,9 +1326,9 @@ module parameters, and are tested with rmmod/insmod:
 +}
 +
 +/*
-+ * El fichero de fabrica NO trae la direccion del sensor -su unico slaveAddr es
-+ * la EEPROM-, asi que se busca leyendo la identificacion. Es la misma trampa
-+ * que con el trasero, donde el 0x50 "documentado" resulto ser la EEPROM y el
++ * The factory file does NOT carry the sensor address -its only slaveAddr is
++ * the EEPROM-, so it is found by reading the ID. It is the same trap
++ * as with the rear one, where the "documented" 0x50 turned out to be the EEPROM and the
 + * sensor estaba en 0x1a.
 + */
 +static int s5k3t2_find_sensor(struct s5k3t2 *s5k3t2, struct i2c_client *client)
@@ -1339,7 +1339,7 @@ module parameters, and are tested with rmmod/insmod:
 +
 +	if (i2c_addr >= 0) {
 +		client->addr = i2c_addr;
-+		dev_info(s5k3t2->dev, "direccion forzada por parametro: 0x%02x\n",
++		dev_info(s5k3t2->dev, "address forced by parameter: 0x%02x\n",
 +			 i2c_addr);
 +		return 0;
 +	}
@@ -1354,7 +1354,7 @@ module parameters, and are tested with rmmod/insmod:
 +		}
 +	}
 +
-+	/* Nada en las probables: barrido completo, y se dice quien contesta. */
++	/* Nothing at the likely ones: full sweep, and report who answers. */
 +	for (i = 0x08; i <= 0x77; i++) {
 +		if (s5k3t2_probe_id_at(client, i, &id))
 +			continue;
@@ -1398,7 +1398,7 @@ module parameters, and are tested with rmmod/insmod:
 +		return ret;
 +
 +	if (bus_cfg.bus.mipi_csi2.num_data_lanes != S5K3T2_DATA_LANES) {
-+		dev_err(s5k3t2->dev, "hacen falta %u carriles, el device tree dice %u\n",
++		dev_err(s5k3t2->dev, "%u lanes are needed, the device tree says %u\n",
 +			S5K3T2_DATA_LANES, bus_cfg.bus.mipi_csi2.num_data_lanes);
 +		ret = -EINVAL;
 +		goto endpoint_free;
@@ -1468,9 +1468,9 @@ module parameters, and are tested with rmmod/insmod:
 +	s5k3t2->dev = &client->dev;
 +
 +	/*
-+	 * Esto va lo primero, y no es cosmetico: es lo que deja el subdev
-+	 * colgado del device, y s5k3t2_power_on() lo busca ahi con
-+	 * dev_get_drvdata(). Encender antes de esta linea es una
++	 * This goes first, and it is not cosmetic: it is what leaves the subdev
++	 * hanging off the device, and s5k3t2_power_on() looks for it there with
++	 * in dev_get_drvdata(). Powering on before this line is a
 +	 * desreferencia a NULL nada mas arrancar.
 +	 */
 +	v4l2_i2c_subdev_init(&s5k3t2->sd, client, &s5k3t2_subdev_ops);
@@ -1478,24 +1478,24 @@ module parameters, and are tested with rmmod/insmod:
 +	s5k3t2->mclk = devm_v4l2_sensor_clk_get(s5k3t2->dev, NULL);
 +	if (IS_ERR(s5k3t2->mclk))
 +		return dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->mclk),
-+				     "no pude coger el MCLK\n");
++				     "could not get the MCLK\n");
 +
 +	freq = clk_get_rate(s5k3t2->mclk);
 +	if (freq != S5K3T2_MCLK_FREQ)
 +		return dev_err_probe(s5k3t2->dev, -EINVAL,
-+				     "el MCLK esta a %lu Hz y las tablas son para %lu\n",
++				     "the MCLK is at %lu Hz and the tables are for %lu\n",
 +				     freq, (unsigned long)S5K3T2_MCLK_FREQ);
 +
 +	ret = s5k3t2_check_hwcfg(s5k3t2);
 +	if (ret)
 +		return dev_err_probe(s5k3t2->dev, ret,
-+				     "el device tree no cuadra\n");
++				     "the device tree does not match\n");
 +
 +	s5k3t2->reset_gpio = devm_gpiod_get_optional(s5k3t2->dev, "reset",
 +						     GPIOD_OUT_HIGH);
 +	if (IS_ERR(s5k3t2->reset_gpio))
 +		return dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->reset_gpio),
-+				     "no pude coger el pin de reset\n");
++				     "could not get the reset pin\n");
 +
 +	for (i = 0; i < S5K3T2_NUM_SUPPLIES; i++)
 +		s5k3t2->supplies[i].supply = s5k3t2_supply_names[i];
@@ -1504,12 +1504,12 @@ module parameters, and are tested with rmmod/insmod:
 +				      s5k3t2->supplies);
 +	if (ret)
 +		return dev_err_probe(s5k3t2->dev, ret,
-+				     "no pude coger los reguladores\n");
++				     "could not get the regulators\n");
 +
 +	/*
-+	 * El conmutador MIPI que comparten la frontal y el gran angular. Se
-+	 * pide como opcional y solo se toca si lo mandan por parametro: no se
-+	 * conduce un pin cuya posicion correcta todavia no esta medida.
++	 * The MIPI switch shared by the front camera and the wide angle. It is
++	 * requested as optional and only touched if told to by parameter: a pin
++	 * whose correct position has not been measured yet is not driven.
 +	 */
 +	s5k3t2->mipi_switch_reg = devm_regulator_get_optional(s5k3t2->dev,
 +							      "mipi-switch");
@@ -1522,28 +1522,28 @@ module parameters, and are tested with rmmod/insmod:
 +			regulator_disable(s5k3t2->mipi_switch_reg);
 +		if (ret)
 +			dev_warn(s5k3t2->dev,
-+				 "no pude poner el conmutador MIPI a %d: %d\n",
++				 "could not set the MIPI switch to %d: %d\n",
 +				 mipi_switch, ret);
 +		else
 +			dev_info(s5k3t2->dev, "conmutador MIPI puesto a %d\n",
 +				 mipi_switch);
 +	}
 +
-+	/* Hay que alimentarlo y darle reloj antes de que conteste por I2C. */
++	/* It has to be powered and clocked before it answers over I2C. */
 +	ret = s5k3t2_power_on(s5k3t2->dev);
 +	if (ret)
 +		return ret;
 +
 +	ret = s5k3t2_find_sensor(s5k3t2, client);
 +	if (ret) {
-+		dev_err(s5k3t2->dev, "no encuentro el S5K3T2 en el bus\n");
++		dev_err(s5k3t2->dev, "cannot find the S5K3T2 on the bus\n");
 +		goto power_off;
 +	}
 +
 +	s5k3t2->regmap = devm_cci_regmap_init_i2c(client, 16);
 +	if (IS_ERR(s5k3t2->regmap)) {
 +		ret = dev_err_probe(s5k3t2->dev, PTR_ERR(s5k3t2->regmap),
-+				    "no pude arrancar el CCI\n");
++				    "could not start the CCI\n");
 +		goto power_off;
 +	}
 +
@@ -1562,7 +1562,7 @@ module parameters, and are tested with rmmod/insmod:
 +
 +	ret = s5k3t2_init_controls(s5k3t2);
 +	if (ret) {
-+		dev_err_probe(s5k3t2->dev, ret, "fallaron los controles\n");
++		dev_err_probe(s5k3t2->dev, ret, "the controls failed\n");
 +		goto power_off;
 +	}
 +
@@ -1586,7 +1586,7 @@ module parameters, and are tested with rmmod/insmod:
 +
 +	ret = v4l2_async_register_subdev_sensor(&s5k3t2->sd);
 +	if (ret < 0) {
-+		dev_err_probe(s5k3t2->dev, ret, "no pude registrar el subdev\n");
++		dev_err_probe(s5k3t2->dev, ret, "could not register the subdev\n");
 +		goto subdev_cleanup;
 +	}
 +
@@ -1661,25 +1661,25 @@ module parameters, and are tested with rmmod/insmod:
  };
  
 +/*
-+ * Los 2 GiB/s de antes no aguantan: con el sensor frontal transmitiendo y la
-+ * CPU tocando memoria -que es justo lo que pasa cuando libcamera revela por
-+ * software- el receptor CSI-2 se queda sin FIFO a los pocos segundos y la
-+ * tuberia se para. Se ve como desbordamiento de carril en
-+ * CSID_CSI2_RX_IRQ_STATUS, seguido de fallos del SMMU.
++ * The previous 2 GiB/s are not enough: with the front sensor streaming and the
++ * CPU touching memory -which is exactly what happens when libcamera develops in
++ * software- the CSI-2 receiver runs out of FIFO after a few seconds and the
++ * pipeline stalls. It shows up as a lane overflow in
++ * CSID_CSI2_RX_IRQ_STATUS, followed by SMMU faults.
 + *
-+ * La medida que lo arregla es 4 GiB/s, y esta hecha en aparato subiendo la
-+ * escalera de uno en uno: a 2 y a 3 se para, a 4 y a 6 aguanta limpio. Subir
-+ * en cambio el reloj del CAMNOC dejando la peticion vieja no cambia nada, asi
-+ * que lo que falta es la peticion al bus, no el reloj.
++ * The figure that fixes it is 4 GiB/s, and it is measured on the device by
++ * climbing the ladder one step at a time: at 2 and 3 it stalls, at 4 and 6 it runs clean. Raising
++ * the CAMNOC clock instead while leaving the old request in place changes nothing, so
++ * what is missing is the bus request, not the clock.
 + *
-+ * Y no es el trafico de la camara: el sensor escribe unos 190 MB/s, veinte
-+ * veces menos. Lo que se compra es un punto de trabajo del bus y de la DDR en
-+ * el que el receptor sigue atendido aunque la memoria este ocupada. Por eso un
++ * And it is not the camera traffic: the sensor writes about 190 MB/s, twenty
++ * times less. What this buys is an operating point of the bus and of the DDR in
++ * which the receiver keeps being served even while memory is busy. That is why a
 + * modelo calculado a partir de resolucion x fotogramas x bits daria ~0,2 GB/s
-+ * y empeoraria las cosas.
++ * and it would make things worse.
 + *
-+ * De sm7150-mainline/linux PR #59, medido en un Xiaomi Mi 9T (davinci) con
-+ * este mismo SoC y este mismo sensor.
++ * From sm7150-mainline/linux PR #59, measured on a Xiaomi Mi 9T (davinci) with
++ * this same SoC and this same sensor.
 + */
  static const struct resources_icc icc_res_sm7150[] = {
  	{

@@ -49,20 +49,20 @@ this needs no changes outside the driver.
  		},
 -		.clock = { "cphy_rx_src", "csiphy0", "csiphy0_timer_src", "csiphy0_timer" },
 +		/*
-+		 * Los cuatro CSIPHY pedian listas distintas y ninguna completa:
-+		 * el 0 y el 3 cuatro relojes, el 1 y el 2 solo dos. El sdm845
-+		 * -que es el CSIPHY hermano y SI captura en mainline- pide los
-+		 * mismos siete en los cuatro. Faltaban camnoc_axi,
-+		 * slow_ahb_src, cpas_ahb, cphy_rx_src y el csiphyN_timer_src.
++		 * The four CSIPHYs asked for different lists and none complete:
++		 * 0 and 3 four clocks, 1 and 2 only two. The sdm845
++		 * -which is the sibling CSIPHY and DOES capture in mainline- asks for the
++		 * same seven on all four. Missing were camnoc_axi,
++		 * slow_ahb_src, cpas_ahb, cphy_rx_src and csiphyN_timer_src.
 +		 *
-+		 * Los levantan de rebote el VFE y el CSID, asi que durante la
-+		 * transmision estan encendidos, pero el CSIPHY los necesita YA
-+		 * cuando se enciende a si mismo y lee su registro de version:
-+		 * en una prueba ese registro devolvio 0x00000000 en vez de
-+		 * 0x40010000, que es el sintoma exacto de un bus de registros
-+		 * sin reloj.
++		 * The VFE and the CSID bring them up as a side effect, so during the
++		 * transmission they are on, but the CSIPHY needs them ALREADY
++		 * when it powers itself up and reads its version register:
++		 * in one test that register returned 0x00000000 instead of
++		 * 0x40010000, which is the exact symptom of a register bus
++		 * with no clock.
 +		 *
-+		 * El device tree del SM7150 declara los siete nombres, asi que
++		 * The SM7150 device tree declares the seven names, so
 +		 * esto no necesita nada mas.
 +		 */
 +		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
@@ -121,10 +121,10 @@ this needs no changes outside the driver.
  		},
 -		.clock = { "csiphy3", "csiphy3_timer_src", "csiphy3_timer", "cphy_rx_src" },
 +		/*
-+		 * Aqui ademas las tasas estaban DESCOLOCADAS respecto a los
-+		 * nombres: la unica que se usa es la de "csiphy3_timer" -es la
-+		 * que casa por nombre en rate_set- y tenia {0}, mientras los
-+		 * 384/400 MHz iban a parar a "cphy_rx_src", que no lleva tasa.
++		 * Here the rates were also MISALIGNED with respect to the
++		 * names: the only one used is that of "csiphy3_timer" -it is the
++		 * which matches by name in rate_set- and had {0}, while the
++		 * 384/400 MHz ended up on "cphy_rx_src", which carries no rate.
 +		 */
 +		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
 +			   "cphy_rx_src", "csiphy3", "csiphy3_timer_src",

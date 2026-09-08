@@ -27,7 +27,7 @@ WITH NO SOUND CARD. It happened on 2026-08-11 with r67 and the kernel had to be
 reinstalled over fastboot. It is triggered by hand, which also allows testing
 without rebooting:
 
-    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/register_topologies
 
 --- a/sound/soc/qcom/qdsp6/q6core.c
 +++ b/sound/soc/qcom/qdsp6/q6core.c
@@ -48,7 +48,7 @@ without rebooting:
 +#define AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS	0x00012925
 +#define AVCS_CMD_SHARED_MEM_UNMAP_REGIONS	0x00012926
 +
-+/* Pool de 4 KiB, el que usan el resto de servicios para esto. */
++/* 4 KiB pool, the one the rest of the services use for this. */
 +#define ADSP_MEMORY_MAP_SHMEM8_4K_POOL		3
  #define AVCS_CMD_DEREGISTER_TOPOLOGIES	0x0001292a
  #define AVCS_CMD_GET_FWK_VERSION	0x001292c
@@ -94,12 +94,12 @@ without rebooting:
  			break;
 +		case AVCS_CMD_SHARED_MEM_MAP_REGIONS:
 +			/*
-+			 * Solo llega aqui si el mapeo FALLA: cuando va bien, la
-+			 * respuesta es AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS, con
-+			 * el asa. Sin este caso, un rechazo se veia como un
-+			 * tiempo agotado y no se sabia cual de las dos cosas era.
++			 * Only gets here if the mapping FAILS: when it works, the
++			 * reply is AVCS_CMDRSP_SHARED_MEM_MAP_REGIONS, with
++			 * the handle. Without this case, a rejection looked like a
++			 * timeout and there was no telling which of the two it was.
 +			 */
-+			dev_err(&adev->dev, "el DSP rechaza mapear memoria: %d\n",
++			dev_err(&adev->dev, "the DSP refuses to map memory: %d\n",
 +				result->status);
 +			core->resp_received = true;
 +			break;
@@ -108,7 +108,7 @@ without rebooting:
 +			break;
  		case AVCS_CMD_REGISTER_TOPOLOGIES:
  			/*
- 			 * Nadie miraba esta respuesta: q6core_register_topologies
+ 			 * Nobody looked at this response: q6core_register_topologies
 @@ -128,6 +171,13 @@
  		}
  		break;
@@ -132,9 +132,9 @@ without rebooting:
 +	int rc;
 +
 +	/*
-+	 * Q6_READY_TIMEOUT_MS son 100 ms, pensados para preguntas triviales.
-+	 * Mapear memoria en el DSP puede tardar mas, y quedarse corto se
-+	 * confunde con un rechazo.
++	 * Q6_READY_TIMEOUT_MS is 100 ms, meant for trivial queries.
++	 * Mapping memory in the DSP can take longer, and falling short gets
++	 * confused with a rejection.
 +	 */
 +	rc = wait_event_timeout(core->wait, core->resp_received,
 +				msecs_to_jiffies(1000));
@@ -146,9 +146,9 @@ without rebooting:
 +}
 +
 +/*
-+ * El DSP no acepta el bloque de topologias pegado al paquete: hay que dejarlo
++ * The DSP does not accept the topology block glued to the packet: it has to be left
 + * en memoria y pasarle un asa. Enviandolo en banda contesta ADSP_EBADPARAM (2),
-+ * que es lo que pasaba con el parche tal cual venia de aguas arriba.
++ * which is what happened with the patch as it came from upstream.
 + */
 +static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)
 +{
@@ -237,22 +237,22 @@ without rebooting:
 +	int pkt_size, rc;
 +
 +	/*
-+	 * El dispositivo APR viene sin mascara de DMA, y dma_alloc_attrs()
-+	 * avisa (WARNING en kernel/dma/mapping.c) y devuelve NULL. El DSP
-+	 * direcciona en 32 bits para estas regiones.
++	 * The APR device comes with no DMA mask, and dma_alloc_attrs()
++	 * warns (WARNING in kernel/dma/mapping.c) and returns NULL. The DSP
++	 * addresses these regions with 32 bits.
 +	 */
 +	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
 +	if (rc) {
-+		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++		dev_err(dev, "could not set the DMA mask: %d\n", rc);
 +		return rc;
 +	}
  
 -	pkt_size = APR_HDR_SIZE + sizeof(*cmd) + size;
 +	/*
-+	 * El DSP solo mapea regiones de un multiplo de 4 KiB. El bloque de
-+	 * topologias son 1316 bytes, y pedir ese tamano tal cual hace que
-+	 * conteste ADSP_EBADPARAM (2). Se redondea la region hacia arriba; el
-+	 * tamano REAL del bloque va aparte, en payload_size.
++	 * The DSP only maps regions of a multiple of 4 KiB. The topology
++	 * block is 1316 bytes, and asking for that size as-is makes it
++	 * answer ADSP_EBADPARAM (2). The region is rounded up; the
++	 * REAL size of the block goes separately, in payload_size.
 +	 */
 +	map_size = ALIGN(size, SZ_4K);
  
@@ -271,7 +271,7 @@ without rebooting:
 +
 +	rc = q6core_map_memory(core, phys, map_size);
 +	if (rc) {
-+		dev_err(dev, "no se pudo mapear la memoria del DSP: %d\n", rc);
++		dev_err(dev, "could not map the DSP memory: %d\n", rc);
 +		goto libera;
 +	}
 +
@@ -317,7 +317,7 @@ without rebooting:
  	return 0;
  }
  
-+static ssize_t registrar_topologias_store(struct device *dev,
++static ssize_t register_topologies_store(struct device *dev,
 +					  struct device_attribute *attr,
 +					  const char *buf, size_t count)
 +{
@@ -326,28 +326,28 @@ without rebooting:
 +	dev_info(dev, "registro a peticion: %d\n", rc);
 +	return rc ? rc : count;
 +}
-+static DEVICE_ATTR_WO(registrar_topologias);
++static DEVICE_ATTR_WO(register_topologies);
 +
  static int q6core_probe(struct apr_device *adev)
  {
  	g_core = kzalloc_obj(*g_core);
 @@ -509,7 +707,18 @@
- 	 * el movil arrancaba con "--- no soundcards ---" y ni un dispositivo
- 	 * en el bus apr. Paso el 2026-08-11 y dejo el telefono mudo.
+ 	 * the phone booted with "--- no soundcards ---" and not a single device
+ 	 * on the apr bus. It happened on 2026-08-11 and left the phone mute.
  	 */
 -	q6core_load_and_register_topologies(&adev->dev);
 +	/*
-+	 * NO se registra al arrancar. Si el registro deja al ADSP tocado, el
-+	 * arranque siguiente se queda sin dominio de audio y el movil aparece
-+	 * SIN TARJETA DE SONIDO; recuperarse de eso cuesta reinstalar el kernel
-+	 * y reiniciar. Paso el 2026-08-11 con r67.
++	 * It is NOT registered at boot. If the registration leaves the ADSP damaged, the
++	 * next boot ends up with no audio domain and the phone comes up
++	 * WITH NO SOUND CARD; recovering from that costs a kernel reinstall
++	 * and a reboot. Happened on 2026-08-11 with r67.
 +	 *
-+	 * Ademas asi se puede probar cuantas veces haga falta sin reiniciar:
++	 * Also this way it can be tested as many times as needed without rebooting:
 +	 *
-+	 *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
++	 *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/register_topologies
 +	 */
-+	if (device_create_file(&adev->dev, &dev_attr_registrar_topologias))
-+		dev_warn(&adev->dev, "sin disparador de registro en sysfs\n");
++	if (device_create_file(&adev->dev, &dev_attr_register_topologies))
++		dev_warn(&adev->dev, "no registration trigger in sysfs\n");
  
  	return 0;
  }

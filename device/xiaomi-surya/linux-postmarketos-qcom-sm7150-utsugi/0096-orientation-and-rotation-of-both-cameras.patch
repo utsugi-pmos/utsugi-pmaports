@@ -75,13 +75,13 @@ Rear 270 and front 90 it is.
 +	/*
 +	 * ORIENTACION Y ROTACION.
 +	 *
-+	 * Sin esto libcamera avisa "Failed to retrieve the camera location" y
-+	 * "Rotation control not available, default to 0 degrees", y la imagen
-+	 * sale tumbada en el visor: el sensor esta montado girado respecto al
++	 * Without this libcamera warns "Failed to retrieve the camera location" and
++	 * "Rotation control not available, default to 0 degrees", and the image
++	 * comes out lying down in the viewfinder: the sensor is mounted rotated with respect to the
 +	 * movil y nadie se lo dice a nadie.
 +	 *
-+	 * Los dos valores vienen del device tree, que es donde estan porque
-+	 * dependen de la placa y no del chip.
++	 * The two values come from the device tree, which is where they are because
++	 * they depend on the board and not on the chip.
 +	 */
 +	ret = v4l2_fwnode_device_parse(&s->client->dev, &props);
 +	if (ret) {
@@ -97,7 +97,7 @@ Rear 270 and front 90 it is.
 +
  	if (h->error) {
  		ret = h->error;
- 		dev_err(&s->client->dev, "fallo al crear los controles: %d\n", ret);
+ 		dev_err(&s->client->dev, "failed to create the controls: %d\n", ret);
 --- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
 @@ -274,6 +274,28 @@
@@ -105,23 +105,23 @@ Rear 270 and front 90 it is.
  		reg = <0x1a>;
  
 +		/*
-+		 * MEDIDO, no deducido: se puso el movil de pie apuntando a la
-+		 * habitacion y se miro la captura en crudo. La imagen del sensor
-+		 * hay que girarla 90 grados EN SENTIDO HORARIO para que quede
-+		 * derecha -el texto de una bolsa se lee, la taza esta de pie y
-+		 * la esquina de la pared sale vertical-.
++		 * MEASURED, not inferred: the phone was stood upright pointing at the
++		 * room and the raw capture was inspected. The sensor image
++		 * has to be rotated 90 degrees CLOCKWISE for it to come out
++		 * right -the text on a bag reads, the mug stands upright and
++		 * the corner of the wall comes out vertical-.
 +		 *
-+		 * EL SIGNO, CORREGIDO CON LA PRUEBA EN LA APLICACION.
++		 * THE SIGN, CORRECTED WITH THE TEST IN THE APPLICATION.
 +		 *
-+		 * La medida de la imagen cruda es la de arriba y no cambia. Lo
-+		 * que estaba mal era traducirla al numero del device tree: el
-+		 * binding define la rotacion como angulo ANTIHORARIO entre dos
-+		 * sistemas de referencia, mientras que orientationFromRotation()
-+		 * de libcamera documenta su argumento como horario. Elegi el
-+		 * criterio de la funcion y salio al reves.
++		 * The measurement of the raw image is the one above and does not change. What
++		 * was wrong was translating it to the device tree number: the
++		 * binding defines the rotation as a COUNTERCLOCKWISE angle between two
++		 * reference systems, whereas orientationFromRotation()
++		 * of libcamera documents its argument as clockwise. I chose the
++		 * criterion of the function and it came out backwards.
 +		 *
-+		 * Con 90 la imagen aparecia girada 180 grados en la camara de
-+		 * KDE, que es exactamente la diferencia entre 90 y 270.
++		 * With 90 the image appeared rotated 180 degrees in the KDE
++		 * camera, which is exactly the difference between 90 and 270.
 +		 */
 +		rotation = <270>;
 +		orientation = <1>;	/* trasera */
@@ -134,12 +134,12 @@ Rear 270 and front 90 it is.
  		reg = <0x10>;
  
 +		/*
-+		 * Medida igual que la trasera y con la misma escena. Esta va al
-+		 * reves que la trasera: hay que girarla 90 grados en sentido
-+		 * ANTIHORARIO. Es lo esperable, porque las dos camaras miran a
++		 * Measured the same as the rear one and with the same scene. This one goes the
++		 * other way round from the rear one: it has to be rotated 90 degrees
++		 * COUNTERCLOCKWISE. That is to be expected, because the two cameras look at
 +		 * lados opuestos y van montadas en espejo.
 +		 *
-+		 * Mismo cambio de signo que en la trasera, por el mismo motivo.
++		 * Same sign change as on the rear one, for the same reason.
 +		 */
 +		rotation = <90>;
 +		orientation = <0>;	/* frontal */

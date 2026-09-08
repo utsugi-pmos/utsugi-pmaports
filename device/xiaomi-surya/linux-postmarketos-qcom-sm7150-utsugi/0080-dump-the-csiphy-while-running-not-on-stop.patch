@@ -35,33 +35,33 @@ It is the first measurement that separates those two things.
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:09:22.934201082 +0200
 @@ -1060,6 +1060,61 @@
  MODULE_PARM_DESC(pulso_terminacion,
- 	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
+ 	"Write 0x01 to CTRL33 (0x0884), the termination pulse mainline leaves out. 1 = yes.");
  
 +/*
-+ * VOLCAR EL PHY EN MARCHA, NO AL PARAR.
++ * DUMP THE PHY WHILE RUNNING, NOT WHEN STOPPING.
 + *
-+ * El volcado del 0079 se hace en csiphy_lanes_disable(), o sea CUANDO EL SENSOR
-+ * YA HA DEJADO DE EMITIR. Los bits de ERROR sobreviven enclavados, pero los de
-+ * ESTADO -como el del carril de reloj- reflejan el final, no la transmision.
++ * The 0079 dump is done in csiphy_lanes_disable(), that is WHEN THE SENSOR
++ * HAS ALREADY STOPPED TRANSMITTING. The ERROR bits survive latched, but the
++ * STATUS ones -like the clock lane one- reflect the end, not the transmission.
 + *
-+ * Por eso el registro del carril de reloj salia igual emitiendo que mudo: se
-+ * estaba mirando en los dos casos cuando ya no habia nada. Es un fallo de la
++ * That is why the clock lane register read the same transmitting as silent: it
++ * was being looked at in both cases when there was nothing left. It is a bug in the
 + * medida, no un dato.
 + *
-+ * Con esto se puede volcar EN CUALQUIER MOMENTO desde el espacio de usuario,
-+ * con el sensor transmitiendo de verdad, que es la unica forma de ver si el
++ * With this it can be dumped AT ANY MOMENT from userspace,
++ * with the sensor really transmitting, which is the only way to see if the
 + * carril de reloj llega a entrar en alta velocidad.
 + */
 +static struct csiphy_device *phy_guardado;
 +
-+static void volcar_phy(struct csiphy_device *csiphy, const char *cuando)
++static void dump_phy(struct csiphy_device *csiphy, const char *when)
 +{
 +	int a;
 +
 +	for (a = 0; a < 0x900; a += 32)
 +		dev_info(csiphy->camss->dev,
 +			 "csiphy%d %s %03x: %08x %08x %08x %08x %08x %08x %08x %08x\n",
-+			 csiphy->id, cuando, a,
++			 csiphy->id, when, a,
 +			 readl_relaxed(csiphy->base + a + 0x00),
 +			 readl_relaxed(csiphy->base + a + 0x04),
 +			 readl_relaxed(csiphy->base + a + 0x08),
@@ -77,7 +77,7 @@ It is the first measurement that separates those two things.
 +	int ret = param_set_int(val, kp);
 +
 +	if (!ret && phy_guardado)
-+		volcar_phy(phy_guardado, "EN MARCHA");
++		dump_phy(phy_guardado, "EN MARCHA");
 +
 +	return ret;
 +}
@@ -90,11 +90,11 @@ It is the first measurement that separates those two things.
 +static int volcar_ahora;
 +module_param_cb(volcar_ahora, &volcar_ahora_ops, &volcar_ahora, 0644);
 +MODULE_PARM_DESC(volcar_ahora,
-+	"Escribir cualquier cosa para volcar el CSIPHY AHORA, con el sensor emitiendo.");
++	"Write anything to dump the CSIPHY NOW, with the sensor transmitting.");
 +
- static int volcado_csiphy;
- module_param(volcado_csiphy, int, 0644);
- MODULE_PARM_DESC(volcado_csiphy,
+ static int csiphy_dump;
+ module_param(csiphy_dump, int, 0644);
+ MODULE_PARM_DESC(csiphy_dump,
 @@ -1298,6 +1353,8 @@
  	u8 val, ctrl5;
  	int i;

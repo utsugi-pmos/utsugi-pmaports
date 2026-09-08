@@ -59,18 +59,18 @@ recompiling.
  }
  
 +/*
-+ * Ajustables en caliente para poder probar variantes del bloque comun del
-+ * CSIPHY sin recompilar ni reiniciar. -1 = lo que corresponda al SoC.
++ * Tunable at runtime so variants of the common block of the
++ * CSIPHY can be tried without recompiling or rebooting. -1 = whatever matches the SoC.
 + */
 +static int ctrl7_valor = -1;
 +module_param(ctrl7_valor, int, 0644);
 +MODULE_PARM_DESC(ctrl7_valor,
-+	"Valor de CSI_COMMON_CTRL7 (0x81C). -1 = 0x52 en SM7150, 0x02 en el resto.");
++	"Value of CSI_COMMON_CTRL7 (0x81C). -1 = 0x52 on SM7150, 0x02 elsewhere.");
 +
 +static int secuencia_ctrl0 = -1;
 +module_param(secuencia_ctrl0, int, 0644);
 +MODULE_PARM_DESC(secuencia_ctrl0,
-+	"CTRL0 (0x800): 1 = 0x03, esperar 1 ms, 0x02 (como Qualcomm v1.2). 0 = 0x00 (mainline). -1 = segun SoC.");
++	"CTRL0 (0x800): 1 = 0x03, wait 1 ms, 0x02 (like Qualcomm v1.2). 0 = 0x00 (mainline). -1 = depending on SoC.");
 +
  static void csiphy_lanes_enable(struct csiphy_device *csiphy,
  				struct csiphy_config *cfg,
@@ -81,11 +81,11 @@ recompiling.
  
 -	val = 0x02;
 +	/*
-+	 * El SM7150 lleva un CSIPHY v1.2 y estos dos registros del bloque comun
-+	 * NO valen lo mismo que en el sdm845 (v1.0/v1.1), que es de donde salen
-+	 * los numeros que hay escritos a pelo aqui.
++	 * The SM7150 has a CSIPHY v1.2 and these two common block registers
++	 * are NOT the same as on the sdm845 (v1.0/v1.1), which is where
++	 * the numbers hardcoded here come from.
 +	 *
-+	 * Del driver de Qualcomm del kernel Android del propio surya,
++	 * From the Qualcomm driver in the Android kernel of the surya itself,
 +	 * cam_csiphy_1_2_hwreg.h, csiphy_common_reg_1_2[]:
 +	 *
 +	 *     {0x0814, 0xd5, ..., CSIPHY_LANE_ENABLE}     <- ctrl5, coincide
@@ -94,19 +94,19 @@ recompiling.
 +	 *     {0x0800, 0x03, delay 1 ms}                  <- ctrl0: 0x03 y esperar
 +	 *     {0x0800, 0x02, ..., CSIPHY_2PH_REGS}        <- luego 0x02
 +	 *
-+	 * Y en las versiones viejas:
++	 * And in the old versions:
 +	 *
 +	 *     csiphy_common_reg_1_0  ->  {0x081C, 0x02}, {0x0800, 0x01}, {0x0800, 0x00}
 +	 *     csiphy_common_reg_1_1  ->  igual
 +	 *
-+	 * O sea que mainline tiene tabla de carriles propia del SM7150
-+	 * (lane_regs_sm7150) pero el bloque comun se quedo con los valores del
-+	 * sdm845. Encaja con lo medido: el PHY ve actividad en los carriles
-+	 * -para el sensor por I2C y las interrupciones caen a cero- pero no
-+	 * consigue un solo sincronismo de inicio, y al CSID no le llega nada.
++	 * That is, mainline has a lane table of its own for the SM7150
++	 * (lane_regs_sm7150) but the common block was left with the values of the
++	 * sdm845. It matches what was measured: the PHY sees activity on the lanes
++	 * -stop the sensor over I2C and the interrupts drop to zero- but it does not
++	 * get a single start-of-transmission sync, and nothing reaches the CSID.
 +	 *
-+	 * Los dos valores van como parametros para poder probar variantes en
-+	 * caliente: en este movil cada reinicio cuesta caro.
++	 * Both values are module parameters so variants can be tried at
++	 * runtime: on this phone every reboot is expensive.
 +	 */
 +	val = ctrl7_valor >= 0 ? ctrl7_valor :
 +	      (csiphy->camss->res->version == CAMSS_7150 ? 0x52 : 0x02);

@@ -21,15 +21,15 @@ Two traces are added:
  			break;
 +		case AVCS_CMD_REGISTER_TOPOLOGIES:
 +			/*
-+			 * Nadie miraba esta respuesta: q6core_register_topologies
-+			 * hace apr_send_pkt() y se va. Si el DSP rechaza el
-+			 * registro, la topologia no queda disponible y el fallo
-+			 * aparece mucho despues y muy lejos, al confirmarla
-+			 * (VSS_IVOCPROC_CMD_TOPOLOGY_COMMIT falla con error 1).
++			 * Nobody looked at this response: q6core_register_topologies
++			 * does apr_send_pkt() and leaves. If the DSP rejects the
++			 * registration, the topology is not available and the
++			 * failure shows up much later and far away, on commit
++			 * (VSS_IVOCPROC_CMD_TOPOLOGY_COMMIT fails with error 1).
 +			 */
 +			if (result->status)
 +				dev_err(&adev->dev,
-+					"el DSP rechaza registrar las topologias: %d\n",
++					"the DSP refuses to register the topologies: %d\n",
 +					result->status);
 +			else
 +				dev_info(&adev->dev, "topologias registradas\n");
@@ -42,7 +42,7 @@ Two traces are added:
  	}
  
  	size = *(const u32 *) (fw->data + topo_off);
-+	dev_info(dev, "registrando topologias: %u bytes desde %s (adsp %s)\n",
++	dev_info(dev, "registering topologies: %u bytes from %s (adsp %s)\n",
 +		 size, fw_name,
 +		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
  	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);

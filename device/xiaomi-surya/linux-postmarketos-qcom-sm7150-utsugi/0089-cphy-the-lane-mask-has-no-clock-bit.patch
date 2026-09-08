@@ -35,10 +35,10 @@ one of the operation that exposes it.
  
 -	lane_mask = CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;
 +	/*
-+	 * El bit del carril de reloj solo existe en D-PHY. En C-PHY la mascara
-+	 * son los trios y nada mas, que es lo que hace el driver de Qualcomm:
++	 * The clock lane bit only exists in D-PHY. In C-PHY the mask
++	 * is the trios and nothing else, which is what the Qualcomm driver does:
 +	 *     adj_lane_mask = lane_mask & LANE_MASK_3PH;
-+	 * sin quitar reloj ni desplazar.
++	 * without removing clock or shifting.
 +	 */
 +	lane_mask = lane_cfg->cphy ? 0 :
 +		    CSIPHY_3PH_CMN_CSI_COMMON_CTRL5_CLK_ENABLE;
@@ -53,13 +53,13 @@ one of the operation that exposes it.
 -	for (i = 0; i < c->num_data; i++)
 -		val |= BIT(c->data[i].pos * 2);
 +	/*
-+	 * C-PHY no tiene carril de reloj: los trios van autosincronizados. Asi
-+	 * que ni se pone CLK_ENABLE ni se cuenta de dos en dos -el paso *2 es
-+	 * el de las parejas de D-PHY-, sino un bit por trio.
++	 * C-PHY has no clock lane: the trios are self-synchronised. So
++	 * neither CLK_ENABLE is set nor is it counted two by two -the *2 step is
++	 * the D-PHY pair one-, but one bit per trio.
 +	 *
-+	 * Medido antes de esto en la trasera: ctrl5 = 0x95, o sea el bit 7 del
-+	 * reloj mas las posiciones dobladas, con el sensor emitiendo en tres
-+	 * fases. Lo correcto para tres trios es 0x07.
++	 * Measured before this on the rear one: ctrl5 = 0x95, that is bit 7 of the
++	 * clock plus the doubled positions, with the sensor transmitting on three
++	 * phases. The correct value for three trios is 0x07.
 +	 */
 +	if (cfg->cphy) {
 +		val = 0;
@@ -79,7 +79,7 @@ one of the operation that exposes it.
   * @clk:      clock lane configuration (only for D-PHY)
   */
  struct csiphy_lanes_cfg {
-+	/* enlace de tres fases: los trios no llevan carril de reloj */
++	/* three-phase link: the trios carry no clock lane */
 +	u8 cphy;
  	int num_data;
  	struct csiphy_lane *data;

@@ -40,46 +40,46 @@ recompiling.
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 01:10:47.338745677 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 01:11:11.798443774 +0200
 @@ -1080,6 +1080,11 @@
-  * reiniciar, que en este movil cuesta caro: se cuelga uno de cada cuatro
+  * reboot, which is expensive on this phone: one boot in four hangs
   * arranques.
   */
 +static int pulso_terminacion = 1;
 +module_param(pulso_terminacion, int, 0644);
 +MODULE_PARM_DESC(pulso_terminacion,
-+	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
++	"Write 0x01 to CTRL33 (0x0884), the termination pulse mainline leaves out. 1 = yes.");
 +
- static int releer_registros;
- module_param(releer_registros, int, 0644);
- MODULE_PARM_DESC(releer_registros,
+ static int readback_registers;
+ module_param(readback_registers, int, 0644);
+ MODULE_PARM_DESC(readback_registers,
 @@ -1369,6 +1374,37 @@
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
  	}
  
 +	/*
-+	 * EL PULSO DE TERMINACION QUE FALTABA.
++	 * THE MISSING TERMINATION PULSE.
 +	 *
-+	 * CTRLn(33), o sea 0x0884, vale 0x01 en la secuencia comun del
-+	 * fabricante y mainline NO LO ESCRIBE NUNCA. Sin el, el PHY se queda
-+	 * pinzado a nivel superior: el sensor transmite, el PHY oye los
-+	 * carriles, y al CSID no le llega ni un sincronismo de inicio.
++	 * CTRLn(33), that is 0x0884, is 0x01 in the common sequence of the
++	 * vendor and mainline NEVER WRITES IT. Without it, the PHY stays
++	 * clamped at the upper level: the sensor transmits, the PHY hears the
++	 * lanes, and not a single start sync reaches the CSID.
 +	 *
-+	 * Es exactamente el fallo que se veia aqui, y lo describe igual quien
-+	 * lo encontro en un SM7125 (Atoll, CSIPHY v1.2.2), que es el hermano de
-+	 * este SoC:
++	 * It is exactly the failure seen here, and it is described the same way by whoever
++	 * found it on an SM7125 (Atoll, CSIPHY v1.2.2), which is the sibling of
++	 * this SoC:
 +	 *
-+	 *   "sensor s_stream(1) + escrituras CCI + reguladores completan, pero
-+	 *    el contador de IRQ del CSID0 se queda a cero durante un STREAMON de
-+	 *    varios segundos y el fichero de captura son 0 bytes"
++	 *   "sensor s_stream(1) + CCI writes + regulators complete, but
++	 *    the CSID0 IRQ counter stays at zero during a STREAMON of
++	 *    several seconds and the capture file is 0 bytes"
 +	 *
-+	 * En la v1.2.1 (lane_regs_sm8250) estos terminadores van repetidos
-+	 * dentro de la tabla de carriles; en la v1.2 y la v1.2.2 van una sola
-+	 * vez en el bloque comun, que es justo el trozo que mainline escribe a
++	 * On v1.2.1 (lane_regs_sm8250) these terminators are repeated
++	 * inside the lane table; on v1.2 and v1.2.2 they go a single
++	 * time in the common block, which is exactly the part mainline writes to
 +	 * mano y donde se quedaron fuera.
 +	 *
-+	 * Nuestra lane_regs_sm7150 escribe 0x0800 = 0x02 cinco veces (una por
-+	 * carril), asi que ese ya estaba; 0x0884 no aparece ni una vez.
++	 * Our lane_regs_sm7150 writes 0x0800 = 0x02 five times (one per
++	 * lane), so that one was already there; 0x0884 does not appear even once.
 +	 *
-+	 * Ajustable en caliente para poder confirmar la atribucion sin
++	 * Adjustable at runtime to be able to confirm the attribution without
 +	 * recompilar.
 +	 */
 +	if (pulso_terminacion)

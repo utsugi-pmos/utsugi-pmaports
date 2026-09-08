@@ -13,15 +13,15 @@ even though the feature handshake completes.
  			watch_add_writeq(perif->cntl_fd, &perif->cntlq);
 +
 +			/*
-+			 * Enviar las mascaras al peripheral recien encontrado,
-+			 * igual que hace la ruta rpmsg. Sin esto el modem nunca
-+			 * sabe que debe emitir y su canal de datos permanece
-+			 * mudo aunque el saludo de caracteristicas se complete.
++			 * Send the masks to the newly found peripheral,
++			 * just like the rpmsg path does. Without this the modem never
++			 * knows that it must emit and its data channel stays
++			 * mute even though the feature handshake completes.
 +			 *
-+			 * Las tres hacen falta: send_masks() solo cubre los
-+			 * mensajes F3. Los logs de RF y de capa 1 viajan como
-+			 * paquetes de log, que necesitan su propia mascara por
-+			 * equip_id, y los eventos la suya.
++			 * All three are needed: send_masks() only covers the
++			 * F3 messages. The RF and layer 1 logs travel as
++			 * log packets, which need their own mask per
++			 * equip_id, and the events need theirs.
 +			 */
 +			{
 +				unsigned int equip_id;

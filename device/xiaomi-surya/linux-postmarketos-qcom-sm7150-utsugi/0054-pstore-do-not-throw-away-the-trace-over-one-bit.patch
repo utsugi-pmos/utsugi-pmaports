@@ -46,16 +46,16 @@ having a trace, which is what there is not.
 -		    buffer_start(prz) > buffer_size(prz)) {
 +		if (buffer_size(prz) > prz->buffer_size ||
 +		    buffer_start(prz) > prz->buffer_size) {
-+			/* Un contador que no cabe en la zona: basura. */
++			/* A counter that does not fit in the region: garbage. */
  			pr_info("found existing invalid buffer, size %zu, start %zu\n",
  				buffer_size(prz), buffer_start(prz));
  			zap = true;
 +		} else if (buffer_start(prz) > buffer_size(prz)) {
 +			/*
-+			 * El cursor de escritura va por delante del tamano: la
-+			 * cabecera quedo a medias, pero los datos hasta "start"
-+			 * estan escritos. Antes se tiraba el bufer entero por
-+			 * esto, y con el la unica traza del fallo.
++			 * The write cursor is ahead of the size: the
++			 * header was left half written, but the data up to "start"
++			 * is written. Before, the whole buffer was thrown away over
++			 * this, and with it the only trace of the failure.
 +			 */
 +			pr_info("found half-written buffer, size %zu, start %zu: recovering\n",
 +				buffer_size(prz), buffer_start(prz));

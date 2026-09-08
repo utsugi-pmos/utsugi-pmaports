@@ -25,18 +25,18 @@ RAM).
  };
  
 +/*
-+ * El tercer modo del fichero de fabrica, que no se habia portado. Es el punto
-+ * de trabajo mas suave de los tres: menos pixeles, menos lineas y el PLL de
++ * The third mode of the factory file, which had not been ported. It is the
++ * smoothest operating point of the three: fewer pixels, fewer lines and the PLL
 + * salida mas lento.
 + *
 + *     5184x3880   op_pre=3 mult=140 0x0312=0   ->  896 MHz
 + *     2592x1940   op_pre=3 mult=187 0x0312=2   -> 1196,8 MHz
-+ *     1280x720    op_pre=2 mult=125 0x0312=2   -> 1200 MHz, pero con una
-+ *                                                 quinta parte de los datos
++ *     1280x720    op_pre=2 mult=125 0x0312=2   -> 1200 MHz, but with a
++ *                                                 fifth of the data
 + *
-+ * Sacado del bloque de fabrica con el mismo lector que los otros dos, y con el
-+ * mismo formato: direcciones en u64[2::10] del regSetting, valores en los
-+ * registerData que siguen.
++ * Taken from the factory block with the same reader as the other two, and with the
++ * same format: addresses in u64[2::10] of the regSetting, values in the
++ * registerData that follow.
 + */
 +static const struct cci_reg_sequence s5k3t2_mode_1280x720[] = {
 +	{ CCI_REG16(0x6028), 0x4000 },
@@ -110,8 +110,8 @@ RAM).
  static const struct s5k3t2_mode s5k3t2_supported_modes[] = {
  	{
  		/*
-+		 * Va primero mientras se investiga por que no llega imagen:
-+		 * es el modo que menos le pide al enlace.
++		 * It goes first while it is being investigated why no image arrives:
++		 * it is the mode that asks the least of the link.
 +		 */
 +		.width = 1280,
 +		.height = 720,
@@ -125,6 +125,6 @@ RAM).
 +	},
 +	{
 +		/*
- 		 * El modo combinado. Va primero a proposito: es el que ya se
- 		 * ha visto capturar en este SoC, y 5 MP son un tamano que el
- 		 * revelado por software puede seguir. Los 20 MP de abajo
+ 		 * The binned mode. It comes first on purpose: it is the one that has
+ 		 * been seen capturing on this SoC, and 5 MP is a size that
+ 		 * software processing can keep up with. The 20 MP below

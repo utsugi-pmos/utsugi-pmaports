@@ -60,14 +60,14 @@ if it did, that would in itself be the fault we are after.
 -	 * will stop the WDT, set timeouts as bootloader
 -	 * might use different ones and set running bit
 -	 * to inform the WDT subsystem to ping the WDT
-+	 * Arrancarlo SIEMPRE, no solo si el gestor de arranque lo dejo puesto.
++	 * Start it ALWAYS, not only if the bootloader left it running.
 +	 *
-+	 * U-Boot no lo deja encendido, asi que con la condicion original el
-+	 * perro no existia hasta que systemd lo armaba, y los cuelgues del
-+	 * arranque temprano -los mas frecuentes en el surya- se quedaban sin
-+	 * nadie que resetease. Con WDOG_HW_RUNNING y
-+	 * CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED el nucleo lo alimenta desde aqui
-+	 * hasta que userspace abra /dev/watchdog.
++	 * U-Boot does not leave it enabled, so with the original condition the
++	 * watchdog did not exist until systemd armed it, and the hangs during
++	 * early boot -the most frequent ones on the surya- were left with
++	 * nobody to reset. With WDOG_HW_RUNNING and
++	 * CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED the kernel feeds it from here
++	 * until userspace opens /dev/watchdog.
  	 */
 -	if (qcom_wdt_is_running(&wdt->wdd)) {
 -		qcom_wdt_start(&wdt->wdd);

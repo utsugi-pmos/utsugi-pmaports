@@ -74,8 +74,8 @@ The front camera carries on down the D-PHY branch without noticing.
  	/*
 -	 * Most SoCs support both D-PHY and C-PHY standards, but currently only
 -	 * D-PHY is supported in the driver.
-+	 * C-PHY tambien vale. La camara trasera del surya es de tres
-+	 * carriles, o sea un trio C-PHY, y se rechazaba aqui mismo antes de
++	 * C-PHY works too. The surya rear camera is three
++	 * lanes, o sea un trio C-PHY, y se rechazaba aqui mismo antes de
 +	 * llegar a ninguna parte.
  	 */
 -	if (vep.bus_type != V4L2_MBUS_CSI2_DPHY) {
@@ -135,10 +135,10 @@ The front camera carries on down the D-PHY branch without noticing.
  	val |= (diag_phy_sel >= 0 ? (u32)diag_phy_sel : phy->csiphy_id)
  		<< CSI2_RX_CFG0_PHY_NUM_SEL;
 +	/*
-+	 * PHY_TYPE_SEL: 0 = D-PHY, 1 = C-PHY. Mainline define este bit y no
-+	 * lo escribe NUNCA, asi que el receptor siempre esperaba D-PHY. Medido
-+	 * en la trasera antes de esto: rx_cfg0 = 0x00002102, bit 24 a cero
-+	 * mientras el sensor emitia en C-PHY.
++	 * PHY_TYPE_SEL: 0 = D-PHY, 1 = C-PHY. Mainline defines this bit and
++	 * NEVER writes it, so the receiver always expected D-PHY. Measured
++	 * on the rear camera before this: rx_cfg0 = 0x00002102, bit 24 at zero
++	 * while the sensor was transmitting in C-PHY.
 +	 */
 +	val |= (u32)phy->cphy << CSI2_RX_CFG0_PHY_TYPE_SEL;
  	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG0);
@@ -151,13 +151,13 @@ The front camera carries on down the D-PHY branch without noticing.
  
  /* GEN2 1.2 2PH */
 +/*
-+ * 5nm 3PH v1.2 en C-PHY: tres trios de treinta escrituras. Copiada del
-+ * kernel de Android del propio movil (csiphy_3ph_v1_2_reg), guardado en
++ * 5nm 3PH v1.2 in C-PHY: three trios of thirty writes. Copied from the
++ * Android kernel of the phone itself (csiphy_3ph_v1_2_reg), saved in
 + * refs-stock/csiphy/cam_csiphy_1_2_hwreg.h.
 + *
-+ * Dos diferencias con la rama D-PHY que importan:
-+ *   - toca una zona propia en 0x900 / 0xA00 / 0xB00 que la otra no usa,
-+ *   - el asentamiento va en DOS registros, byte bajo y byte alto.
++ * Two differences from the D-PHY branch that matter:
++ *   - it touches its own area at 0x900 / 0xA00 / 0xB00 that the other does not use,
++ *   - the settle count goes in TWO registers, low byte and high byte.
 + */
 +static const struct
 +csiphy_lane_regs lane_regs_sm7150_cphy[] = {
@@ -266,8 +266,8 @@ The front camera carries on down the D-PHY branch without noticing.
  	const struct csiphy_lane_regs *r = csiphy->regs->lane_regs;
  	int i, array_size = csiphy->regs->lane_array_size;
 +	/*
-+	 * La eleccion es por ENLACE y no por SoC: el mismo CSIPHY puede
-+	 * atender un sensor D-PHY o uno C-PHY segun a cual este conectado.
++	 * The choice is per LINK and not per SoC: the same CSIPHY can
++	 * serve a D-PHY sensor or a C-PHY one depending on which one it is connected to.
 +	 */
 +	if (csiphy->cfg.cphy && csiphy->camss->res->version == CAMSS_7150) {
 +		r = &lane_regs_sm7150_cphy[0];
@@ -281,7 +281,7 @@ The front camera carries on down the D-PHY branch without noticing.
  			val = settle_cnt & 0xff;
 +			break;
 +		case CSIPHY_SETTLE_CNT_HIGHER_BYTE:
-+			/* C-PHY reparte el asentamiento en dos registros. */
++			/* C-PHY splits the settle count across two registers. */
 +			val = (settle_cnt >> 8) & 0xff;
  			break;
  		case CSIPHY_SKEW_CAL:

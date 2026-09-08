@@ -38,14 +38,14 @@ not lie.
 
 WHAT IT ADDS
 ------------
-  diag_rx_visto      OR of CSI2_RX_IRQ_STATUS seen (CSID)
-  diag_rdi0_visto    OR of RDIN0_IRQ_STATUS seen (CSID)
-  diag_rx_mascara    mask to write into both IRQ_MASKs. Default 0, that is, like
+  diag_rx_seen      OR of CSI2_RX_IRQ_STATUS seen (CSID)
+  diag_rdi0_seen    OR of RDIN0_IRQ_STATUS seen (CSID)
+  diag_rx_mask    mask to write into both IRQ_MASKs. Default 0, that is, like
                      mainline: unmasking can give a storm at 30 frames per
                      second and this phone is sensitive to timing, so it is
                      turned on by hand
-  diag_phy_estado    OR of the eleven CSIPHY CSI_COMMON_STATUS
-  diag_phy_saltos    number of times the CSIPHY ISR has fired
+  diag_phy_state    OR of the eleven CSIPHY CSI_COMMON_STATUS
+  diag_phy_jumps    number of times the CSIPHY ISR has fired
 
 And it reads the receiver status on the STOP path, which is the only place where
 what happened during the whole transmission can be seen in one piece: the CSID
@@ -83,40 +83,40 @@ known.
  #include "camss.h"
  
 +/*
-+ * DIAGNOSTICO TEMPORAL: que ve el receptor CSI-2.
++ * TEMPORARY DIAGNOSTIC: what the CSI-2 receiver sees.
 + *
-+ * Los contadores van como parametros de modulo en 0644, o sea que se LEEN y se
-+ * PONEN A CERO desde el espacio de usuario. Eso importa mas de lo que parece:
-+ * el diagnostico anterior imprimia por dev_info con un tope de 25 lineas y un
-+ * contador estatico que no se reinicia nunca, asi que si algo tocaba la camara
-+ * al arrancar -pipewire lo hace- la cuota estaba gastada y el registro salia
-+ * VACIO aunque el hardware estuviera disparando dos millones de veces. Eso ya
-+ * llevo a dar por bueno un "el PHY no ve nada" que era falso.
++ * The counters are module parameters at 0644, that is, they are READ and
++ * ZEROED from user space. That matters more than it looks:
++ * the previous diagnostic printed through dev_info with a cap of 25 lines and a
++ * static counter that is never reset, so if anything touched the camera
++ * at boot -pipewire does- the quota was spent and the log came out
++ * EMPTY even though the hardware was firing two million times. That already
++ * led to accepting a "the PHY sees nothing" that was false.
 + *
-+ * Un contador que se puede poner a cero antes de cada prueba no tiene ese
-+ * problema y ademas no inunda el registro.
++ * A counter that can be zeroed before each test does not have that
++ * problem and on top of that does not flood the log.
 + */
-+static unsigned int diag_rx_visto;
-+module_param(diag_rx_visto, uint, 0644);
-+MODULE_PARM_DESC(diag_rx_visto,
-+	"OR de CSI2_RX_IRQ_STATUS visto. Escribir 0 para reiniciar.");
++static unsigned int diag_rx_seen;
++module_param(diag_rx_seen, uint, 0644);
++MODULE_PARM_DESC(diag_rx_seen,
++	"OR of CSI2_RX_IRQ_STATUS seen. Write 0 to reset.");
 +
-+static unsigned int diag_rdi0_visto;
-+module_param(diag_rdi0_visto, uint, 0644);
-+MODULE_PARM_DESC(diag_rdi0_visto,
-+	"OR de RDIN0_IRQ_STATUS visto. Escribir 0 para reiniciar.");
++static unsigned int diag_rdi0_seen;
++module_param(diag_rdi0_seen, uint, 0644);
++MODULE_PARM_DESC(diag_rdi0_seen,
++	"OR of RDIN0_IRQ_STATUS seen. Write 0 to reset.");
 +
 +/*
-+ * Mainline deja enmascaradas TODAS las interrupciones del receptor CSI-2 y de
-+ * los RDI: solo desenmascara el bit de "reset hecho". Con esto se pueden
-+ * encender, pero por defecto NO se hace: a 30 fotogramas por segundo y varias
-+ * interrupciones por fotograma esto puede convertirse en una tormenta, y este
-+ * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
++ * Mainline leaves masked ALL the interrupts of the CSI-2 receiver and of
++ * the RDIs: it only unmasks the "reset done" bit. With this they can be
++ * enabled, but by default it is NOT done: at 30 frames per second and several
++ * interrupts per frame this can turn into a storm, and this
++ * phone is sensitive to timing. Enable it by hand when needed.
 + */
-+static unsigned int diag_rx_mascara;
-+module_param(diag_rx_mascara, uint, 0644);
-+MODULE_PARM_DESC(diag_rx_mascara,
-+	"Mascara para CSI2_RX_IRQ_MASK y RDIN_IRQ_MASK. 0 = como mainline.");
++static unsigned int diag_rx_mask;
++module_param(diag_rx_mask, uint, 0644);
++MODULE_PARM_DESC(diag_rx_mask,
++	"Mask for CSI2_RX_IRQ_MASK and RDIN_IRQ_MASK. 0 = like mainline.");
 +
  /* The CSID 2 IP-block is different from the others,
   * and is of a bare-bones Lite version, with no PIX
@@ -126,11 +126,11 @@ known.
  	val |= 1 << CSI2_RX_CFG1_MISR_EN;
  	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG1);
 +
-+	/* DIAGNOSTICO: desenmascarar el receptor si nos lo piden. */
-+	if (diag_rx_mascara) {
-+		writel_relaxed(diag_rx_mascara,
++	/* DIAGNOSTIC: unmask the receiver if we are asked to. */
++	if (diag_rx_mask) {
++		writel_relaxed(diag_rx_mask,
 +			       csid->base + CSID_CSI2_RX_IRQ_MASK);
-+		writel_relaxed(diag_rx_mascara,
++		writel_relaxed(diag_rx_mask,
 +			       csid->base + CSID_CSI2_RDIN_IRQ_MASK(vc));
 +		writel_relaxed(1 << IRQ_CMD_CLEAR, csid->base + CSID_IRQ_CMD);
 +	}
@@ -142,12 +142,12 @@ known.
  				__csid_configure_testgen(csid, enable, i);
  
 +			/*
-+			 * DIAGNOSTICO: leer el estado del receptor ANTES de
-+			 * apagar nada. Es el unico sitio donde se puede ver de
-+			 * una pieza que ha pasado durante toda la transmision:
-+			 * el ISR solo se dispara con el "reset hecho", que
-+			 * ocurre al ARRANCAR, asi que esperar a el significa
-+			 * leer lo de la sesion anterior.
++			 * DIAGNOSTIC: read the receiver status BEFORE
++			 * turning anything off. It is the only place where one can see in
++			 * one piece what happened during the whole stream:
++			 * the ISR only fires on "reset done", which
++			 * happens at START, so waiting for it means
++			 * reading what the previous session left.
 +			 */
 +			if (!enable) {
 +				u32 rx = readl_relaxed(csid->base +
@@ -155,10 +155,10 @@ known.
 +				u32 rdi = readl_relaxed(csid->base +
 +						CSID_CSI2_RDIN_IRQ_STATUS(i));
 +
-+				diag_rx_visto |= rx;
-+				diag_rdi0_visto |= rdi;
++				diag_rx_seen |= rx;
++				diag_rdi0_seen |= rdi;
 +				dev_info(csid->camss->dev,
-+					 "csid%d al parar: rx=0x%08x rdin%d=0x%08x\n",
++					 "csid%d at stop: rx=0x%08x rdin%d=0x%08x\n",
 +					 csid->id, rx, i, rdi);
 +			}
 +
@@ -169,7 +169,7 @@ known.
  	 */
  	rx_status = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
  	writel_relaxed(rx_status, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
-+	diag_rx_visto |= rx_status;
++	diag_rx_seen |= rx_status;
  
  	/* Read and clear IRQ status for each enabled RDI channel */
  	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
@@ -177,7 +177,7 @@ known.
  			val = readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_STATUS(i));
  			writel_relaxed(val, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
 +			if (i == 0)
-+				diag_rdi0_visto |= val;
++				diag_rdi0_seen |= val;
  			if (veces < 25)
  				dev_info(csid->camss->dev,
  					 "csid%d rx=0x%08x rdin%d=0x%08x\n",
@@ -188,26 +188,26 @@ known.
  }
  
 +/*
-+ * DIAGNOSTICO: el OR de los once registros de estado y la cuenta de veces que
-+ * ha saltado, legibles y reiniciables en caliente por
++ * DIAGNOSTIC: the OR of the eleven status registers and the count of times
++ * it has fired, readable and resettable at runtime through
 + * /sys/module/qcom_camss/parameters/.
 + *
-+ * Sustituye al tope de 20 lineas por dev_info que habia antes. Aquel tope
-+ * usaba un estatico que no se reinicia nunca, asi que bastaba con que algo
-+ * tocara la camara al arrancar -pipewire lo hace- para que la cuota estuviera
-+ * gastada y el registro saliera vacio con el PHY disparando dos millones de
-+ * veces. Se dio por bueno un "el PHY no ve nada" que era falso.
++ * It replaces the 20-line dev_info cap that was there before. That cap
++ * used a static that is never reset, so it was enough for something
++ * to touch the camera at boot -pipewire does- for the quota to be
++ * spent and the log to come out empty with the PHY firing two million
++ * times. A "the PHY sees nothing" that was false was taken as good.
 + */
-+static unsigned int diag_phy_estado[11];
-+static int diag_phy_estado_n = 11;
-+module_param_array(diag_phy_estado, uint, &diag_phy_estado_n, 0644);
-+MODULE_PARM_DESC(diag_phy_estado,
-+	"OR de los 11 CSI_COMMON_STATUS del CSIPHY. Escribir ceros para reiniciar.");
++static unsigned int diag_phy_state[11];
++static int diag_phy_state_n = 11;
++module_param_array(diag_phy_state, uint, &diag_phy_state_n, 0644);
++MODULE_PARM_DESC(diag_phy_state,
++	"OR of the 11 CSI_COMMON_STATUS of the CSIPHY. Write zeros to reset.");
 +
-+static unsigned int diag_phy_saltos;
-+module_param(diag_phy_saltos, uint, 0644);
-+MODULE_PARM_DESC(diag_phy_saltos,
-+	"Veces que ha saltado el ISR del CSIPHY. Escribir 0 para reiniciar.");
++static unsigned int diag_phy_jumps;
++module_param(diag_phy_jumps, uint, 0644);
++MODULE_PARM_DESC(diag_phy_jumps,
++	"Times the CSIPHY ISR has fired. Write 0 to reset.");
 +
  static irqreturn_t csiphy_isr(int irq, void *dev)
  {
@@ -216,7 +216,7 @@ known.
  							  regs->common_status_offset, i));
  
  		vistos[i] = val;
-+		diag_phy_estado[i] |= val;
++		diag_phy_state[i] |= val;
  
  		writel_relaxed(val, csiphy->base +
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, c));
@@ -224,9 +224,9 @@ known.
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, i));
  	}
  
-+	diag_phy_saltos++;
++	diag_phy_jumps++;
 +
- 	/* Acotado: si el enlace da ruido, esto se dispara sin parar. */
+ 	/* Bounded: if the link is noisy, this fires nonstop. */
  	if (veces++ < 20)
  		dev_info(csiphy->camss->dev,
 --- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-08-16 21:30:17.978653641 +0200
@@ -239,19 +239,19 @@ known.
 +	/*
 +	 * DIAGNOSTICO (y probablemente algo mas).
 +	 *
-+	 * Tal como esta en mainline, configure_stream() SOLO se llama si esta
-+	 * puesta need_vc_update, y la bandera se borra ahi mismo. Se pone al
-+	 * cablear el enlace, o sea antes de arrancar; cuando se llega a la
-+	 * PARADA ya vale falso, asi que configure_stream(csid, 0) no se ejecuta
-+	 * NUNCA. El RDI no se para al terminar y el receptor no se reconfigura.
++	 * As it stands in mainline, configure_stream() is ONLY called if
++	 * need_vc_update is set, and the flag is cleared right there. It is set when
++	 * the link is wired up, that is before start; by the time the
++	 * STOP is reached it is already false, so configure_stream(csid, 0) is
++	 * NEVER executed. The RDI is not stopped at the end and the receiver is not reconfigured.
 +	 *
-+	 * Aqui interesa por una razon inmediata: el unico sitio desde el que se
-+	 * puede leer de una pieza que ha visto el receptor CSI-2 durante toda
-+	 * la transmision es el camino de parada. Leerlo en el ISR no vale,
-+	 * porque el ISR solo salta con el "reset hecho" -que ocurre al
-+	 * ARRANCAR- y el propio reset puede haber borrado ya el registro.
++	 * It matters here for an immediate reason: the only place from which one
++	 * can read in one piece what the CSI-2 receiver saw during the whole
++	 * stream is the stop path. Reading it in the ISR does not work,
++	 * because the ISR only fires on "reset done" -which happens at
++	 * START- and the reset itself may have already cleared the register.
 +	 *
-+	 * Sin esto, el diagnostico daba 0x00000000 y parecia un resultado.
++	 * Without this, the diagnostic gave 0x00000000 and looked like a result.
 +	 */
 +	if (csid->phy.need_vc_update || !enable) {
  		csid->res->hw_ops->configure_stream(csid, enable);

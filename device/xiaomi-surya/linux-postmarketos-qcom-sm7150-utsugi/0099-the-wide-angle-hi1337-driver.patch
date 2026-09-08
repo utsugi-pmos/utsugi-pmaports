@@ -121,7 +121,7 @@ without recompiling.
 --- a/drivers/media/i2c/Kconfig
 +++ b/drivers/media/i2c/Kconfig
 @@ -130,5 +130,16 @@
- 	  Va como modulo y se carga a mano.
+ 	  It builds as a module and is loaded by hand.
  
 +config VIDEO_HI1337
 +	tristate "SK Hynix Hi-1337 sensor support"
@@ -131,8 +131,8 @@ without recompiling.
 +	select V4L2_CCI_I2C
 +	select V4L2_FWNODE
 +	help
-+	  El gran angular del Xiaomi POCO X3 NFC. Tablas sacadas del fichero de
-+	  calibracion de fabrica del propio movil.
++	  The wide-angle camera of the Xiaomi POCO X3 NFC. Tables taken from the factory
++	  calibration file of the phone itself.
 +
  config VIDEO_HI846
  	tristate "Hynix Hi-846 sensor support"
@@ -154,24 +154,24 @@ without recompiling.
  		};
  
 +		/*
-+		 * DOS SENSORES EN EL MISMO PUERTO, y es correcto.
++		 * TWO SENSORS ON THE SAME PORT, and that is correct.
 +		 *
-+		 * La frontal y el gran angular cuelgan FISICAMENTE de la misma
-+		 * entrada del SoC a traves de un conmutador MIPI: el movil
-+		 * tiene cinco camaras y el SoC cuatro entradas. En uso real se
-+		 * usa una a la vez y se conmuta.
++		 * The front and the wide-angle cameras hang PHYSICALLY off the same
++		 * SoC input through a MIPI switch: the phone
++		 * has five cameras and the SoC four inputs. In real use
++		 * one is used at a time and the switch is flipped.
 +		 *
-+		 * camss lo admite: camss_parse_ports() recorre TODOS los
-+		 * endpoints de TODOS los puertos con
-+		 * fwnode_graph_for_each_endpoint(), y el CSIPHY se elige por el
++		 * camss supports this: camss_parse_ports() walks ALL the
++		 * endpoints of ALL the ports with
++		 * fwnode_graph_for_each_endpoint(), and the CSIPHY is chosen by the
 +		 * numero de PUERTO -csd->interface.csiphy_id = vep.base.port-,
-+		 * no por el endpoint. Asi que los dos salen en la topologia,
-+		 * los dos van por el CSIPHY1, y cada uno lleva su propia
-+		 * configuracion de carriles.
++		 * not by the endpoint. So both show up in the topology,
++		 * both go through CSIPHY1, and each one carries its own
++		 * configuracion de lanes.
 +		 *
-+		 * Cual transmite se decide en caliente activando su enlace. El
-+		 * conmutador lo mueve el driver del sensor al encenderse y lo
-+		 * suelta al apagarse, asi que sigue solo a quien este en uso.
++		 * Which one streams is decided at runtime by enabling its link. The
++		 * switch is moved by the sensor driver when it powers on and is
++		 * released when it powers off, so it only follows whoever is in use.
 +		 */
  		port@1 {
 -			csiphy1_ep: endpoint {
@@ -202,13 +202,13 @@ without recompiling.
  	};
 +
 +	/*
-+	 * El gran angular. La direccion 0x21 esta MEDIDA: aparece en el bus al
-+	 * soltar el reset del tlmm 24 y contesta 0x1337 en el registro 0x0716.
++	 * The wide-angle camera. Address 0x21 is MEASURED: it shows up on the bus when
++	 * the tlmm 24 reset is released and it answers 0x1337 in register 0x0716.
 +	 *
-+	 * OJO con el endpoint: NO apunta a camss todavia, y es deliberado. Si
-+	 * se declara el puerto en camss y este sensor no llegara a arrancar, el
-+	 * notificador asincrono se queda esperando y se pierde /dev/media0, que
-+	 * es por donde funciona la frontal. Primero que arranque; el cableado
++	 * WATCH OUT with the endpoint: it does NOT point to camss yet, and that is deliberate. If
++	 * the port is declared in camss and this sensor failed to probe, the
++	 * async notifier keeps waiting and /dev/media0 is lost, which
++	 * is where the front camera works. First make it probe; the wiring
 +	 * CSI, despues.
 +	 */
 +	camera@21 {
@@ -216,44 +216,44 @@ without recompiling.
 +		reg = <0x21>;
 +
 +		/*
-+		 * Va en la trasera, al lado de la principal y montada igual, asi
-+		 * que se le pone lo mismo que a ella: ver
-+		 * 0096-orientacion-y-rotacion-de-las-dos-camaras.patch, donde
-+		 * quedo medido que la trasera es 270 y la frontal 90.
++		 * It sits on the back, next to the main one and mounted the same way, so
++		 * it gets the same values as that one: see
++		 * 0096-orientation-and-rotation-of-both-cameras.patch, where
++		 * it was measured that the back one is 270 and the front one 90.
 +		 *
-+		 * La primera version puso rotation=0 y orientation=0, y
-+		 * orientation=0 es FRONTAL: el comentario decia "mira hacia
-+		 * atras" y el numero decia lo contrario.
++		 * The first version set rotation=0 and orientation=0, and
++		 * orientation=0 is FRONT: the comment said "faces
++		 * backwards" and the number said the opposite.
 +		 */
 +		rotation = <270>;
 +		orientation = <1>;	/* trasera */
 +
-+		/* CAM_RESET3 de fabrica, confirmado por medida. */
++		/* CAM_RESET3 from the factory, confirmed by measurement. */
 +		reset-gpios = <&tlmm 24 GPIO_ACTIVE_LOW>;
 +		pinctrl-names = "default";
 +		pinctrl-0 = <&cam_mclk3_active>;
 +
 +		/*
-+		 * MCLK3 en el gpio16 a 19,2 MHz. Los 24 MHz que dice el device
-+		 * tree generico del QRD son de otro nodo -el del sensor ToF de
-+		 * la placa de referencia- y enganaron durante rondas.
++		 * MCLK3 on gpio16 at 19.2 MHz. The 24 MHz stated by the generic
++		 * QRD device tree belong to another node -the one of the ToF sensor on
++		 * the reference board- and they misled for rounds.
 +		 */
 +		clocks = <&camcc CAMCC_MCLK3_CLK>;
 +		clock-names = "xvclk";
 +		/*
-+		 * SIN assigned-clocks, y no es un olvido. Poner la frecuencia
-+		 * aqui la aplica el nucleo en of_clk_set_defaults() al REGISTRAR
-+		 * el nodo, sin driver de por medio, y en este SoC eso cuelga el
-+		 * arranque con los MCLK altos: le paso al buscador con MCLK2
-+		 * -es su fallo numero 1- y volvio a pasar aqui con MCLK3. El
-+		 * nodo de la frontal si lo lleva, pero usa MCLK0, que no cuelga.
-+		 * La frecuencia la pone el driver con clk_set_rate() en el probe.
++		 * NO assigned-clocks, and that is not an oversight. Setting the frequency
++		 * here makes the kernel apply it in of_clk_set_defaults() when REGISTERING
++		 * the node, with no driver involved, and on this SoC that hangs the
++		 * boot with the high MCLKs: it happened to the scanner with MCLK2
++		 * -it is its bug number 1- and it happened again here with MCLK3. The
++		 * front camera node does carry it, but it uses MCLK0, which does not hang.
++		 * The frequency is set by the driver with clk_set_rate() in probe.
 +		 */
 +
 +		/*
-+		 * De fabrica este sensor solo recibe VIO del SoC: su
-+		 * powerSetting no pide ni VDIG ni VANA. Los dos canales
-+		 * digitales del wl2866d estan tomados por las dos camaras que
++		 * From the factory this sensor only gets VIO from the SoC: its
++		 * powerSetting asks for neither VDIG nor VANA. The two digital
++		 * channels of the wl2866d are taken by the two cameras that
 +		 * ya funcionan.
 +		 */
 +		vddio-supply = <&vreg_l13a_1p8>;
@@ -261,33 +261,33 @@ without recompiling.
 +		vddd-supply = <&vreg_camera_vdig>;
 +
 +		/*
-+		 * El conmutador MIPI. Segun docs/CAMARA-02-cableado.md, la
-+		 * frontal y el gran angular COMPARTEN el CSIPHY1 y se turnan por
-+		 * CAM_SEL (pm6150 gpio3). Sin ponerlo en la posicion de este
-+		 * sensor, sus carriles no llegan al SoC por mucho que el sensor
++		 * The MIPI switch. According to docs/CAMARA-02-cableado.md, the
++		 * front and the wide-angle cameras SHARE CSIPHY1 and take turns through
++		 * CAM_SEL (pm6150 gpio3). Without putting it in this sensor's
++		 * position, its lanes do not reach the SoC no matter how much the sensor
 +		 * emita.
 +		 *
-+		 * Que posicion es cual no se sabe: va por parametro de modulo
-+		 * (mipi_switch=0 o 1) para poder probarlo sin recompilar.
++		 * Which position is which is not known: it goes as a module parameter
++		 * (mipi_switch=0 or 1) so it can be tried without recompiling.
 +		 */
 +		mipi-switch-supply = <&vreg_camera_mipi_switch_en>;
 +
 +		/*
-+		 * LA SEGUNDA SEÑAL DEL CONMUTADOR, y sin ella no llega imagen.
++		 * THE SECOND SWITCH SIGNAL, and without it no image arrives.
 +		 *
-+		 * El conmutador MIPI necesita DOS: el regulador de arriba, que
-+		 * el device tree ya declaraba, y esta, que no declaraba nadie.
-+		 * Salia como "input" en gpioinfo, con el nombre puesto por el
++		 * The MIPI switch needs TWO: the regulator above, which
++		 * the device tree already declared, and this one, which nobody declared.
++		 * It showed up as "input" in gpioinfo, with the name set by the
 +		 * propio SoC:
 +		 *
 +		 *     line 2: "CAM_SW2_OE_2"   input
 +		 *
-+		 * Medido: con ella a 1 llegan 6857 paquetes al CSID; a 0,
-+		 * ninguno. Ese fue el bloqueo real de toda la investigacion.
++		 * Measured: with it at 1, 6857 packets reach the CSID; at 0,
++		 * none. That was the real blocker of the whole investigation.
 +		 *
-+		 * OJO con la numeracion: gpioinfo cuenta desde 0 y el device
-+		 * tree de los spmi-gpio desde 1, asi que la linea 2 de gpioinfo
-+		 * es el 3 de aqui.
++		 * WATCH OUT with the numbering: gpioinfo counts from 0 and the device
++		 * tree of the spmi-gpio from 1, so line 2 in gpioinfo
++		 * is the 3 here.
 +		 */
 +		mipi-switch-oe-gpios = <&pm6150_gpios 3 GPIO_ACTIVE_HIGH>;
 +
@@ -298,15 +298,15 @@ without recompiling.
 +				bus-type = <MEDIA_BUS_TYPE_CSI2_DPHY>;
 +				link-frequencies = /bits/ 64 <864000000>;
 +				/*
-+				 * Los dos extremos tienen que apuntarse. Falto
-+				 * en la primera version -camss apuntaba aqui
-+				 * pero aqui no se apuntaba a camss- y el
-+				 * resultado fue silencioso y desconcertante: el
-+				 * driver arrancaba, reconocia el sensor y
-+				 * /dev/media0 existia, pero el sensor NO
-+				 * aparecia como entidad en la topologia. El
-+				 * emparejamiento asincrono necesita el enlace
-+				 * en los dos sentidos.
++				 * Both ends have to point at each other. It was
++				 * missing in the first version -camss pointed here
++				 * but here nothing pointed back to camss- and the
++				 * result was silent and puzzling: the
++				 * driver probed, recognized the sensor and
++				 * /dev/media0 existed, but the sensor did NOT
++				 * show up as an entity in the topology. The
++				 * async matching needs the link
++				 * in both directions.
 +				 */
 +				remote-endpoint = <&csiphy1_ga_ep>;
 +			};
@@ -318,68 +318,68 @@ without recompiling.
 @@ -0,0 +1,3158 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * SK Hynix Hi-1337: el gran angular del Xiaomi POCO X3 NFC (surya).
++ * SK Hynix Hi-1337: the wide-angle camera of the Xiaomi POCO X3 NFC (surya).
 + *
-+ * DE DONDE SALE ESTE DRIVER
++ * WHERE THIS DRIVER COMES FROM
 + * -------------------------
-+ * Es un port del hi1337.c de este mismo arbol -la camara frontal, que ya
-+ * funciona de punta a punta- porque los dos sensores estan cableados igual:
-+ * cuatro carriles D-PHY. No se ha reescrito lo que ya estaba probado.
++ * It is a port of the hi1337.c in this same tree -the front camera, which already
++ * works end to end- because both sensors are wired the same way:
++ * four D-PHY lanes. What was already proven has not been rewritten.
 + *
-+ * EL FALLO QUE COSTO LA INVESTIGACION ENTERA, Y QUE NO HAY QUE REPETIR
++ * THE MISTAKE THAT COST THE WHOLE INVESTIGATION, AND THAT MUST NOT BE REPEATED
 + * -------------------------------------------------------------------
-+ * El buscador que encontro este sensor leia su identificacion en 0x0f16,
-+ * copiado del driver hi846 de mainline dando por hecho que otro sensor de SK
-+ * Hynix la tendria en el mismo sitio. NO la tiene: el Hi-1337 la pone en
-+ * 0x0716. Durante rondas enteras se leyo 0000 y se interpreto como "el sensor
-+ * esta muerto", cuando significaba "ese registro no existe aqui".
++ * The scanner that found this sensor read its ID at 0x0f16,
++ * copied from the mainline hi846 driver assuming that another SK
++ * Hynix sensor would have it in the same place. It does NOT: the Hi-1337 puts it at
++ * 0x0716. For entire rounds 0000 was read and interpreted as "the sensor
++ * is dead", when it meant "that register does not exist here".
 + *
-+ * Asi que de este driver hermano se copia la ESTRUCTURA, no las constantes.
-+ * Cada direccion de registro de aqui abajo sale del fichero de fabrica de este
-+ * modulo o esta medida en el chip, y se dice cual es cual.
++ * So from this sibling driver the STRUCTURE is copied, not the constants.
++ * Every register address below comes from the factory file of this
++ * module or is measured on the chip, and which is which is stated.
 + *
-+ * DE DONDE SALEN LAS TABLAS
++ * WHERE THE TABLES COME FROM
 + * -------------------------
-+ * De com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin, el fichero del propio
-+ * movil, leido con surya/camara/leer-sensormodule.py --tablas. Son 1457
-+ * escrituras de inicializacion y 87 por modo.
++ * From com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin, the file of the phone
++ * itself, read with surya/camara/leer-sensormodule.py --tablas. They are 1457
++ * initialization writes and 87 per mode.
 + *
-+ * Las primeras cientos de la inicializacion van a 0x2000 y arriba, con valores
-+ * tipo 40b2 b05c 8446: eso no son ajustes, es microcodigo para el secuenciador
-+ * interno del sensor.
++ * The first few hundred of the initialization go to 0x2000 and above, with values
++ * like 40b2 b05c 8446: those are not settings, that is microcode for the sensor's
++ * internal sequencer.
 + *
-+ * LO QUE ESTA MEDIDO EN EL CHIP, no deducido
++ * WHAT IS MEASURED ON THE CHIP, not inferred
 + * ------------------------------------------
-+ *   0x0716 = 0x1337    la identificacion
-+ *   0x0b12 = 4208      ancho de salida
-+ *   0x0b14 = 3120      alto de salida
++ *   0x0716 = 0x1337    the ID
++ *   0x0b12 = 4208      width de salida
++ *   0x0b14 = 3120      height de salida
 + *
-+ * Los dos ultimos coinciden con lo que dice la tabla de fabrica, que es la
-+ * comprobacion cruzada de que las tablas son de este sensor.
++ * The last two match what the factory table says, which is the
++ * cross-check that the tables belong to this sensor.
 + *
-+ * LO QUE NO ESTA RESUELTO, y por eso no se toca
++ * WHAT IS NOT SETTLED, and that is why it is not touched
 + * ---------------------------------------------
-+ * No se sabe con certeza donde tiene el Hi-1337 la exposicion ni la ganancia
-+ * analogica. Estan en algun sitio del bloque 0x0200 -las ganancias digitales
-+ * por canal si estan localizadas, en 0x0214..0x021a, y salen del propio
-+ * fichero de fabrica-, pero adivinar cual es cual solo sirve para escribir en
-+ * un registro equivocado. Asi que esta version NO expone controles de
-+ * exposicion ni ganancia: se queda con lo que ponen las tablas.
++ * It is not known for certain where the Hi-1337 keeps the exposure or the analog
++ * gain. They are somewhere in the 0x0200 block -the per-channel digital gains
++ * are located, at 0x0214..0x021a, and they come from the factory
++ * file itself-, but guessing which is which only leads to writing to
++ * the wrong register. So this version does NOT expose exposure or
++ * gain controls: it sticks with whatever the tables set.
 + *
-+ * Esa es toda la diferencia con el driver de la frontal, y es deliberada.
++ * That is the whole difference from the front camera driver, and it is deliberate.
 + *
-+ * LA FRECUENCIA DE ENLACE ES PROVISIONAL
++ * THE LINK FREQUENCY IS PROVISIONAL
 + * --------------------------------------
-+ * De los registros del PLL del modo completo, el multiplicador de la primera
-+ * cadena (0x0736) vale 90, que con INCK = 19,2 MHz da 1728 MHz de VCO y por
-+ * tanto 864 MHz de reloj de enlace. Cuadra de sobra con lo que pide el modo
-+ * completo (4208 x 3120 x 30 fps x 10 bits / 4 carriles / 2 = 493 MHz minimo),
-+ * pero la estructura exacta del PLL de este sensor no esta documentada y no se
-+ * ha podido verificar por un segundo camino, que es como se valido la de la
++ * From the PLL registers of the full mode, the multiplier of the first
++ * chain (0x0736) is 90, which with INCK = 19.2 MHz gives 1728 MHz of VCO and
++ * therefore 864 MHz of link clock. It fits comfortably with what the mode needs
++ * completo (4208 x 3120 x 30 fps x 10 bits / 4 lanes / 2 = 493 MHz minimo),
++ * but the exact PLL structure of this sensor is not documented and it has not
++ * been possible to verify it through a second path, which is how the one of the
 + * frontal.
 + *
-+ * Por eso va como parametro de modulo: se puede barrer sin recompilar, igual
-+ * que se hizo con la sonda del buscador.
++ * That is why it goes as a module parameter: it can be swept without recompiling, just
++ * like it was done with the scanner's probe.
 + */
 +
 +#include <linux/clk.h>
@@ -400,34 +400,34 @@ without recompiling.
 +#define HI1337_DATA_LANES	4
 +#define HI1337_BPP		10
 +
-+/* 845,71 MHz. La cuenta, y como se comprobo, en el comentario de arriba. */
-+/* 864 MHz. Provisional y por eso tambien parametro: ver la cabecera. */
++/* 845.71 MHz. The arithmetic, and how it was checked, in the comment above. */
++/* 864 MHz. Provisional and therefore also a parameter: see the header. */
 +#define HI1337_LINK_FREQ	864000000ULL
 +
-+/* MEDIDO en el chip, no copiado del hi846: alli es 0x0f16 y aqui vale 0. */
++/* MEASURED on the chip, not copied from hi846: there it is 0x0f16 and here it reads 0. */
 +#define HI1337_REG_CHIP_ID	CCI_REG16(0x0716)
 +#define HI1337_CHIP_ID		0x1337
-+/* Los dos bytes sueltos, para el barrido a pelo de hi1337_probe_id_at(). */
++/* The two individual bytes, for the raw sweep of hi1337_probe_id_at(). */
 +#define HI1337_ID_REG_HI	0x07
 +#define HI1337_ID_REG_LO	0x16
 +
 +/*
-+ * El registro que arranca y para el flujo. Sale de las tablas de fabrica: hay
-+ * cuatro regSetting de una sola escritura y todas van a 0x0b00, con 0x0100
-+ * para arrancar y 0x0000 para parar. Es el analogo del 0x0a00 del Hi-846.
++ * The register that starts and stops the stream. It comes from the factory tables: there are
++ * four single-write regSetting entries and all of them go to 0x0b00, with 0x0100
++ * to start and 0x0000 to stop. It is the analogue of the Hi-846's 0x0a00.
 + */
 +#define HI1337_REG_CTRL_MODE	CCI_REG16(0x0b00)
 +#define HI1337_MODE_STREAMING	0x0100
 +
 +/*
-+ * El cerrojo de grupo, sacado del blob de fabrica: alli 0x0208 aparece como dos
-+ * "tablas" de una sola escritura, 0x0100 y 0x0000, justo al lado del par de
-+ * arranque y parada del flujo. Ver hi1337_set_ctrl().
++ * The group hold, taken from the factory blob: there 0x0208 shows up as two
++ * single-write "tables", 0x0100 and 0x0000, right next to the stream start
++ * and stop pair. See hi1337_set_ctrl().
 + */
-+/* Cuanto hay que dejar libre al final de la trama para la exposicion. */
++/* How much has to be left free at the end of the frame for the exposure. */
 +#define HI1337_EXPOSURE_MARGEN	4
 +
-+/* Por debajo de esto el sensor deja de emitir. Medido, no del manual. */
++/* Below this the sensor stops streaming. Measured, not from the datasheet. */
 +#define HI1337_EXPOSURE_MINIMA	720
 +
 +#define HI1337_REG_GROUP_HOLD	CCI_REG16(0x0208)
@@ -444,67 +444,67 @@ without recompiling.
 +static int i2c_addr = -1;
 +module_param(i2c_addr, int, 0444);
 +MODULE_PARM_DESC(i2c_addr,
-+	"Direccion I2C de 7 bits del sensor. -1 (por defecto) = buscarla.");
++	"7-bit I2C address of the sensor. -1 (default) = search for it.");
 +
 +static ulong link_freq_hz;
 +module_param(link_freq_hz, ulong, 0444);
 +MODULE_PARM_DESC(link_freq_hz,
-+	"Frecuencia de enlace en Hz. 0 (por defecto) = la calculada del PLL.");
++	"Link frequency in Hz. 0 (default) = the one computed from the PLL.");
 +
 +/*
-+ * LAS DIRECCIONES DE EXPOSICION Y GANANCIA VAN COMO PARAMETRO
++ * THE EXPOSURE AND GAIN ADDRESSES GO AS PARAMETERS
 + *
 + * libcamera EXIGE cuatro controles -exposicion, ganancia analogica, HBLANK y
-+ * VBLANK- y sin ellos rechaza el sensor entero: "The sensor kernel driver needs
-+ * to be fixed". O sea que no son un adorno.
++ * VBLANK- and without them it rejects the whole sensor: "The sensor kernel driver needs
++ * to be fixed". So they are not decoration.
 + *
-+ * Pero el mapa de registros del Hi-1337 no esta documentado y NO se puede
-+ * copiar del hi846: alli la identificacion esta en 0x0f16 y aqui en 0x0716, el
-+ * arranque del flujo en 0x0a00 y aqui en 0x0b00. No hay desplazamiento
-+ * constante que valga.
++ * But the Hi-1337 register map is not documented and it can NOT be
++ * copied from hi846: there the ID is at 0x0f16 and here at 0x0716, the
++ * stream start at 0x0a00 and here at 0x0b00. There is no constant
++ * offset that works.
 + *
-+ * Lo que si hay es evidencia propia:
-+ *   - el blob de fabrica situa las ganancias digitales en 0x0214..0x021a, o sea
-+ *     que el bloque 0x02xx es el de exposicion y ganancia;
-+ *   - dentro de ese bloque, 0x0206 (=720) y 0x020a (=3307) valen IGUAL en los
-+ *     dos modos, que es lo que se espera de una exposicion y una longitud de
-+ *     trama por defecto;
-+ *   - 0x0234..0x023a si cambian entre modos (1111 -> 3311/2222): esos son los
++ * What there is, is our own evidence:
++ *   - the factory blob places the digital gains at 0x0214..0x021a, that is,
++ *     the 0x02xx block is the exposure and gain one;
++ *   - within that block, 0x0206 (=720) and 0x020a (=3307) have the SAME value in
++ *     both modes, which is what one expects from a default exposure and frame
++ *     length;
++ *   - 0x0234..0x023a do change between modes (1111 -> 3311/2222): those are the
 + *     registros de combinacion de pixeles, no de ganancia.
 + *
-+ * De la ganancia analogica no hay pista, y el 0x0204 que se probo como tal esta
-+ * DESMENTIDO: la tabla del modo binado lo pone a 0x0200 y escribirle un 0 deja
-+ * al sensor emitiendo UN solo fotograma. Un registro de ganancia no hace eso.
-+ * Sigue sin saberse donde esta, y se encontrara midiendo brillo.
++ * Of the analog gain there is no clue, and the 0x0204 that was tried as such is
++ * DISPROVED: the binned mode table sets it to 0x0200 and writing a 0 to it leaves
++ * the sensor streaming ONE single frame. A gain register does not do that.
++ * Where it is remains unknown, and it will be found by measuring brightness.
 + */
 +static int reg_exposure = 0x0206;
 +module_param(reg_exposure, int, 0444);
-+MODULE_PARM_DESC(reg_exposure, "Registro de exposicion (por defecto 0x0206).");
++MODULE_PARM_DESC(reg_exposure, "Exposure register (default 0x0206).");
 +
 +/*
-+ * LA GANANCIA SON CUATRO REGISTROS, UNO POR CANAL
++ * THE GAIN IS FOUR REGISTERS, ONE PER CHANNEL
 + * -----------------------------------------------
-+ * 0x0214, 0x0216, 0x0218 y 0x021a. Hay que escribir los cuatro con el mismo
-+ * valor para tener una ganancia global; 512 es la unidad.
++ * 0x0214, 0x0216, 0x0218 and 0x021a. All four have to be written with the same
++ * value to get a global gain; 512 is unity.
 + *
-+ * Esto costo tres vueltas y dos conclusiones equivocadas, asi que conviene
-+ * dejar escrito COMO se distingue una ganancia de lo que no lo es:
++ * This cost three rounds and two wrong conclusions, so it is worth
++ * writing down HOW a gain is told apart from what is not one:
 + *
-+ *   - El brillo medio NO vale: lo suben una exposicion mas larga, una ganancia
-+ *     y un desplazamiento del nivel de negro. Las tres.
-+ *   - El periodo de trama descarta la exposicion, pero no el desplazamiento.
-+ *   - Lo que las separa es la DESVIACION TIPICA. Una ganancia multiplica la
-+ *     senal y su dispersion; un desplazamiento sube el suelo y deja la
-+ *     dispersion igual, o la aplasta.
-+ *   - Y nada de esto sirve si el sensor no esta mirando a una escena: sobre una
-+ *     imagen negra se amplifica un cero y todas las medidas mienten.
++ *   - Mean brightness is NO good: it is raised by a longer exposure, by a gain
++ *     and by a black level offset. All three.
++ *   - The frame period rules out the exposure, but not the offset.
++ *   - What tells them apart is the STANDARD DEVIATION. A gain multiplies the
++ *     signal and its spread; an offset raises the floor and leaves the
++ *     spread unchanged, or squashes it.
++ *   - And none of this works if the sensor is not looking at a scene: on a
++ *     black image a zero gets amplified and every measurement lies.
 + *
-+ * 0x0204 -que estuvo aqui como ganancia dos veces- es el NIVEL DE NEGRO.
-+ * Medido: al pasarlo de 512 a 768 la media sube de 20,5 a 82,0 pero la
-+ * desviacion BAJA de 16,5 a 10,3 y el contraste se parte por la mitad. Sube el
-+ * suelo, no la senal.
++ * 0x0204 -which was here as a gain twice- is the BLACK LEVEL.
++ * Measured: moving it from 512 to 768 raises the mean from 20.5 to 82.0 but the
++ * deviation DROPS from 16.5 to 10.3 and the contrast is halved. It raises the
++ * floor, not the signal.
 + *
-+ * Y estos cuatro, medidos por canal de Bayer escribiendo solo 0x0214:
++ * And these four, measured per Bayer channel by writing only 0x0214:
 + *
 + *     canal   senal a 512   senal a 2048   factor
 + *       Gr           4,76           4,74     1,00
@@ -512,49 +512,49 @@ without recompiling.
 + *        B           4,41           4,40     1,00
 + *       Gb           4,01          10,75     2,68
 + *
-+ * Dos canales amplificados y dos intactos, con el pedestal quieto. Eso es una
-+ * ganancia por canal.
++ * Two channels amplified and two untouched, with the pedestal steady. That is a
++ * per-channel gain.
 + */
 +static int reg_again = 0x0214;
 +module_param(reg_again, int, 0444);
 +MODULE_PARM_DESC(reg_again,
-+	"Primer registro de ganancia (por defecto 0x0214); se escriben cuatro; 0 = ninguno.");
++	"First gain register (default 0x0214); four are written; 0 = none.");
 +
 +/* Cuantos registros consecutivos de ganancia se escriben, de dos en dos. */
 +#define HI1337_CANALES_GANANCIA	4
 +
 +static int reg_vts = 0x020a;
 +module_param(reg_vts, int, 0444);
-+MODULE_PARM_DESC(reg_vts, "Registro de longitud de trama (por defecto 0x020a).");
++MODULE_PARM_DESC(reg_vts, "Frame length register (default 0x020a).");
 +
 +/*
-+ * La pareja de 0x020a. En las tres tablas de fabrica va siempre 4 por encima.
-+ * A 0 se deja sin escribir, para poder comprobar si de verdad hace falta.
++ * The mate of 0x020a. In the three factory tables it is always 4 above.
++ * At 0 it is left unwritten, so it can be checked whether it is really needed.
 + */
 +static int reg_vts_par = 0x020e;
 +module_param(reg_vts_par, int, 0444);
 +MODULE_PARM_DESC(reg_vts_par,
-+	"Segundo registro de longitud de trama, +4 (por defecto 0x020e); 0 = no escribirlo.");
++	"Second frame length register, +4 (default 0x020e); 0 = do not write it.");
 +
 +/*
-+ * El conmutador MIPI va SIEMPRE a la posicion de este sensor mientras este
-+ * encendido, porque sin eso no llega imagen. El parametro queda para poder
-+ * dejarlo quieto (=0) si algun dia hace falta depurar la frontal sin
-+ * descargar este driver.
++ * The MIPI switch ALWAYS goes to this sensor's position while it is
++ * powered on, because without that no image arrives. The parameter is kept to be able
++ * to leave it alone (=0) if some day the front camera needs debugging without
++ * unloading this driver.
 + */
 +static int mipi_switch = 1;
 +module_param(mipi_switch, int, 0444);
 +MODULE_PARM_DESC(mipi_switch,
-+	"1 (por defecto) pone el conmutador MIPI en este sensor; 0 no lo toca.");
++	"1 (default) points the MIPI switch at this sensor; 0 leaves it alone.");
 +
 +static s64 hi1337_link_freq_menu[] = {
 +	HI1337_LINK_FREQ,
 +};
 +
 +/*
-+ * El reparto exacto de los cuatro LDOs del WL2866D entre los cinco sensores
-+ * todavia no se sabe, y por eso el device tree los deja siempre encendidos.
-+ * Aqui se piden los tres carriles que si estan identificados.
++ * The exact assignment of the four WL2866D LDOs among the five sensors
++ * is not known yet, and that is why the device tree leaves them always on.
++ * Here the three lanes that are identified are requested.
 + */
 +static const char * const hi1337_supply_names[] = {
 +	"vdda",		/* analogica */
@@ -574,9 +574,9 @@ without recompiling.
 +	u32 height;
 +	u32 hts;
 +	u32 vts;
-+	/* La trama mas corta que el blob de fabrica usa en este modo. */
++	/* The shortest frame that the factory blob uses in this mode. */
 +	u32 vts_min;
-+	/* Lo que la tabla de fabrica deja en el registro de ganancia. */
++	/* What the factory table leaves in the gain register. */
 +	u32 again;
 +	u32 exposure;
 +	struct hi1337_reg_list reg_list;
@@ -589,22 +589,22 @@ without recompiling.
 +	struct gpio_desc *reset_gpio;
 +	struct regulator *mipi_switch_reg;
 +	struct gpio_desc *mipi_switch_oe;
-+	/* Si ahora mismo este sensor tiene cogido el conmutador MIPI. */
-+	bool conmutador_cogido;
++	/* Whether this sensor currently holds the MIPI switch. */
++	bool mux_held;
 +	struct regulator_bulk_data supplies[HI1337_NUM_SUPPLIES];
 +
 +	struct v4l2_subdev sd;
 +	struct media_pad pad;
 +
 +	struct v4l2_ctrl_handler ctrl_handler;
-+	/* Su techo tiene que seguir a la longitud de trama. */
++	/* Its ceiling has to follow the frame length. */
 +	struct v4l2_ctrl *exposure;
 +
 +	const struct hi1337_mode *mode;
 +};
 +
-+/* Inicializacion completa. Las primeras cientos de escrituras van a 0x2000 y
-+ * arriba: eso no son ajustes, es microcodigo para el secuenciador interno. */
++/* Full initialization. The first few hundred writes go to 0x2000 and
++ * above: those are not settings, that is microcode for the internal sequencer. */
 +static const struct cci_reg_sequence hi1337_init[] = {
 +	{ CCI_REG16(0x0790), 0x0100 },
 +	{ CCI_REG16(0x2000), 0x0000 },
@@ -2250,38 +2250,38 @@ without recompiling.
 +static const struct hi1337_mode hi1337_supported_modes[] = {
 +	{
 +		/*
-+		 * El combinado va primero: 3,3 MP son un tamano que el revelado
-+		 * por software puede seguir, y es el modo con el que conviene
-+		 * comprobar que llega imagen antes de pedir los 13 MP.
++		 * The binned one goes first: 3.3 MP is a size that software
++		 * debayering can keep up with, and it is the mode worth using to
++		 * check that an image arrives before asking for the 13 MP.
 +		 */
 +		.width = 2104,
 +		.height = 1560,
 +		/*
-+		 * vts sale de 0x020a en la tabla de fabrica. hts NO se conoce:
-+		 * 0x022c vale 3629 aqui y 3615 en el modo completo, pero en el
-+		 * completo eso es MENOR que los 4208 de ancho, asi que no puede
-+		 * ser una longitud de linea en pixeles. Se deja el blanqueo
-+		 * horizontal igual en los dos modos y marcado como provisional:
-+		 * libcamera lo usa para estimar tiempos, no para capturar.
++		 * vts comes from 0x020a in the factory table. hts is NOT known:
++		 * 0x022c is 3629 here and 3615 in the full mode, but in the
++		 * full one that is LESS than the 4208 of width, so it cannot
++		 * be a line length in pixels. The horizontal blanking is left
++		 * the same in both modes and marked as provisional:
++		 * libcamera uses it to estimate timings, not to capture.
 +		 */
 +		.hts = 2104 + 1525,
 +		.vts = 3307,
 +		/*
-+		 * El blob trae DOS tablas para este modo, identicas salvo en la
-+		 * longitud de trama: una con 3307 y otra con 1662. La segunda es
-+		 * la variante rapida, asi que 1662 es un valor bendecido por el
-+		 * fabricante y se puede usar como minimo.
++		 * The blob carries TWO tables for this mode, identical except in the
++		 * frame length: one with 3307 and another with 1662. The second one is
++		 * the fast variant, so 1662 is a value blessed by the
++		 * manufacturer and can be used as the minimum.
 +		 *
-+		 * Importa desde r180: hasta entonces la longitud de trama se
-+		 * escribia a medias -solo 0x020a, sin su pareja 0x020e- y el
-+		 * sensor la ignoraba, asi que este minimo no habria servido de
-+		 * nada. Con la pareja puesta, doblar vts de 3307 a 6614 baja de
++		 * It matters since r180: until then the frame length was
++		 * written only halfway -just 0x020a, without its mate 0x020e- and the
++		 * sensor ignored it, so this minimum would have been of no
++		 * use at all. With the mate in place, doubling vts from 3307 to 6614 drops from
 +		 * 19,5 a 12,3 fps: ya manda.
 +		 */
 +		.vts_min = 1662,
 +		/*
-+		 * La tabla del modo binado pone 0x0200 aqui, y un 0 lo deja
-+		 * emitiendo un solo fotograma. Es el suelo del control.
++		 * The binned mode table puts 0x0200 here, and a 0 leaves it
++		 * streaming a single frame. It is the floor of the control.
 +		 */
 +		.again = 0x0200,
 +		.exposure = 720,
@@ -2295,9 +2295,9 @@ without recompiling.
 +		.height = 3120,
 +		.hts = 4208 + 1525,
 +		.vts = 3307,
-+		/* Aqui el blob solo trae una tabla, asi que no hay margen medido. */
++		/* Here the blob only carries one table, so there is no measured margin. */
 +		.vts_min = 3307,
-+		/* En resolucion completa la tabla de fabrica lo deja a cero. */
++		/* At full resolution the factory table leaves it at zero. */
 +		.again = 0x0000,
 +		.exposure = 720,
 +		.reg_list = {
@@ -2316,7 +2316,7 @@ without recompiling.
 +
 +static int bayer;
 +module_param(bayer, int, 0444);
-+MODULE_PARM_DESC(bayer, "Orden del mosaico: 0=GRBG 1=RGGB 2=BGGR 3=GBRG");
++MODULE_PARM_DESC(bayer, "Bayer order: 0=GRBG 1=RGGB 2=BGGR 3=GBRG");
 +
 +static u32 hi1337_get_format_code(void)
 +{
@@ -2329,10 +2329,10 @@ without recompiling.
 +}
 +
 +/*
-+ * Solo los dos controles obligatorios. La exposicion y la ganancia analogica
-+ * de este sensor no estan localizadas con certeza -ver la cabecera-, y un
-+ * control que escribe en el registro equivocado es peor que no tenerlo: falla
-+ * de una forma que parece un problema del enlace.
++ * Only the two mandatory controls. The exposure and the analog gain
++ * of this sensor are not located with certainty -see the header-, and a
++ * control that writes to the wrong register is worse than not having it: it fails
++ * in a way that looks like a link problem.
 + */
 +static int hi1337_set_ctrl(struct v4l2_ctrl *ctrl)
 +{
@@ -2340,25 +2340,25 @@ without recompiling.
 +					     ctrl_handler);
 +	int ret = 0;
 +
-+	/* Sin alimentacion no hay a quien escribir. */
++	/* With no power there is nobody to write to. */
 +	if (!pm_runtime_get_if_in_use(hi1337->dev))
 +		return 0;
 +
 +	/*
 +	 * CERROJO DE GRUPO
 +	 * ----------------
-+	 * El blob de fabrica trae 0x0208=0x0100 y 0x0208=0x0000 como dos
-+	 * "tablas" de UNA sola escritura, justo al lado del par de arranque y
-+	 * parada del flujo (0x0b00). Ese es el patron clasico del cerrojo de
-+	 * grupo: se cierra, se escriben los registros que deben cambiar a la
-+	 * vez, y se abre; el sensor los aplica todos al empezar la trama
-+	 * siguiente, no a mitad de la que esta leyendo.
++	 * The factory blob carries 0x0208=0x0100 and 0x0208=0x0000 as two
++	 * single-write "tables", right next to the stream start and
++	 * stop pair (0x0b00). That is the classic pattern of the group
++	 * hold: it is closed, the registers that must change together are
++	 * written, and it is opened; the sensor applies them all at the start of the
++	 * next frame, not in the middle of the one it is reading out.
 +	 *
-+	 * Sin esto la exposicion se escribia a pelo en mitad de una trama.
-+	 * Medido: subirla funciona -1440 y 2880 van bien- pero bajarla rompe el
-+	 * flujo, y el suelo cae justo por debajo del valor de fabrica: 720 va,
-+	 * 690 no. Que el limite coincida con el valor de fabrica es demasiada
-+	 * casualidad para ser un limite fisico del sensor.
++	 * Without this the exposure was written raw in the middle of a frame.
++	 * Measured: raising it works -1440 and 2880 are fine- but lowering it breaks the
++	 * stream, and the floor falls right below the factory value: 720 works,
++	 * 690 does not. That the limit coincides with the factory value is too much of
++	 * a coincidence to be a physical limit of the sensor.
 +	 */
 +	cci_write(hi1337->regmap, HI1337_REG_GROUP_HOLD,
 +		  HI1337_GROUP_HOLD_ON, NULL);
@@ -2369,7 +2369,7 @@ without recompiling.
 +				ctrl->val, NULL);
 +		break;
 +	case V4L2_CID_ANALOGUE_GAIN:
-+		/* Los cuatro canales con el mismo valor: ganancia global. */
++		/* All four channels with the same value: global gain. */
 +		if (reg_again) {
 +			unsigned int i;
 +
@@ -2384,20 +2384,20 @@ without recompiling.
 +		break;
 +	case V4L2_CID_VBLANK:
 +		/*
-+		 * LA LONGITUD DE TRAMA SON DOS REGISTROS, NO UNO.
++		 * THE FRAME LENGTH IS TWO REGISTERS, NOT ONE.
 +		 *
-+		 * En las TRES tablas de modo del blob de fabrica, 0x020a y
-+		 * 0x020e van emparejados y la diferencia es siempre 4:
++		 * In the THREE mode tables of the factory blob, 0x020a and
++		 * 0x020e are paired and the difference is always 4:
 +		 *
 +		 *     4208x3120: 0x020a=3307  0x020e=3311
 +		 *     2104x1560: 0x020a=3307  0x020e=3311
 +		 *     2104x1560: 0x020a=1662  0x020e=1666   (variante rapida)
 +		 *
-+		 * Se escribia solo el primero, asi que en cuanto alguien tocaba
-+		 * el blanqueo vertical la pareja quedaba descuadrada. Encaja con
-+		 * lo medido: doblar 0x020a de 3307 a 6614 no cambiaba NADA -ni el
-+		 * periodo de trama ni el suelo de exposicion-, que es justo lo
-+		 * que hace un sensor que ignora un par incoherente.
++		 * Only the first one was written, so as soon as anyone touched
++		 * the vertical blanking the pair went out of sync. It fits
++		 * what was measured: doubling 0x020a from 3307 to 6614 changed NOTHING -neither the
++		 * frame period nor the exposure floor-, which is exactly what
++		 * a sensor that ignores an inconsistent pair does.
 +		 */
 +		ret = cci_write(hi1337->regmap, CCI_REG16(reg_vts),
 +				hi1337->mode->height + ctrl->val, NULL);
@@ -2409,17 +2409,17 @@ without recompiling.
 +					NULL);
 +
 +		/*
-+		 * Y el techo de la exposicion tiene que seguir a la trama, que si
-+		 * no se puede pedir una exposicion que no cabe dentro.
++		 * And the exposure ceiling has to follow the frame, because
++		 * otherwise an exposure that does not fit inside can be requested.
 +		 *
-+		 * Medido: con vblank=102 -trama de 1662- el control seguia
-+		 * admitiendo 3303, que era el maximo calculado en el probe con la
-+		 * trama por defecto de 3307. Y libcamera, a oscuras, pide
-+		 * exactamente el maximo: acababa pidiendo el DOBLE de lo que cabe
-+		 * y el sensor alargaba la trama para que cupiera, con lo que
++		 * Measured: with vblank=102 -a frame of 1662- the control still
++		 * accepted 3303, which was the maximum computed in probe with the
++		 * default frame of 3307. And libcamera, in the dark, asks for
++		 * exactly the maximum: it ended up asking for TWICE what fits
++		 * and the sensor stretched the frame so that it would fit, which
 +		 * acortarla no servia de nada.
 +		 *
-+		 * Es lo que hace hi846.c de mainline, que es el pariente cercano.
++		 * It is what mainline's hi846.c does, which is the close relative.
 +		 */
 +		if (hi1337->exposure) {
 +			s64 max = hi1337->mode->height + ctrl->val -
@@ -2435,7 +2435,7 @@ without recompiling.
 +		break;
 +	}
 +
-+	/* Abrir el cerrojo: el sensor aplica los cambios en la trama siguiente. */
++	/* Open the group hold: the sensor applies the changes on the next frame. */
 +	cci_write(hi1337->regmap, HI1337_REG_GROUP_HOLD,
 +		  HI1337_GROUP_HOLD_OFF, NULL);
 +
@@ -2450,12 +2450,12 @@ without recompiling.
 +};
 +
 +/*
-+ * libcamera EXIGE exposicion, ganancia analogica, HBLANK y VBLANK: sin los
-+ * cuatro rechaza el sensor entero con "The sensor kernel driver needs to be
-+ * fixed". Por eso estan aqui aunque las direcciones de dos de ellos sean
-+ * provisionales -ver el comentario de los parametros-. Un control que escribe
-+ * en el registro equivocado se nota: la imagen sale pero no responde. Sin el
-+ * control no hay imagen siquiera.
++ * libcamera REQUIRES exposure, analog gain, HBLANK and VBLANK: without the
++ * four of them it rejects the whole sensor with "The sensor kernel driver needs to be
++ * fixed". That is why they are here even though the addresses of two of them are
++ * provisional -see the comment on the parameters-. A control that writes
++ * to the wrong register shows: the image comes out but does not respond. Without the
++ * control there is not even an image.
 + */
 +static int hi1337_init_controls(struct hi1337 *hi1337)
 +{
@@ -2496,30 +2496,30 @@ without recompiling.
 +
 +	vblank = mode->vts - mode->height;
 +	/*
-+	 * El MINIMO del blanqueo vertical era el propio valor por defecto, o
-+	 * sea que la trama solo podia alargarse y nunca acortarse: libcamera no
-+	 * tenia forma de acelerar la camara ni queriendo. Ahora baja hasta la
-+	 * longitud de trama mas corta que usa el blob de fabrica.
++	 * The MINIMUM of the vertical blanking was the default value itself,
++	 * that is, the frame could only be lengthened and never shortened: libcamera had
++	 * no way to speed up the camera even if it wanted to. Now it goes down to the
++	 * shortest frame length that the factory blob uses.
 +	 */
 +	v4l2_ctrl_new_std(h, &hi1337_ctrl_ops, V4L2_CID_VBLANK,
 +			  mode->vts_min - mode->height,
 +			  0xffff - mode->height, 1, vblank);
 +
 +	/*
-+	 * EL MINIMO ES 720, NO 4, Y ESTA MEDIDO.
++	 * THE MINIMUM IS 720, NOT 4, AND IT IS MEASURED.
 +	 *
-+	 * Por debajo de ~720 este sensor DEJA DE EMITIR: se le escribe el valor,
++	 * Below ~720 this sensor STOPS STREAMING: the value is written to it,
 +	 * lo acepta y lo devuelve tal cual, y a partir de ahi no sale un solo
-+	 * paquete por el CSI. Acotado por bisección: 720 va, 690 no.
++	 * packet over CSI. Bounded by bisection: 720 works, 690 does not.
 +	 *
-+	 * Declarar 4 no era inofensivo. Los controles PERSISTEN, asi que en
-+	 * cuanto alguien pedia menos -el control automatico de libcamera o una
-+	 * barra en la herramienta de calibracion- la camara se quedaba muerta y
-+	 * TODAS las capturas siguientes esperaban su tiempo de espera entero y
-+	 * devolvian cero bytes. Visto desde fuera parece una camara lentisima,
-+	 * no una camara parada, que es lo que despista.
++	 * Declaring 4 was not harmless. Controls PERSIST, so as
++	 * soon as anyone asked for less -libcamera's automatic control or a
++	 * slider in the calibration tool- the camera was left dead and
++	 * ALL the following captures waited their whole timeout and
++	 * returned zero bytes. Seen from outside it looks like a very slow camera,
++	 * not a stopped camera, which is what misleads.
 +	 *
-+	 * Un driver no debe ofrecer un rango en el que su sensor no funciona.
++	 * A driver must not offer a range in which its sensor does not work.
 +	 */
 +	hi1337->exposure = v4l2_ctrl_new_std(h, &hi1337_ctrl_ops,
 +					     V4L2_CID_EXPOSURE,
@@ -2528,19 +2528,19 @@ without recompiling.
 +					     1, mode->exposure);
 +
 +	/*
-+	 * Suelo: el valor de fabrica de ESTE modo, porque por debajo el binado
-+	 * deja de transmitir. Techo: abierto, porque el escalon medido esta en
-+	 * 0x0300 y el limite de arriba todavia no se ha buscado.
++	 * Floor: the factory value of THIS mode, because below it the binned one
++	 * stops streaming. Ceiling: open, because the measured step is at
++	 * 0x0300 and the upper limit has not been looked for yet.
 +	 */
-+	/* 512 es la unidad en los cuatro registros de canal, en los dos modos. */
++	/* 512 is unity in the four channel registers, in both modes. */
 +	v4l2_ctrl_new_std(h, &hi1337_ctrl_ops, V4L2_CID_ANALOGUE_GAIN,
 +			  512, 0x0fff, 1, 512);
 +
 +	/*
-+	 * Donde mira la camara y como esta montada, sacado del device tree.
-+	 * Sin esto libcamera avisa "Failed to retrieve the camera location",
-+	 * lista la camara como 'hi1337' en vez de "Internal back camera", y la
-+	 * imagen sale girada porque nadie le ha dicho como enderezarla. Las
++	 * Where the camera looks and how it is mounted, taken from the device tree.
++	 * Without this libcamera warns "Failed to retrieve the camera location",
++	 * lists the camera as 'hi1337' instead of "Internal back camera", and the
++	 * image comes out rotated because nobody has told it how to straighten it. The
 +	 * otras dos ya lo hacen; ver 0096-orientacion-y-rotacion.
 +	 */
 +	ret = v4l2_fwnode_device_parse(hi1337->dev, &props);
@@ -2557,7 +2557,7 @@ without recompiling.
 +
 +	if (h->error) {
 +		ret = h->error;
-+		dev_err(hi1337->dev, "fallo montando los controles: %d\n", ret);
++		dev_err(hi1337->dev, "failed setting up the controls: %d\n", ret);
 +		v4l2_ctrl_handler_free(h);
 +		return ret;
 +	}
@@ -2568,45 +2568,45 @@ without recompiling.
 +}
 +
 +/*
-+ * s_stream CLASICO, y no el par enable_streams/disable_streams que traia el
-+ * driver de la frontal.
++ * CLASSIC s_stream, and not the enable_streams/disable_streams pair that the
++ * front camera driver carried.
 + *
-+ * Medido: con enable_streams el nucleo toma el camino de la API de "streams",
-+ * que exige la bandera V4L2_SUBDEV_FL_STREAMS y rutas declaradas, y camss
-+ * fallaba con
++ * Measured: with enable_streams the kernel takes the path of the "streams" API,
++ * which requires the V4L2_SUBDEV_FL_STREAMS flag and declared routes, and camss
++ * failed with
 + *
 + *     collect_streams: sub-device "hi1337 14-0021" does not support streams
 + *
-+ * despues de haber validado la tuberia ENTERA. El driver del IMX682, que si
-+ * captura con esta misma camss, usa .s_stream a secas: sin enable_streams el
-+ * nucleo cae a esa via. Alinearse con el caso que funciona sale mas barato que
++ * after having validated the WHOLE pipeline. The IMX682 driver, which does
++ * capture with this same camss, uses plain .s_stream: without enable_streams the
++ * kernel falls back to that path. Aligning with the case that works is cheaper than
 + * implementar rutas.
 + */
 +static int hi1337_parar(struct v4l2_subdev *sd);
 +
 +/*
-+ * EL CONMUTADOR MIPI ES DE QUIEN ESTA TRANSMITIENDO
++ * THE MIPI SWITCH BELONGS TO WHOEVER IS STREAMING
 + * -------------------------------------------------
-+ * La frontal y el gran angular comparten la entrada CSIPHY1 del SoC a traves
-+ * de un conmutador MIPI, asi que el conmutador es un recurso compartido y hay
-+ * que cogerlo mientras se USA, no mientras se esta encendido.
++ * The front and the wide-angle cameras share the SoC's CSIPHY1 input through
++ * a MIPI switch, so the switch is a shared resource and it has
++ * to be taken while it is USED, not while it is powered on.
 + *
-+ * La primera version lo cogia en hi1337_power_on(). Parecia razonable y estaba
-+ * mal: el sensor se queda encendido bastante despues de dejar de usarse
-+ * -runtime PM con autosuspend, y ademas libcamera lo deja en "active" al
-+ * cerrar la camara-, asi que el conmutador seguia apuntando aqui y la frontal
-+ * capturaba CERO paquetes con todo lo demas correcto: enlaces bien, formato
-+ * bien, frecuencia bien y s_stream sin quejarse. Un fallo mudo y lejos de su
-+ * causa, que es la peor clase.
++ * The first version took it in hi1337_power_on(). It looked reasonable and it was
++ * wrong: the sensor stays powered on for a good while after it stops being used
++ * -runtime PM with autosuspend, and besides libcamera leaves it "active" when
++ * closing the camera-, so the switch kept pointing here and the front camera
++ * captured ZERO packets with everything else correct: links fine, format
++ * fine, frequency fine and s_stream not complaining. A silent failure far from its
++ * cause, which is the worst kind.
 + *
-+ * Cogido en s_stream(1) y soltado en la parada, la ventana en la que este
-+ * sensor se queda el bus es exactamente la que lo necesita.
++ * Taken in s_stream(1) and released on stop, the window in which this
++ * sensor keeps the bus is exactly the one that needs it.
 + */
-+static int hi1337_coger_conmutador(struct hi1337 *hi1337)
++static int hi1337_acquire_mux(struct hi1337 *hi1337)
 +{
 +	int ret;
 +
-+	if (hi1337->conmutador_cogido || mipi_switch == 0)
++	if (hi1337->mux_held || mipi_switch == 0)
 +		return 0;
 +
 +	if (hi1337->mipi_switch_reg) {
@@ -2615,20 +2615,20 @@ without recompiling.
 +			return ret;
 +	}
 +	gpiod_set_value_cansleep(hi1337->mipi_switch_oe, 1);
-+	hi1337->conmutador_cogido = true;
++	hi1337->mux_held = true;
 +
 +	return 0;
 +}
 +
-+static void hi1337_soltar_conmutador(struct hi1337 *hi1337)
++static void hi1337_release_mux(struct hi1337 *hi1337)
 +{
-+	if (!hi1337->conmutador_cogido)
++	if (!hi1337->mux_held)
 +		return;
 +
 +	gpiod_set_value_cansleep(hi1337->mipi_switch_oe, 0);
 +	if (hi1337->mipi_switch_reg)
 +		regulator_disable(hi1337->mipi_switch_reg);
-+	hi1337->conmutador_cogido = false;
++	hi1337->mux_held = false;
 +}
 +
 +static int hi1337_s_stream(struct v4l2_subdev *sd, int enable)
@@ -2644,20 +2644,20 @@ without recompiling.
 +	if (ret < 0)
 +		return ret;
 +
-+	ret = hi1337_coger_conmutador(hi1337);
++	ret = hi1337_acquire_mux(hi1337);
 +	if (ret) {
-+		dev_err(hi1337->dev, "no pude coger el conmutador MIPI\n");
++		dev_err(hi1337->dev, "could not take the MIPI switch\n");
 +		goto err_rpm_put;
 +	}
 +
 +	/*
-+	 * El reinicio por pagina del Samsung no existe aqui: el Hi-1337 sale
-+	 * del reset fisico listo para recibir la tabla.
++	 * The Samsung's per-page reset does not exist here: the Hi-1337 comes
++	 * out of the physical reset ready to receive the table.
 +	 */
 +	ret = cci_multi_reg_write(hi1337->regmap, hi1337_init,
 +				  ARRAY_SIZE(hi1337_init), NULL);
 +	if (ret) {
-+		dev_err(hi1337->dev, "fallo la tabla de inicializacion\n");
++		dev_err(hi1337->dev, "the initialization table failed\n");
 +		goto err_rpm_put;
 +	}
 +
@@ -2665,27 +2665,27 @@ without recompiling.
 +	ret = cci_multi_reg_write(hi1337->regmap, reg_list->regs,
 +				  reg_list->num_regs, NULL);
 +	if (ret) {
-+		dev_err(hi1337->dev, "fallo la tabla del modo\n");
++		dev_err(hi1337->dev, "the mode table failed\n");
 +		goto err_rpm_put;
 +	}
 +
 +	/*
-+	 * Los controles ANTES de arrancar, que es lo que hacen los demas
++	 * The controls BEFORE starting, which is what all the other
 +	 * drivers.
 +	 *
-+	 * Estuvieron un rato despues, por una medida que resulto ser una
-+	 * carrera: creí haber demostrado que el sensor solo se atraganta al
-+	 * ARRANCAR con una exposicion corta y que bajarla en marcha iba bien
-+	 * -"30 fotogramas de 30"-. Pero esa captura de 30 fotogramas a 47 ms
-+	 * termina en 1,4 s y yo bajaba la exposicion a los 3 s: cuando ya no
-+	 * quedaba nada que medir. Repetida con 100 fotogramas y bajandola al
-+	 * segundo, entran 14 y el flujo MUERE. El suelo es real y tambien
-+	 * aplica en marcha, asi que reordenar no arreglaba nada y solo alejaba
-+	 * este driver de lo que hace todo el mundo.
++	 * They were after it for a while, because of a measurement that turned out to be a
++	 * race: I thought I had shown that the sensor only chokes when
++	 * STARTING with a short exposure and that lowering it while running was fine
++	 * -"30 frames out of 30"-. But that capture of 30 frames at 47 ms
++	 * ends in 1.4 s and I was lowering the exposure at 3 s: when there was
++	 * nothing left to measure. Repeated with 100 frames and lowering it at the
++	 * one second mark, 14 come in and the stream DIES. The floor is real and it also
++	 * applies while running, so reordering fixed nothing and only moved
++	 * this driver away from what everyone else does.
 +	 *
-+	 * Lo que sigue sin explicacion es el suelo en si: entre 700 y 720, el
-+	 * mismo en los dos modos, sin relacion con vts ni con la altura, y con
-+	 * el chip aceptando y devolviendo cualquier valor que se le escriba
++	 * What remains unexplained is the floor itself: between 700 and 720, the
++	 * same in both modes, unrelated to vts or to the height, and with
++	 * the chip accepting and reading back any value written to it
 +	 * -incluido 0x0004-. Ver docs/CAMARA-06.
 +	 */
 +	ret = __v4l2_ctrl_handler_setup(&hi1337->ctrl_handler);
@@ -2693,8 +2693,8 @@ without recompiling.
 +		goto err_rpm_put;
 +
 +	/*
-+	 * Sin volteos: el gran angular mira hacia atras, no hace falta darle
-+	 * la vuelta. Y donde estan sus bits de volteo tampoco esta confirmado.
++	 * No flips: the wide-angle camera faces backwards, there is no need to turn it
++	 * around. And where its flip bits are is not confirmed either.
 +	 */
 +	ret = cci_write(hi1337->regmap, HI1337_REG_CTRL_MODE,
 +			HI1337_MODE_STREAMING, NULL);
@@ -2704,7 +2704,7 @@ without recompiling.
 +	return 0;
 +
 +err_rpm_put:
-+	hi1337_soltar_conmutador(hi1337);
++	hi1337_release_mux(hi1337);
 +	pm_runtime_mark_last_busy(hi1337->dev);
 +	pm_runtime_put_autosuspend(hi1337->dev);
 +
@@ -2718,7 +2718,7 @@ without recompiling.
 +
 +	ret = cci_write(hi1337->regmap, HI1337_REG_CTRL_MODE, 0, NULL);
 +
-+	hi1337_soltar_conmutador(hi1337);
++	hi1337_release_mux(hi1337);
 +	pm_runtime_mark_last_busy(hi1337->dev);
 +	pm_runtime_put_autosuspend(hi1337->dev);
 +
@@ -2726,23 +2726,23 @@ without recompiling.
 +}
 +
 +/*
-+ * EL DISPARADOR DE TRANSMISION
++ * THE STREAMING TRIGGER
 + *
-+ * Existe porque camss todavia NO esta cableado a este sensor, y con razon: el
-+ * parche 0051 dejo escrito que declarar un puerto en camss cuyo sensor no
-+ * arranque hace perder /dev/media0, y con el la camara frontal, que si
-+ * funciona. Cablearlo es un paso con riesgo y hay que darlo a sabiendas.
++ * It exists because camss is NOT wired to this sensor yet, and rightly so:
++ * patch 0051 wrote down that declaring a port in camss whose sensor does not
++ * probe loses /dev/media0, and with it the front camera, which does
++ * work. Wiring it up is a risky step and it has to be taken knowingly.
 + *
-+ * Pero sin camss nadie llama a enable_streams(), asi que no habia forma de
-+ * saber si el sensor llega a emitir. Con esto se comprueba lo importante -que
-+ * las 1544 escrituras entran sin error y que el sensor arranca el flujo- sin
-+ * tocar nada de lo que ya va:
++ * But without camss nobody calls enable_streams(), so there was no way to
++ * know whether the sensor manages to stream. This checks what matters -that
++ * the 1544 writes go in without error and that the sensor starts the stream- without
++ * touching anything that already works:
 + *
 + *     echo 1 > /sys/module/hi1337/parameters/transmitir
 + *     echo 0 > /sys/module/hi1337/parameters/transmitir
 + *
-+ * Es el mismo truco que la sonda del buscador, y por el mismo motivo: separar
-+ * la pregunta cara -recompilar, arriesgar el arranque- de la pregunta barata.
++ * It is the same trick as the scanner's probe, and for the same reason: to separate
++ * the expensive question -recompiling, risking the boot- from the cheap one.
 + */
 +static struct hi1337 *hi1337_vivo;
 +
@@ -2767,14 +2767,14 @@ without recompiling.
 +
 +	ret = pm_runtime_resume_and_get(h->dev);
 +	if (ret < 0) {
-+		dev_info(h->dev, "no se pudo despertar: %d\n", ret);
++		dev_info(h->dev, "could not wake up: %d\n", ret);
 +		return 0;
 +	}
 +
 +	ret = cci_multi_reg_write(h->regmap, hi1337_init,
 +				  ARRAY_SIZE(hi1337_init), NULL);
 +	if (ret) {
-+		dev_info(h->dev, "la inicializacion fallo en i2c: %d\n", ret);
++		dev_info(h->dev, "the initialization failed on i2c: %d\n", ret);
 +		goto suelta;
 +	}
 +	dev_info(h->dev, "inicializacion escrita: %u registros\n",
@@ -2783,7 +2783,7 @@ without recompiling.
 +	ret = cci_multi_reg_write(h->regmap, h->mode->reg_list.regs,
 +				  h->mode->reg_list.num_regs, NULL);
 +	if (ret) {
-+		dev_info(h->dev, "la tabla del modo fallo en i2c: %d\n", ret);
++		dev_info(h->dev, "the mode table failed on i2c: %d\n", ret);
 +		goto suelta;
 +	}
 +	dev_info(h->dev, "modo %ux%u escrito: %u registros\n",
@@ -2802,22 +2802,22 @@ without recompiling.
 +}
 +
 +/*
-+ * LA SONDA DE 16 BITS
++ * THE 16-BIT PROBE
 + *
-+ * Existe porque medir este sensor desde el espacio de usuario NO SE PUEDE
-+ * hacer con i2cdump: el bus del CCI no admite las transacciones combinadas de
-+ * i2ctransfer, e i2cdump lee de 8 en 8 bits sobre un chip de 16. Eso no es
-+ * leer, es ESCRIBIR -el segundo byte entra como dato- y este repositorio ya lo
-+ * tiene documentado como trampa.
++ * It exists because measuring this sensor from user space CANNOT be
++ * done with i2cdump: the CCI bus does not support the combined transactions of
++ * i2ctransfer, and i2cdump reads 8 bits at a time on a 16-bit chip. That is not
++ * reading, it is WRITING -the second byte goes in as data- and this repository already
++ * has it documented as a trap.
 + *
-+ * Yo mismo cai en ella: di por bueno que el sensor "estaba emitiendo" mirando
-+ * una huella sacada con i2cdump, cuando esa huella puede ser un artefacto de
++ * I fell into it myself: I took for granted that the sensor "was streaming" by looking at
++ * a fingerprint taken with i2cdump, when that fingerprint can be an artifact of
 + * mis propias escrituras.
 + *
 + *     echo "0b00"      > /sys/module/hi1337/parameters/sonda   # leer
 + *     echo "0b00 0100" > /sys/module/hi1337/parameters/sonda   # escribir y releer
 + */
-+static int sonda_set(const char *val, const struct kernel_param *kp)
++static int probe_set(const char *val, const struct kernel_param *kp)
 +{
 +	struct hi1337 *h = READ_ONCE(hi1337_vivo);
 +	unsigned int reg, dato = 0;
@@ -2833,7 +2833,7 @@ without recompiling.
 +
 +	ret = pm_runtime_resume_and_get(h->dev);
 +	if (ret < 0) {
-+		dev_info(h->dev, "sonda: no se pudo despertar: %d\n", ret);
++		dev_info(h->dev, "probe: could not wake up: %d\n", ret);
 +		return 0;
 +	}
 +
@@ -2856,15 +2856,15 @@ without recompiling.
 +	return 0;
 +}
 +
-+static const struct kernel_param_ops sonda_ops = { .set = sonda_set };
-+module_param_cb(sonda, &sonda_ops, NULL, 0200);
++static const struct kernel_param_ops probe_ops = { .set = probe_set };
++module_param_cb(sonda, &probe_ops, NULL, 0200);
 +MODULE_PARM_DESC(sonda,
-+		 "\"reg\" lee 16 bits, \"reg dato\" escribe y relee; sale por dmesg");
++		 "\"reg\" reads 16 bits, \"reg data\" writes and reads back; output goes to dmesg");
 +
 +static const struct kernel_param_ops transmitir_ops = { .set = transmitir_set };
 +module_param_cb(transmitir, &transmitir_ops, NULL, 0200);
 +MODULE_PARM_DESC(transmitir,
-+		 "1 escribe las tablas y arranca el flujo, 0 lo para; la respuesta sale por dmesg");
++		 "1 writes the tables and starts the stream, 0 stops it; the answer goes to dmesg");
 +
 +static void hi1337_update_pad_format(const struct hi1337_mode *mode,
 +				     struct v4l2_mbus_framefmt *fmt)
@@ -2905,10 +2905,10 @@ without recompiling.
 +	crop->height = mode->height;
 +
 +	/*
-+	 * Aqui el driver de la frontal reajusta los rangos de hblank, vblank y
-+	 * exposicion. Este no: no expone esos controles porque no se sabe en
-+	 * que registros viven en el Hi-1337, y tocarlos a ciegas rompe el
-+	 * enlace de una forma que parece un problema de CSI.
++	 * Here the front camera driver readjusts the hblank, vblank and
++	 * exposure ranges. This one does not: it does not expose those controls because it is not known
++	 * in which registers they live in the Hi-1337, and touching them blindly breaks the
++	 * link in a way that looks like a CSI problem.
 +	 */
 +	if (fmt->which == V4L2_SUBDEV_FORMAT_ACTIVE)
 +		hi1337->mode = mode;
@@ -2960,19 +2960,19 @@ without recompiling.
 +		sel->r.top = 0;
 +		sel->r.left = 0;
 +		/*
-+		 * Aqui habia 5184x3880 a pelo, que es la matriz del S5K3T2: se
-+		 * quedo del driver del que se porto esto. El Hi-1337 es de 13 MP,
-+		 * no de 20. Se veia desde fuera, en cam --list-properties:
++		 * Here there was a raw 5184x3880, which is the S5K3T2's array: it
++		 * was left over from the driver this was ported from. The Hi-1337 is 13 MP,
++		 * not 20. It was visible from outside, in cam --list-properties:
 +		 *
 +		 *     camara 2 (hi1337):  PixelArraySize = 5184x3880
 +		 *     camara 3 (s5k3t2):  PixelArraySize = 5184x3880
 +		 *
-+		 * Dos sensores distintos declarando la misma matriz. libcamera
-+		 * usa ese tamano para el recorte y el campo de vision, asi que un
-+		 * numero prestado sale por ahi como geometria equivocada.
++		 * Two different sensors declaring the same array. libcamera
++		 * uses that size for the crop and the field of view, so a
++		 * borrowed number comes out there as wrong geometry.
 +		 *
-+		 * Se saca del modo mas grande en vez de escribirlo, para que no
-+		 * pueda volver a separarse de la realidad.
++		 * It is derived from the largest mode instead of being written, so that it
++		 * cannot drift away from reality again.
 +		 */
 +		sel->r.width = hi1337_supported_modes[ARRAY_SIZE(hi1337_supported_modes) - 1].width;
 +		sel->r.height = hi1337_supported_modes[ARRAY_SIZE(hi1337_supported_modes) - 1].height;
@@ -3022,19 +3022,19 @@ without recompiling.
 +	.link_validate = v4l2_subdev_link_validate,
 +};
 +
-+/* Lee la identificacion en una direccion concreta, sin usar el regmap. */
++/* Reads the ID at a given address, without going through the regmap. */
 +/*
-+ * OJO CON LA DIRECCION DEL REGISTRO, que ya ha mordido dos veces.
++ * WATCH OUT WITH THE REGISTER ADDRESS, which has already bitten twice.
 + *
-+ * Esta funcion venia del s5k3t2 con el registro CABLEADO a 0x0000, porque en
-+ * el Samsung la identificacion vive ahi. Al portarla se renombraron las
-+ * constantes pero esta se quedo, y el driver leia 0x0000 -que en el Hi-1337
-+ * vale 0- y concluia "no encuentro el sensor" con el sensor delante,
++ * This function came from the s5k3t2 with the register HARDCODED to 0x0000, because on
++ * the Samsung the ID lives there. When porting it the constants were
++ * renamed but this one stayed, and the driver read 0x0000 -which on the Hi-1337
++ * reads 0- and concluded "cannot find the sensor" with the sensor right there,
 + * contestando.
 + *
-+ * Es el mismo fallo que ya bloqueo la investigacion entera cuando el buscador
-+ * leia 0x0f16 por copiarlo del hi846. Una constante heredada de un driver
-+ * hermano es una suposicion, aunque venga dentro de codigo que funciona.
++ * It is the same mistake that already blocked the whole investigation when the scanner
++ * read 0x0f16 because it was copied from hi846. A constant inherited from a sibling
++ * driver is an assumption, even when it comes inside code that works.
 + */
 +static int hi1337_probe_id_at(struct i2c_client *client, u8 addr, u16 *id)
 +{
@@ -3056,9 +3056,9 @@ without recompiling.
 +}
 +
 +/*
-+ * El fichero de fabrica NO trae la direccion del sensor -su unico slaveAddr es
-+ * la EEPROM-, asi que se busca leyendo la identificacion. Es la misma trampa
-+ * que con el trasero, donde el 0x50 "documentado" resulto ser la EEPROM y el
++ * The factory file does NOT carry the sensor address -its only slaveAddr is
++ * the EEPROM-, so it is found by reading the ID. It is the same trap
++ * as with the rear one, where the "documented" 0x50 turned out to be the EEPROM and the
 + * sensor estaba en 0x1a.
 + */
 +static int hi1337_find_sensor(struct hi1337 *hi1337, struct i2c_client *client)
@@ -3069,7 +3069,7 @@ without recompiling.
 +
 +	if (i2c_addr >= 0) {
 +		client->addr = i2c_addr;
-+		dev_info(hi1337->dev, "direccion forzada por parametro: 0x%02x\n",
++		dev_info(hi1337->dev, "address forced by parameter: 0x%02x\n",
 +			 i2c_addr);
 +		return 0;
 +	}
@@ -3084,7 +3084,7 @@ without recompiling.
 +		}
 +	}
 +
-+	/* Nada en las probables: barrido completo, y se dice quien contesta. */
++	/* Nothing at the likely ones: full sweep, and report who answers. */
 +	for (i = 0x08; i <= 0x77; i++) {
 +		if (hi1337_probe_id_at(client, i, &id))
 +			continue;
@@ -3128,7 +3128,7 @@ without recompiling.
 +		return ret;
 +
 +	if (bus_cfg.bus.mipi_csi2.num_data_lanes != HI1337_DATA_LANES) {
-+		dev_err(hi1337->dev, "hacen falta %u carriles, el device tree dice %u\n",
++		dev_err(hi1337->dev, "%u lanes are needed, the device tree says %u\n",
 +			HI1337_DATA_LANES, bus_cfg.bus.mipi_csi2.num_data_lanes);
 +		ret = -EINVAL;
 +		goto endpoint_free;
@@ -3157,28 +3157,28 @@ without recompiling.
 +		return ret;
 +
 +	/*
-+	 * El MCLK NO se toca aqui: se enciende una sola vez en el probe y se
-+	 * queda girando mientras el driver este enlazado. Ver el comentario
-+	 * largo del probe.
++	 * The MCLK is NOT touched here: it is enabled once in probe and it
++	 * keeps spinning while the driver is bound. See the long comment
++	 * in probe.
 +	 */
 +
 +	/*
-+	 * El conmutador MIPI NO se toca aqui. Se coge al empezar a transmitir
-+	 * y se suelta al parar: ver hi1337_coger_conmutador(). Antes se hacia
-+	 * en el encendido y estaba MAL, porque el sensor puede quedarse
-+	 * encendido mucho despues de dejar de usarse -runtime PM con
-+	 * autosuspend, y libcamera lo deja "active" al cerrar-, y mientras
-+	 * tanto la frontal se quedaba sin bus y capturaba cero paquetes.
++	 * The MIPI switch is NOT touched here. It is taken when streaming starts
++	 * and released on stop: see hi1337_acquire_mux(). It used to be done
++	 * at power on and that was WRONG, because the sensor can stay
++	 * powered on long after it stops being used -runtime PM with
++	 * autosuspend, and libcamera leaves it "active" on close-, and in the
++	 * meantime the front camera was left without a bus and captured zero packets.
 +	 */
 +
 +	gpiod_set_value_cansleep(hi1337->reset_gpio, 0);
 +	usleep_range(10 * USEC_PER_MSEC, 15 * USEC_PER_MSEC);
 +
 +	/*
-+	 * Decir en voz alta si el reloj esta girando de verdad. La primera
-+	 * version no lo decia, y como leer la identificacion por i2c NO
-+	 * necesita MCLK, un reloj parado pasaba desapercibido hasta mucho
-+	 * despues, cuando no llegara imagen. Eso es lo peor que puede hacer un
++	 * Say out loud whether the clock is really spinning. The first
++	 * version did not say it, and since reading the ID over i2c does NOT
++	 * need MCLK, a stopped clock went unnoticed until much
++	 * later, when no image would arrive. That is the worst thing a
 +	 * fallo: aparecer lejos de donde se causa.
 +	 */
 +	dev_dbg(dev, "encendido: MCLK a %lu Hz\n", clk_get_rate(hi1337->mclk));
@@ -3192,7 +3192,7 @@ without recompiling.
 +	struct hi1337 *hi1337 = to_hi1337(sd);
 +
 +	gpiod_set_value_cansleep(hi1337->reset_gpio, 1);
-+	hi1337_soltar_conmutador(hi1337);
++	hi1337_release_mux(hi1337);
 +	regulator_bulk_disable(HI1337_NUM_SUPPLIES, hi1337->supplies);
 +
 +	return 0;
@@ -3213,84 +3213,84 @@ without recompiling.
 +	hi1337->dev = &client->dev;
 +
 +	/*
-+	 * Esto va lo primero, y no es cosmetico: es lo que deja el subdev
-+	 * colgado del device, y hi1337_power_on() lo busca ahi con
-+	 * dev_get_drvdata(). Encender antes de esta linea es una
++	 * This goes first, and it is not cosmetic: it is what leaves the subdev
++	 * hanging off the device, and hi1337_power_on() looks for it there with
++	 * in dev_get_drvdata(). Powering on before this line is a
 +	 * desreferencia a NULL nada mas arrancar.
 +	 */
 +	v4l2_i2c_subdev_init(&hi1337->sd, client, &hi1337_subdev_ops);
 +
 +	/*
-+	 * devm_clk_get() a secas, y NO el devm_v4l2_sensor_clk_get() que traia
-+	 * el driver de la frontal. Medido: con aquel, al encender el reloj la
-+	 * habilitacion NO se propagaba al padre -camcc_mclk3_clk_src se quedaba
-+	 * en enable_cnt 0- y la rama reportaba "status stuck at off". El
-+	 * buscador enciende ese mismo MCLK3 sin problema pidiendolo por la via
-+	 * normal, y ahi el padre sube a 1: esa es la unica diferencia entre los
-+	 * dos casos, y es la que se cambia aqui.
++	 * plain devm_clk_get(), and NOT the devm_v4l2_sensor_clk_get() that the
++	 * front camera driver carried. Measured: with that one, when enabling the clock the
++	 * enable did NOT propagate to the parent -camcc_mclk3_clk_src stayed
++	 * at enable_cnt 0- and the branch reported "status stuck at off". The
++	 * scanner enables that same MCLK3 without trouble by requesting it the
++	 * normal way, and there the parent goes up to 1: that is the only difference between the
++	 * two cases, and it is the one changed here.
 +	 */
 +	hi1337->mclk = devm_clk_get(hi1337->dev, "xvclk");
 +	if (IS_ERR(hi1337->mclk))
 +		return dev_err_probe(hi1337->dev, PTR_ERR(hi1337->mclk),
-+				     "no pude coger el MCLK\n");
++				     "could not get the MCLK\n");
 +
 +	/*
-+	 * La frecuencia se pone AQUI y no con assigned-clocks en el device
-+	 * tree: aquello lo aplica el nucleo al registrar el nodo y cuelga el
-+	 * arranque en este SoC. Ver el comentario del nodo en el dtsi.
++	 * The frequency is set HERE and not with assigned-clocks in the device
++	 * tree: the kernel applies that when registering the node and it hangs the
++	 * boot on this SoC. See the node's comment in the dtsi.
 +	 */
 +	ret = clk_set_rate(hi1337->mclk, HI1337_MCLK_FREQ);
 +	if (ret)
 +		return dev_err_probe(hi1337->dev, ret,
-+				     "el MCLK no acepta %lu Hz\n",
++				     "the MCLK does not accept %lu Hz\n",
 +				     (unsigned long)HI1337_MCLK_FREQ);
 +
 +	/*
-+	 * EL MCLK SE ENCIENDE UNA SOLA VEZ Y SE QUEDA GIRANDO
++	 * THE MCLK IS ENABLED ONCE AND KEPT SPINNING
 +	 *
-+	 * Medido en la placa, y costo tres hipotesis descartadas: sobre el mismo
-+	 * manejador de reloj, la secuencia encender -> apagar -> encender FALLA.
-+	 * El segundo encendido reporta "camcc_mclk3_clk status stuck at 'off'",
-+	 * el resume de runtime PM falla y el dispositivo se queda suspendido
-+	 * para siempre.
++	 * Measured on the board, and it cost three discarded hypotheses: on the same
++	 * clock handle, the sequence enable -> disable -> enable FAILS.
++	 * The second enable reports "camcc_mclk3_clk status stuck at 'off'",
++	 * the runtime PM resume fails and the device stays suspended
++	 * forever.
 +	 *
-+	 * No es de la plataforma: el buscador enciende ESE MISMO MCLK3 dos veces
-+	 * seguidas sin quejarse... porque cada vez lo hace con un manejador
-+	 * recien pedido y nunca lo apaga en medio. Esa es la unica diferencia
-+	 * que queda entre los dos casos.
++	 * It is not the platform: the scanner enables THAT SAME MCLK3 twice
++	 * in a row without complaining... because each time it does so with a freshly
++	 * requested handle and never disables it in between. That is the only difference
++	 * left between the two cases.
 +	 *
-+	 * Descartado antes, y por medida, no por corazonada:
-+	 *   - el GDSC de camara (camcc_titan_top_gdsc sigue apagado con el
-+	 *     buscador manteniendo el reloj encendido),
++	 * Ruled out before, and by measurement, not by hunch:
++	 *   - the camera GDSC (camcc_titan_top_gdsc stays off with the
++	 *     scanner keeping the clock enabled),
 +	 *   - devm_v4l2_sensor_clk_get() frente a devm_clk_get(),
-+	 *   - volver a fijar la frecuencia antes de cada encendido.
++	 *   - setting the frequency again before every enable.
 +	 *
-+	 * Asi que el reloj se enciende aqui y se apaga en el remove. Runtime PM
-+	 * sigue gobernando rieles y reset, que es lo que de verdad consume. Un
-+	 * MCLK de 19,2 MHz girando cuesta poco, y hasta que se entienda por que
-+	 * la rama no vuelve a arrancar, esto es honesto y funciona.
++	 * So the clock is enabled here and disabled in remove. Runtime PM
++	 * still governs rails and reset, which is what really draws power. A
++	 * A 19.2 MHz MCLK spinning costs little, and until we understand why
++	 * the branch does not start up again, this is honest and it works.
 +	 */
 +	ret = clk_prepare_enable(hi1337->mclk);
 +	if (ret)
 +		return dev_err_probe(hi1337->dev, ret,
-+				     "el MCLK no arranca\n");
++				     "MCLK does not start\n");
 +
 +	freq = clk_get_rate(hi1337->mclk);
 +	if (freq != HI1337_MCLK_FREQ)
 +		return dev_err_probe(hi1337->dev, -EINVAL,
-+				     "el MCLK se quedo en %lu Hz y las tablas son para %lu\n",
++				     "MCLK stayed at %lu Hz and the tables are for %lu\n",
 +				     freq, (unsigned long)HI1337_MCLK_FREQ);
 +
 +	ret = hi1337_check_hwcfg(hi1337);
 +	if (ret)
 +		return dev_err_probe(hi1337->dev, ret,
-+				     "el device tree no cuadra\n");
++				     "the device tree does not match\n");
 +
 +	hi1337->reset_gpio = devm_gpiod_get_optional(hi1337->dev, "reset",
 +						     GPIOD_OUT_HIGH);
 +	if (IS_ERR(hi1337->reset_gpio))
 +		return dev_err_probe(hi1337->dev, PTR_ERR(hi1337->reset_gpio),
-+				     "no pude coger el pin de reset\n");
++				     "could not get the reset pin\n");
 +
 +	for (i = 0; i < HI1337_NUM_SUPPLIES; i++)
 +		hi1337->supplies[i].supply = hi1337_supply_names[i];
@@ -3299,45 +3299,45 @@ without recompiling.
 +				      hi1337->supplies);
 +	if (ret)
 +		return dev_err_probe(hi1337->dev, ret,
-+				     "no pude coger los reguladores\n");
++				     "could not get the regulators\n");
 +
 +	/*
-+	 * El conmutador MIPI que comparten la frontal y el gran angular. Se
-+	 * pide como opcional y solo se toca si lo mandan por parametro: no se
-+	 * conduce un pin cuya posicion correcta todavia no esta medida.
++	 * The MIPI switch shared by the front camera and the wide angle. It is
++	 * requested as optional and only touched if told to by parameter: a pin
++	 * whose correct position has not been measured yet is not driven.
 +	 */
 +	/*
-+	 * La segunda señal del conmutador MIPI. Sin ella el CSID no ve un solo
-+	 * paquete por mucho que el sensor transmita: es opcional en el codigo
-+	 * pero imprescindible en esta placa.
++	 * The second signal of the MIPI switch. Without it the CSID does not see a single
++	 * packet no matter how much the sensor transmits: it is optional in the code
++	 * but essential on this board.
 +	 */
 +	hi1337->mipi_switch_oe = devm_gpiod_get_optional(hi1337->dev,
 +							"mipi-switch-oe",
 +							GPIOD_OUT_LOW);
 +	if (IS_ERR(hi1337->mipi_switch_oe))
 +		return dev_err_probe(hi1337->dev, PTR_ERR(hi1337->mipi_switch_oe),
-+				     "no pude coger la señal OE del conmutador\n");
++				     "could not get the switch OE signal\n");
 +
 +	hi1337->mipi_switch_reg = devm_regulator_get_optional(hi1337->dev,
 +							      "mipi-switch");
 +	if (IS_ERR(hi1337->mipi_switch_reg))
 +		hi1337->mipi_switch_reg = NULL;
 +
-+	/* Hay que alimentarlo y darle reloj antes de que conteste por I2C. */
++	/* It has to be powered and clocked before it answers over I2C. */
 +	ret = hi1337_power_on(hi1337->dev);
 +	if (ret)
 +		return ret;
 +
 +	ret = hi1337_find_sensor(hi1337, client);
 +	if (ret) {
-+		dev_err(hi1337->dev, "no encuentro el HI1337 en el bus\n");
++		dev_err(hi1337->dev, "HI1337 not found on the bus\n");
 +		goto power_off;
 +	}
 +
 +	hi1337->regmap = devm_cci_regmap_init_i2c(client, 16);
 +	if (IS_ERR(hi1337->regmap)) {
 +		ret = dev_err_probe(hi1337->dev, PTR_ERR(hi1337->regmap),
-+				    "no pude arrancar el CCI\n");
++				    "could not start the CCI\n");
 +		goto power_off;
 +	}
 +
@@ -3357,7 +3357,7 @@ without recompiling.
 +
 +	ret = hi1337_init_controls(hi1337);
 +	if (ret) {
-+		dev_err_probe(hi1337->dev, ret, "fallaron los controles\n");
++		dev_err_probe(hi1337->dev, ret, "controls failed\n");
 +		goto power_off;
 +	}
 +
@@ -3381,7 +3381,7 @@ without recompiling.
 +
 +	ret = v4l2_async_register_subdev_sensor(&hi1337->sd);
 +	if (ret < 0) {
-+		dev_err_probe(hi1337->dev, ret, "no pude registrar el subdev\n");
++		dev_err_probe(hi1337->dev, ret, "could not register the subdev\n");
 +		goto subdev_cleanup;
 +	}
 +
@@ -3427,14 +3427,14 @@ without recompiling.
 +	}
 +
 +	/*
-+	 * Y el MCLK, que ya no lo apaga power_off: se enciende en el probe y
-+	 * vive lo que viva el enlace, asi que hay que pararlo AQUI.
++	 * And the MCLK, which power_off no longer turns off: it is enabled in probe and
++	 * lives as long as the binding does, so it has to be stopped HERE.
 +	 *
-+	 * Se olvido en la primera version y el reloj se quedaba girando tras el
-+	 * rmmod -visible en clk_summary como camcc_mclk3_clk con enable=1 y sin
-+	 * consumidor-. Es la misma fuga que ya tuvo el buscador con los rieles,
-+	 * y se encontro igual: mirando el estado despues de descargar en vez de
-+	 * dar por hecho que se habia limpiado.
++	 * It was forgotten in the first version and the clock kept spinning after
++	 * rmmod -visible in clk_summary as camcc_mclk3_clk with enable=1 and no
++	 * consumer-. It is the same leak the scanner already had with the rails,
++	 * and it was found the same way: looking at the state after unloading instead of
++	 * assuming it had been cleaned up.
 +	 */
 +	clk_disable_unprepare(hi1337->mclk);
 +}
@@ -3448,14 +3448,14 @@ without recompiling.
 +	{ /* sentinel */ }
 +};
 +/*
-+ * AHORA SI, con MODULE_DEVICE_TABLE. Se quito mientras el driver era una
-+ * primera version sin probar, para que un fallo suyo no pudiera dejar el movil
-+ * sin arrancar. Ya no es el caso: identifica el sensor, aguanta ciclos de
-+ * suspender y despertar sin un aviso, y escribe las 1544 entradas de las tablas
-+ * sin un error de i2c.
++ * NOW YES, with MODULE_DEVICE_TABLE. It was removed while the driver was a
++ * first untested version, so that a bug in it could not leave the phone
++ * unable to boot. That is no longer the case: it identifies the sensor, survives
++ * suspend and resume cycles without a single warning, and writes the 1544 table entries
++ * without a single i2c error.
 + *
-+ * Y ahora hace falta: camss espera a que aparezca el subdev del sensor de su
-+ * puerto, y si nadie carga el modulo esa espera no termina nunca y se pierde
++ * And now it is needed: camss waits for the sensor subdev of its
++ * port to appear, and if nobody loads the module that wait never ends and it loses
 + * /dev/media0.
 + */
 +MODULE_DEVICE_TABLE(of, hi1337_of_match);
@@ -3472,6 +3472,6 @@ without recompiling.
 +
 +module_i2c_driver(hi1337_i2c_driver);
 +
-+MODULE_DESCRIPTION("SK Hynix Hi-1337: el gran angular del POCO X3 NFC");
++MODULE_DESCRIPTION("SK Hynix Hi-1337: the POCO X3 NFC wide-angle camera");
 +MODULE_LICENSE("GPL");
 

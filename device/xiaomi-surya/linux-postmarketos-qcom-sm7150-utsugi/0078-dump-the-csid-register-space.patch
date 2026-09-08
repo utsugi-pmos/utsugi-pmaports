@@ -34,38 +34,38 @@ guessing which register to read.
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 14:24:31.216609922 +0200
 @@ -74,6 +74,11 @@
  MODULE_PARM_DESC(diag_reaplicar,
- 	"Escribir 1 para reaplicar la configuracion del receptor con el sensor ya transmitiendo.");
+ 	"Write 1 to reapply the receiver configuration with the sensor already streaming.");
  
-+static int volcado_csid;
-+module_param(volcado_csid, int, 0644);
-+MODULE_PARM_DESC(volcado_csid,
-+	"1 = volcar el espacio de registros del CSID al parar la transmision.");
++static int csid_dump;
++module_param(csid_dump, int, 0644);
++MODULE_PARM_DESC(csid_dump,
++	"1 = dump the CSID register space when streaming stops.");
 +
  static unsigned int diag_pkts;
  module_param(diag_pkts, uint, 0644);
  MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
 @@ -508,6 +513,41 @@
  				 * receptor estaria escuchando a otro sitio y
- 				 * todo lo demas seria coherente con lo medido.
+ 				 * everything else would be consistent with what was measured.
  				 */
 +				/*
 +				 * VOLCADO COMPLETO.
 +				 *
 +				 * A estas alturas ir registro a registro es
-+				 * perder el tiempo: se ha comprobado uno por
-+				 * uno todo lo que el fabricante escribe y
-+				 * coincide. Lo que falta es lo que NO se
-+				 * escribe y no se sabe que existe.
++				 * waste time: everything the vendor writes
++				 * has been checked one by one and it
++				 * matches. What is missing is what is NOT
++				 * written and is not known to exist.
 +				 *
-+				 * Asi que se vuelca el espacio entero del CSID
-+				 * al parar. Interesan sobre todo los que
-+				 * mainline no lee nunca: el estado del RDI en
++				 * So the entire CSID space is dumped
++				 * on stop. Of most interest are the ones
++				 * mainline never reads: the RDI status at
 +				 * 0x350, sus firmas de datos MISR en
-+				 * 0x354..0x360 -que serian distintas de cero
-+				 * si hubiera pasado UN solo dato- y las marcas
-+				 * de tiempo de los sincronismos.
++				 * 0x354..0x360 -which would be non-zero
++				 * if a SINGLE datum had gone through- and the
++				 * timestamps of the sync signals.
 +				 */
-+				if (volcado_csid) {
++				if (csid_dump) {
 +					int a;
 +
 +					for (a = 0; a < 0x400; a += 32) {

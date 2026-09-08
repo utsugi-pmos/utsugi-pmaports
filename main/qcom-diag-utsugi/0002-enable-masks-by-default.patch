@@ -15,8 +15,8 @@ client could have connected. So we start with everything enabled.
  	}
  
 +	/*
-+	 * Arrancar con todas las mascaras habilitadas: el modem debe emitir su
-+	 * log desde el arranque, sin esperar a que un cliente lo pida.
++	 * Start with all the masks enabled: the modem must emit its
++	 * log from boot, without waiting for a client to ask for it.
 +	 */
 +	diag_cmd_set_all_msg_mask(0xffffffff);
 +	log_mask.status = DIAG_CTRL_MASK_ALL_ENABLED;

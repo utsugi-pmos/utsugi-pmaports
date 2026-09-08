@@ -32,18 +32,18 @@ SoC.
 -	if (camss->res->version == CAMSS_8250 || camss->res->version == CAMSS_7150) {
 +	if (camss->res->version == CAMSS_7150) {
 +		/*
-+		 * En el SM7150 el CSID lite NO esta a 0x200 del VFE lite, sino
-+		 * a 0x4000, igual que los otros dos. Del device tree de Android
-+		 * del propio movil:
++		 * On the SM7150 the CSID lite is NOT at 0x200 from the VFE lite, but
++		 * at 0x4000, just like the other two. From the Android device tree
++		 * of the phone itself:
 +		 *
 +		 *     vfe_lite        0x0acc4000   (mainline, reg-names)
 +		 *     cam_csid_lite0  0x0acc8000   (Android, qcom,csid_lite@)
 +		 *
-+		 * o sea 0x4000 de diferencia, no los 0x200 del Titan 480. Con
-+		 * el 0x200 el csid2 apunta DENTRO del VFE lite: contesta,
-+		 * porque es una region valida, pero no es el CSID.
++		 * that is 0x4000 of difference, not the 0x200 of the Titan 480. With
++		 * 0x200 csid2 points INSIDE the VFE lite: it answers,
++		 * because it is a valid region, but it is not the CSID.
 +		 *
-+		 * Los otros dos si cuadran con el 0x4000 de siempre:
++		 * The other two do match the usual 0x4000:
 +		 *     vfe0 0x0acaf000 + 0x4000 = 0x0acb3000 = cam_csid0
 +		 *     vfe1 0x0acb6000 + 0x4000 = 0x0acba000 = cam_csid1
 +		 */

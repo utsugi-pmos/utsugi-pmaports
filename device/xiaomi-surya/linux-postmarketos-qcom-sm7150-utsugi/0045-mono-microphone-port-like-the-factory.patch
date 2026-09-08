@@ -52,29 +52,29 @@ break. The `prueba-canales-tx` sweep lowers it to 1 in the phases that need it.
  #define MI2S_BCLK_RATE		1536000
  
 +/*
-+ * Canales del puerto de captura del codec, ajustable en caliente:
++ * Codec capture port channels, adjustable at runtime:
 + *
 + *   /sys/module/snd_soc_sm8250/parameters/tx_be_channels
 + *
-+ * sm8250_be_hw_params_fixup() fuerza TODOS los backends a 2 canales. Para la
-+ * reproduccion esta bien, pero para el microfono no: este aparato tiene UN
-+ * microfono en el camino de voz, y el segundo canal del puerto es silencio
++ * sm8250_be_hw_params_fixup() forces ALL backends to 2 channels. For
++ * playback that is fine, but not for the microphone: this device has ONE
++ * microphone in the voice path, and the second channel of the port is silence
 + * digital exacto (medido: max=0 en 3 segundos de grabacion).
 + *
-+ * El Android de fabrica de este mismo movil lo pone a uno. En su
-+ * mixer_paths_wcd9375qrd.xml, TODOS los caminos de un microfono llevan:
++ * The factory Android of this same phone sets it to one. In its
++ * mixer_paths_wcd9375qrd.xml, ALL the paths of a single microphone carry:
 + *
 + *     <ctl name="TX_CDC_DMA_TX_3 Channels" value="One" />
 + *
-+ * y solo los de doble microfono (endfire) lo suben a "Two". O sea que ese
-+ * control es el numero de microfonos del puerto, y de fabrica la voz va mono.
++ * and only the dual microphone (endfire) ones raise it to "Two". So that
++ * control is the number of microphones of the port, and from the factory voice is mono.
 + *
-+ * Se deja por defecto en 2 para no tocar la grabacion normal, que hoy
-+ * funciona. El barrido lo baja a 1 para probar la configuracion de fabrica.
++ * It is left at 2 by default so as not to disturb normal recording, which today
++ * works. The sweep lowers it to 1 to test the factory configuration.
 + */
 +static unsigned int tx_be_channels = 2;
 +module_param(tx_be_channels, uint, 0644);
-+MODULE_PARM_DESC(tx_be_channels, "canales del puerto TX_CODEC_DMA_TX_3 (1-8)");
++MODULE_PARM_DESC(tx_be_channels, "channels of the TX_CODEC_DMA_TX_3 port (1-8)");
 +
  struct sm8250_snd_data {
  	bool stream_prepared[AFE_PORT_MAX];
@@ -88,7 +88,7 @@ break. The `prueba-canales-tx` sweep lowers it to 1 in the phases that need it.
  	rate->min = rate->max = 48000;
  	channels->min = channels->max = 2;
 +
-+	/* El puerto del microfono, mono como de fabrica. Ver tx_be_channels. */
++	/* The microphone port, mono as from the factory. See tx_be_channels. */
 +	if (cpu_dai->id == TX_CODEC_DMA_TX_3 && tx_be_channels >= 1 &&
 +	    tx_be_channels <= 8)
 +		channels->min = channels->max = tx_be_channels;

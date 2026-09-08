@@ -100,19 +100,19 @@ the bus, which is a dependency that can be met: moving focus while capturing.
  	};
  
 +	/*
-+	 * EL HABILITADOR DEL MOTOR DE ENFOQUE.
++	 * THE FOCUS MOTOR ENABLE.
 +	 *
-+	 * La linea se llama "64M_AF_EN" en el propio SoC -64M es la camara de
-+	 * 64 MP, o sea la principal trasera- y venia SIN DUENNO: `gpioinfo` la
-+	 * daba como "input", sin conductor.
++	 * The line is called "64M_AF_EN" in the SoC itself -64M is the 64 MP
++	 * camera, that is the main rear one- and it came with NO OWNER: `gpioinfo`
++	 * reported it as "input", with no consumer.
 +	 *
-+	 * Ese pin es la razon de que el actuador pareciera no existir. Con el
-+	 * bajo, barrer el bus entero de su sensor no encuentra nada; poniendolo
-+	 * alto, aparece 0x0c -la direccion clasica de los VCM Dongwoon- en los
++	 * That pin is the reason the actuator seemed not to exist. With it
++	 * low, sweeping the whole bus of its sensor finds nothing; setting it
++	 * high, 0x0c -the classic address of Dongwoon VCMs- shows up in the
 +	 * DOS modos de barrido, y acepta ordenes de posicion.
 +	 *
-+	 * Es exactamente el mismo tipo de fallo que tenia el gran angular con
-+	 * CAM_SW2_OE_2: un habilitador que nadie declaraba.
++	 * It is exactly the same kind of bug the wide-angle had with
++	 * CAM_SW2_OE_2: an enable line nobody declared.
 +	 */
 +	vreg_cam_af_en: regulator-vreg-cam-af-en {
 +		compatible = "regulator-fixed";
@@ -127,17 +127,17 @@ the bus, which is a dependency that can be met: moving focus while capturing.
 +		/*
 +		 * SIEMPRE ENCENDIDO, y no es pereza.
 +		 *
-+		 * El driver del actuador apaga este regulador al suspenderse, y
-+		 * para volver a encenderse necesita hablar con el chip por i2c.
-+		 * Pero el bus CCI solo vive mientras el SENSOR transmite, asi que
-+		 * en cuanto se suspendia se quedaba fuera: el regulador a cero, el
-+		 * estado de energia en "error" y el subdispositivo sin abrirse.
++		 * The actuator driver turns this regulator off on suspend, and
++		 * to power up again it needs to talk to the chip over i2c.
++		 * But the CCI bus only lives while the SENSOR transmits, so
++		 * as soon as it suspended it was locked out: the regulator at zero, the
++		 * power state in "error" and the subdevice never opening.
 +		 *
 +		 * Medido: enable count 0 y /sys/.../power/runtime_status = error.
 +		 *
-+		 * Dejando el habilitador fijo, el chip conserva la corriente y el
-+		 * driver solo depende del bus, que es una dependencia que si se
-+		 * puede cumplir -moviendo el foco mientras se captura-.
++		 * Leaving the enable line fixed, the chip keeps its power and the
++		 * driver only depends on the bus, which is a dependency that CAN be
++		 * met -moving focus while capturing-.
 +		 */
 +		regulator-always-on;
 +	};
@@ -146,29 +146,29 @@ the bus, which is a dependency that can be met: moving focus while capturing.
  		compatible = "regulator-fixed";
  		regulator-name = "uw_ldo_ois_drv";
 @@ -1134,11 +1177,52 @@
- 	 * REACTIVADA para bisecar: hace falta un segundo sensor en otro CSIPHY
- 	 * para separar "falla nuestra camara" de "falla CAMSS en este SoC".
+ 	 * RE-ENABLED for bisecting: a second sensor on another CSIPHY is needed
+ 	 * to tell "our camera fails" from "CAMSS fails on this SoC" apart.
  	 */
 +	/*
-+	 * EL MOTOR DE ENFOQUE de la principal.
++	 * THE FOCUS MOTOR of the main camera.
 +	 *
-+	 * El fichero de fabrica lo llama "ofilm_dw9800", y este chip habla POR
-+	 * REGISTROS: direccion mas dato, con la posicion de diez bits repartida
-+	 * entre 0x03 (los dos bits altos) y 0x04 (los ocho bajos).
++	 * The factory file calls it "ofilm_dw9800", and this chip speaks BY
++	 * REGISTERS: address plus data, with the ten-bit position split
++	 * between 0x03 (the two high bits) and 0x04 (the eight low ones).
 +	 *
-+	 * NO es el protocolo del dw9714, que manda dos bytes crudos. Se probo
-+	 * con ese driver primero y el resultado enganna: el chip CONFIRMA cada
-+	 * escritura -porque cae sobre los registros 0x00 y 0x01, que son
-+	 * identificacion y control- y la lente no se mueve. Medido: con dw9714
-+	 * la nitidez variaba x1,01 al azar entre los dos extremos; escribiendo
-+	 * por registros baja de forma monotona, 85443 -> 66997, y el contraste
-+	 * cae con ella de 117 a 82. Eso es desenfoque progresivo.
++	 * It is NOT the dw9714 protocol, which sends two raw bytes. It was tried
++	 * with that driver first and the result is deceiving: the chip ACKs every
++	 * write -because it lands on registers 0x00 and 0x01, which are
++	 * id and control- and the lens does not move. Measured: with dw9714
++	 * sharpness varied x1.01 at random between the two extremes; writing
++	 * by registers it drops monotonically, 85443 -> 66997, and contrast
++	 * falls with it from 117 to 82. That is progressive defocus.
 +	 *
-+	 * dw9807-vcm de mainline escribe exactamente eso: el registro 0x03
-+	 * seguido de los dos bytes de posicion. Por eso se usa ese.
++	 * mainline dw9807-vcm writes exactly that: register 0x03
++	 * followed by the two position bytes. That is why that one is used.
 +	 *
-+	 * Con esto sale V4L2_CID_FOCUS_ABSOLUTE de 0 a 1023, o sea enfoque
-+	 * manual. El automatico va por encima, en quien tenga los fotogramas.
++	 * With this V4L2_CID_FOCUS_ABSOLUTE comes out from 0 to 1023, that is manual
++	 * focus. Autofocus goes above, in whoever has the frames.
 +	 */
 +	cam_focus: focus@c {
 +		compatible = "dongwoon,dw9807-vcm";
@@ -181,20 +181,20 @@ the bus, which is a dependency that can be met: moving focus while capturing.
  		reg = <0x1a>;
  
  		/*
-+		 * EL MOTOR ES SUYO, Y HAY QUE DECIRLO AQUI.
++		 * THE MOTOR BELONGS TO IT, AND IT HAS TO BE SAID HERE.
 +		 *
-+		 * Sin esta referencia el driver del actuador engancha con el chip
-+		 * -se ve en /sys/bus/i2c/devices/12-000c/driver- pero no aparece
++		 * Without this reference the actuator driver binds to the chip
++		 * -visible in /sys/bus/i2c/devices/12-000c/driver- but it does not show up
 +		 * ningun subdispositivo ni ningun control de enfoque: nadie lo
-+		 * mete en el grafo.
++		 * puts it into the graph.
 +		 *
-+		 * v4l2_async_register_subdev_sensor(), que es lo que usa este
-+		 * driver, lee lens-focus y crea el enlace auxiliar. De ahi sale
-+		 * el nodo y, con el, V4L2_CID_FOCUS_ABSOLUTE.
++		 * v4l2_async_register_subdev_sensor(), which is what this
++		 * driver uses, reads lens-focus and creates the ancillary link. That is where
++		 * the node comes from and, with it, V4L2_CID_FOCUS_ABSOLUTE.
 +		 */
 +		lens-focus = <&cam_focus>;
 +
 +		/*
- 		 * MEDIDO, no deducido: se puso el movil de pie apuntando a la
- 		 * habitacion y se miro la captura en crudo. La imagen del sensor
- 		 * hay que girarla 90 grados EN SENTIDO HORARIO para que quede
+ 		 * MEASURED, not inferred: the phone was stood upright pointing at the
+ 		 * room and the raw capture was inspected. The sensor image
+ 		 * has to be rotated 90 degrees CLOCKWISE for it to come out

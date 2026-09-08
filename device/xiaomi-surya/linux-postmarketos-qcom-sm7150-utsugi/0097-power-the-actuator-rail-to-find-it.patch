@@ -39,19 +39,19 @@ be looked for on another bus.
  		regulator-min-microvolt = <2800000>;
  		regulator-max-microvolt = <2800000>;
 +		/*
-+		 * ENCENDIDO PARA BUSCAR EL MOTOR DE ENFOQUE.
++		 * POWERED ON TO LOOK FOR THE FOCUS MOTOR.
 +		 *
-+		 * El fichero de fabrica dice que la trasera lleva un actuador
-+		 * -ofilm_dw9800- pero escaneando el bus CCI con la camara
-+		 * alimentada solo contestan el sensor (0x1a) y la EEPROM (0x50).
-+		 * Un chip sin alimentar no contesta, y este es el unico riel de
-+		 * 2,8 V de camara que quedaba apagado: cam_avdd1 y cam_avdd2 ya
++		 * The factory file says the rear camera has an actuator
++		 * -ofilm_dw9800- but scanning the CCI bus with the camera
++		 * powered only the sensor (0x1a) and the EEPROM (0x50) answer.
++		 * An unpowered chip does not answer, and this is the only camera
++		 * 2.8 V rail that was still off: cam_avdd1 and cam_avdd2 are already
 +		 * salen encendidos de fabrica.
 +		 *
-+		 * Se enciende siempre porque su GPIO lo posee el kernel y no hay
-+		 * forma de moverlo desde el espacio de usuario. Es temporal: si
-+		 * el motor aparece, pasara a ser la alimentacion declarada del
-+		 * nodo del actuador; si no aparece, esto se quita.
++		 * It is always enabled because its GPIO is owned by the kernel and there is no
++		 * way to move it from userspace. It is temporary: if
++		 * the motor shows up, it will become the declared supply of the
++		 * actuator node; if it does not, this is removed.
 +		 */
 +		regulator-always-on;
  

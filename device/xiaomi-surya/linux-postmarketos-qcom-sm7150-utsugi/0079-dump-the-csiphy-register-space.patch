@@ -27,33 +27,33 @@ This does NOT fix anything: it is to look.
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 14:38:20.979295927 +0200
 @@ -1085,6 +1085,11 @@
  MODULE_PARM_DESC(pulso_terminacion,
- 	"Escribir 0x01 en CTRL33 (0x0884), el pulso de terminacion que mainline se deja. 1 = si.");
+ 	"Write 0x01 to CTRL33 (0x0884), the termination pulse mainline leaves out. 1 = yes.");
  
-+static int volcado_csiphy;
-+module_param(volcado_csiphy, int, 0644);
-+MODULE_PARM_DESC(volcado_csiphy,
-+	"1 = volcar el espacio de registros del CSIPHY al parar la transmision.");
++static int csiphy_dump;
++module_param(csiphy_dump, int, 0644);
++MODULE_PARM_DESC(csiphy_dump,
++	"1 = dump the CSIPHY register space when stopping the transmission.");
 +
- static int releer_registros;
- module_param(releer_registros, int, 0644);
- MODULE_PARM_DESC(releer_registros,
+ static int readback_registers;
+ module_param(readback_registers, int, 0644);
+ MODULE_PARM_DESC(readback_registers,
 @@ -1487,6 +1492,35 @@
  				CSIPHY_3PH_CMN_CSI_COMMON_STATUSn(regs->offset,
  						regs->common_status_offset, i));
  
 +	/*
-+	 * VOLCADO COMPLETO DEL CSIPHY.
++	 * FULL CSIPHY DUMP.
 +	 *
-+	 * Igual que con el CSID: ya se ha comprobado uno por uno todo lo que el
-+	 * fabricante escribe y coincide, asi que lo que falta es lo que no se
-+	 * escribe y no se sabe que existe.
++	 * Same as with the CSID: everything the vendor writes has already been checked
++	 * one by one and it matches, so what is left is what is not
++	 * written and is not known to exist.
 +	 *
-+	 * Lo interesante es COMPARAR el volcado con el sensor emitiendo contra
-+	 * el sensor mudo: los registros que cambien son los que responden a la
-+	 * senal de verdad, y ahi estaria la unica pista que queda sobre si el
++	 * What is interesting is to COMPARE the dump with the sensor transmitting against
++	 * the sensor silent: the registers that change are the ones that respond to the
++	 * real signal, and that would be the only clue left about whether the
 +	 * PHY llega a ver alta velocidad o solo baja potencia.
 +	 */
-+	if (volcado_csiphy) {
++	if (csiphy_dump) {
 +		int a;
 +
 +		for (a = 0; a < 0x900; a += 32)
@@ -71,5 +71,5 @@ This does NOT fix anything: it is to look.
 +	}
 +
  	dev_info(csiphy->camss->dev,
- 		 "csiphy%d al parar: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
- 		 csiphy->id, diag_phy_estado[0], diag_phy_estado[1],
+ 		 "csiphy%d at stop: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
+ 		 csiphy->id, diag_phy_state[0], diag_phy_state[1],

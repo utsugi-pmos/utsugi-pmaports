@@ -53,31 +53,31 @@ And that ties up all the loose ends at once:
 
 THE PARAMETER IS PART OF THE MEASUREMENT
 
-senal_phy allows forcing 2 or 3 at runtime. With it both configurations can be
+phy_signal allows forcing 2 or 3 at runtime. With it both configurations can be
 measured IN THE SAME BOOT, with the same pipeline and the same PHY, and then the
 difference is attributable to this register and to nothing else. A reboot in
 between always leaves the doubt that something else may have changed.
 
-    senal_phy = 0   the table's value (now 0x03, C-PHY)
+    phy_signal = 0   the table's value (now 0x03, C-PHY)
                 2   D-PHY  -> nothing must arrive, still
                 3   C-PHY
 --- a/drivers/media/i2c/imx682.c
 +++ b/drivers/media/i2c/imx682.c
 @@ -19,10 +19,11 @@
-  *    Si se cambia el reloj, hay que cambiarlo TAMBIEN en el device tree
-  *    (assigned-clock-rates) o el PLL quedara mal y no habra imagen.
+  *    If the clock is changed, it has to be changed ALSO in the device tree
+  *    (assigned-clock-rates) or the PLL will be wrong and there will be no image.
   *
-- * 2. D-PHY de 2 carriles. CAMSS solo admite D-PHY, y 2 carriles funciona tanto
-- *    si la placa tiene 2 como si tiene 4, porque los carriles 0 y 1 siempre
-- *    estan cableados. El sensor se configura para eso con 0x0111=0x02 y
-- *    0x0114=0x01, que ya vienen en las tablas.
-+ * 2. C-PHY de 3 trios, que es como esta cableada la placa. Lo dice el propio
-+ *    sensor en sus registros de capacidad, que son de solo lectura:
+- * 2. D-PHY de 2 lanes. CAMSS solo admite D-PHY, y 2 lanes funciona tanto
+- *    whether the board has 2 or 4, because lanes 0 and 1 are always
+- *    wired. The sensor is configured for that with 0x0111=0x02 and
+- *    0x0114=0x01, which already come in the tables.
++ * 2. 3-trio C-PHY, which is how the board is wired. The sensor itself says so
++ *    in its capability registers, which are read-only:
 + *    0x1602 = 0x0C (sabe D-PHY y C-PHY) y 0x1601 = 0x0B (en D-PHY admite 1, 2
-+ *    y 4 carriles; el bit de TRES esta a cero). Se configura con 0x0111 = 0x03
++ *    and 4 lanes; the THREE bit is zero). It is configured with 0x0111 = 0x03
 + *    y 0x0114 = 0x02.
   *
-  * LO QUE ESTE DRIVER NO HACE
+  * WHAT THIS DRIVER DOES NOT DO
   * --------------------------
 @@ -106,7 +107,17 @@
  	{ 0x0137, 0x33 },
@@ -85,55 +85,55 @@ between always leaves the doubt that something else may have changed.
  	{ 0x3C7F, 0x0A },
 -	{ 0x0111, 0x02 },
 +	/*
-+	 * 0x0111 es CSI_SIGNALING_MODE de la norma CCS, y lleva un VALOR, no una
-+	 * bandera: 2 = D-PHY, 3 = C-PHY. Esta definido en este mismo kernel, en
++	 * 0x0111 is CSI_SIGNALING_MODE from the CCS spec, and it carries a VALUE, not a
++	 * flag: 2 = D-PHY, 3 = C-PHY. It is defined in this very kernel, in
 +	 * drivers/media/i2c/ccs/ccs-regs.h.
 +	 *
-+	 * El 0x02 venia del porte de MediaTek, que era D-PHY de dos carriles. Aqui
-+	 * la placa tiene tres trios C-PHY, asi que con 0x02 se le estaba pidiendo al
-+	 * sensor D-PHY de TRES carriles, que es justo lo unico que su registro de
-+	 * capacidad 0x1601 = 0x0B dice que NO sabe hacer.
++	 * The 0x02 came from the MediaTek port, which was two-lane D-PHY. Here
++	 * the board has three C-PHY trios, so with 0x02 the sensor was being asked for
++	 * THREE-lane D-PHY, which is exactly the one thing its capability
++	 * register 0x1601 = 0x0B says it can NOT do.
 +	 */
 +	{ 0x0111, 0x03 },
  	{ 0x380C, 0x00 },
  	{ 0x3C00, 0x10 },
  	{ 0x3C01, 0x10 },
 @@ -437,6 +448,20 @@
- MODULE_PARM_DESC(carriles,
- 	"Carriles que se le declaran al sensor en 0x0114. 0 = tabla (3).");
+ MODULE_PARM_DESC(lanes,
+ 	"Lanes declared to the sensor in 0x0114. 0 = table (3).");
  
 +/*
-+ * Para medir D-PHY y C-PHY EN EL MISMO ARRANQUE. Con un reinicio de por medio
-+ * siempre queda la duda de si cambio otra cosa; asi la unica diferencia entre
-+ * las dos medidas es este registro.
++ * To measure D-PHY and C-PHY IN THE SAME BOOT. With a reboot in between
++ * there is always the doubt of whether something else changed; this way the only difference
++ * between the two measurements is this register.
 + *
-+ *   0 = el valor de la tabla (0x03, C-PHY)
-+ *   2 = D-PHY   (control negativo: tiene que seguir sin llegar nada)
++ *   0 = the table value (0x03, C-PHY)
++ *   2 = D-PHY   (negative control: still nothing must arrive)
 + *   3 = C-PHY
 + */
-+static int senal_phy;
-+module_param(senal_phy, int, 0644);
-+MODULE_PARM_DESC(senal_phy,
-+	"Enlace que se le declara al sensor en 0x0111. 2 = D-PHY, 3 = C-PHY, 0 = tabla.");
++static int phy_signal;
++module_param(phy_signal, int, 0644);
++MODULE_PARM_DESC(phy_signal,
++	"Link declared to the sensor in 0x0111. 2 = D-PHY, 3 = C-PHY, 0 = table.");
 +
  static const s64 imx682_link_freqs[] = {
  	IMX682_LINK_FREQ,
  };
 @@ -689,11 +714,14 @@
  		imx682_write(s, 0x030B, op_sys_div);
- 	if (carriles)
- 		imx682_write(s, 0x0114, carriles - 1);
-+	if (senal_phy)
-+		imx682_write(s, 0x0111, senal_phy);
+ 	if (lanes)
+ 		imx682_write(s, 0x0114, lanes - 1);
++	if (phy_signal)
++		imx682_write(s, 0x0111, phy_signal);
  
--	if (op_pre_div || op_pll_mult || op_sys_div || carriles)
-+	if (op_pre_div || op_pll_mult || op_sys_div || carriles || senal_phy)
+-	if (op_pre_div || op_pll_mult || op_sys_div || lanes)
++	if (op_pre_div || op_pll_mult || op_sys_div || lanes || phy_signal)
  		dev_info(&s->client->dev,
--			 "barrido: pre=%d mult=%d div=%d carriles=%d\n",
--			 op_pre_div, op_pll_mult, op_sys_div, carriles);
-+			 "barrido: pre=%d mult=%d div=%d carriles=%d senal=%d\n",
-+			 op_pre_div, op_pll_mult, op_sys_div, carriles,
-+			 senal_phy);
+-			 "barrido: pre=%d mult=%d div=%d lanes=%d\n",
+-			 op_pre_div, op_pll_mult, op_sys_div, lanes);
++			 "barrido: pre=%d mult=%d div=%d lanes=%d senal=%d\n",
++			 op_pre_div, op_pll_mult, op_sys_div, lanes,
++			 phy_signal);
  
  	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
  	if (ret)

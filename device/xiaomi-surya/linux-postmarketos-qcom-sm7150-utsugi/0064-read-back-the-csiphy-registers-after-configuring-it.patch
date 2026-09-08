@@ -30,45 +30,45 @@ WHAT IT DOES
 ------------
 After writing the lane table, it walks it again reading each register and warns
 about the ones that do not return what was written. It sits behind the
-releer_registros parameter because it is 115 reads for every transmission start.
+readback_registers parameter because it is 115 reads for every transmission start.
 
 This does NOT fix anything: it is for looking.
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 00:12:20.920071431 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 00:12:40.484056759 +0200
 @@ -1057,6 +1057,11 @@
-  * reiniciar, que en este movil cuesta caro: se cuelga uno de cada cuatro
+  * reboot, which is expensive on this phone: one boot in four hangs
   * arranques.
   */
-+static int releer_registros;
-+module_param(releer_registros, int, 0644);
-+MODULE_PARM_DESC(releer_registros,
-+	"1 = releer los registros del CSIPHY tras configurarlo y avisar de los que no cuadren.");
++static int readback_registers;
++module_param(readback_registers, int, 0644);
++MODULE_PARM_DESC(readback_registers,
++	"1 = read the CSIPHY registers back after configuring it and report the ones that do not match.");
 +
- static int desenmascarar;
- module_param(desenmascarar, int, 0644);
- MODULE_PARM_DESC(desenmascarar,
+ static int unmask;
+ module_param(unmask, int, 0644);
+ MODULE_PARM_DESC(unmask,
 @@ -1179,6 +1184,45 @@
  		if (r->delay_us)
  			udelay(r->delay_us);
  	}
 +
 +	/*
-+	 * DIAGNOSTICO: releer lo que se acaba de escribir.
++	 * DIAGNOSTIC: read back what has just been written.
 +	 *
-+	 * Todo lo demas esta ya descartado con medida -el sensor emite, el PHY
-+	 * lo oye, los relojes estan puestos, el encaminamiento es el bueno y el
-+	 * receptor del CSID SI sabe reportar cuando le llega algo, comprobado
-+	 * con su generador de patron-. Y aun asi el PHY no le entrega un solo
++	 * Everything else is already ruled out by measurement -the sensor transmits, the PHY
++	 * hears it, the clocks are set, the routing is the right one and the
++	 * CSID receiver DOES know how to report when something arrives, checked
++	 * with its pattern generator-. And even so the PHY does not deliver it a single
 +	 * simbolo.
 +	 *
-+	 * Queda por comprobar lo mas tonto: que las escrituras aterricen. Un
-+	 * bloque a medio alimentar, un offset equivocado o un registro que
-+	 * ignora lo que se le escribe se ven aqui y en ningun otro sitio.
++	 * The silliest thing is left to check: that the writes land. A
++	 * half-powered block, a wrong offset or a register that
++	 * ignores what is written to it show up here and nowhere else.
 +	 *
-+	 * Va detras de un parametro porque son 115 lecturas por arranque de
++	 * It sits behind a parameter because it is 115 reads per start of
 +	 * transmision y no hace falta tenerlas siempre.
 +	 */
-+	if (!releer_registros)
++	if (!readback_registers)
 +		return;
 +
 +	r = csiphy->regs->lane_regs;

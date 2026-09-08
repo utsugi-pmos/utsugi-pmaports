@@ -20,7 +20,7 @@ And these are already ruled out, with validated instruments:
                                common, it steps on nothing
 
 This adds four module parameters -op_pll_mult, op_pre_div, op_sys_div and
-carriles- that are written AFTER the mode table, which is what programs the
+lanes- that are written AFTER the mode table, which is what programs the
 PLLs, and before starting the stream. With the front camera the same mechanism
 made it possible to sweep eight rates in one afternoon instead of one per build.
 
@@ -34,38 +34,38 @@ sensor have to agree on, and trying 2 against 3 without recompiling separates
  };
  
 +/*
-+ * BARRER EL ENLACE EN CALIENTE
++ * SWEEP THE LINK AT RUNTIME
 + * ---------------------------
-+ * El link_freq de 435,2 MHz esta DEDUCIDO de los PLL del fichero de fabrica
-+ * (19,2/3 x 272 / 2 / 2), no medido. Si el sensor emite a otro ritmo del que
-+ * se le dice al CSIPHY, no hay sincronismo posible y el CSID no ve nada, que
-+ * es exactamente lo que pasa.
++ * The link_freq of 435.2 MHz is DEDUCED from the PLLs of the factory file
++ * (19.2/3 x 272 / 2 / 2), not measured. If the sensor transmits at a rate other than the one
++ * told to the CSIPHY, no sync is possible and the CSID sees nothing, which
++ * is exactly what happens.
 + *
-+ * Con la frontal esto mismo permitio barrer ocho velocidades en una tarde en
-+ * vez de una por compilacion. Se escribe justo despues de la tabla del modo y
-+ * antes de arrancar la transmision, que es el unico punto donde vale.
++ * With the front one this same thing allowed sweeping eight speeds in one afternoon
++ * instead of one per build. It is written right after the mode table and
++ * before starting the stream, which is the only point where it is valid.
 + *
-+ * 0 = dejar el valor de la tabla de fabrica.
++ * 0 = keep the value from the factory table.
 + */
 +static int op_pll_mult;
 +module_param(op_pll_mult, int, 0644);
 +MODULE_PARM_DESC(op_pll_mult,
-+	"Multiplicador del PLL de salida (0x030e/0x030f). 0 = tabla (272).");
++	"Output PLL multiplier (0x030e/0x030f). 0 = table (272).");
 +
 +static int op_pre_div;
 +module_param(op_pre_div, int, 0644);
 +MODULE_PARM_DESC(op_pre_div,
-+	"Predivisor del PLL de salida (0x030d). 0 = tabla (3).");
++	"Output PLL pre-divider (0x030d). 0 = table (3).");
 +
 +static int op_sys_div;
 +module_param(op_sys_div, int, 0644);
 +MODULE_PARM_DESC(op_sys_div,
 +	"Divisor de sistema de salida (0x030b). 0 = tabla (2).");
 +
-+static int carriles;
-+module_param(carriles, int, 0644);
-+MODULE_PARM_DESC(carriles,
-+	"Carriles que se le declaran al sensor en 0x0114. 0 = tabla (3).");
++static int lanes;
++module_param(lanes, int, 0644);
++MODULE_PARM_DESC(lanes,
++	"Lanes declared to the sensor in 0x0114. 0 = table (3).");
 +
  static const s64 imx682_link_freqs[] = {
  	IMX682_LINK_FREQ,
@@ -75,8 +75,8 @@ sensor have to agree on, and trying 2 against 3 without recompiling separates
  		return ret;
  
 +	/*
-+	 * Los ajustes de barrido van DESPUES de la tabla del modo, que es
-+	 * quien programa los PLL, y antes de arrancar la transmision.
++	 * The sweep settings go AFTER the mode table, which is
++	 * what programs the PLLs, and before starting the transmission.
 +	 */
 +	if (op_pre_div)
 +		imx682_write(s, 0x030D, op_pre_div);
@@ -86,13 +86,13 @@ sensor have to agree on, and trying 2 against 3 without recompiling separates
 +	}
 +	if (op_sys_div)
 +		imx682_write(s, 0x030B, op_sys_div);
-+	if (carriles)
-+		imx682_write(s, 0x0114, carriles - 1);
++	if (lanes)
++		imx682_write(s, 0x0114, lanes - 1);
 +
-+	if (op_pre_div || op_pll_mult || op_sys_div || carriles)
++	if (op_pre_div || op_pll_mult || op_sys_div || lanes)
 +		dev_info(&s->client->dev,
-+			 "barrido: pre=%d mult=%d div=%d carriles=%d\n",
-+			 op_pre_div, op_pll_mult, op_sys_div, carriles);
++			 "barrido: pre=%d mult=%d div=%d lanes=%d\n",
++			 op_pre_div, op_pll_mult, op_sys_div, lanes);
 +
  	ret = __v4l2_ctrl_handler_setup(&s->ctrls);
  	if (ret)

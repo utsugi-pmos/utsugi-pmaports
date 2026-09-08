@@ -34,22 +34,22 @@ This does NOT fix anything on its own: it is for deciding.
 --- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:58:26.885167533 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:58:26.903814367 +0200
 @@ -49,6 +49,31 @@
-  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
-  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  * interrupts per frame this can turn into a storm, and this
+  * phone is sensitive to timing. Enable it by hand when needed.
   */
 +/*
-+ * REAPLICAR LA CONFIGURACION DEL RECEPTOR, A MANO Y CUANDO YO QUIERA.
++ * REAPPLY THE RECEIVER CONFIGURATION, BY HAND AND WHENEVER I WANT.
 + *
-+ * mainline arranca la cadena en este orden:  VFE -> CSID -> CSIPHY -> sensor
-+ * y el fabricante en este otro:              CSIPHY -> CSID -> sensor
++ * mainline starts the chain in this order:  VFE -> CSID -> CSIPHY -> sensor
++ * and the vendor in this other one:         CSIPHY -> CSID -> sensor
 + *
-+ * O sea que aqui el CSID se pone a escuchar ANTES de que el PHY exista. Si el
-+ * receptor engancha su interfaz con el PHY en el momento de arrancar, hacerlo
-+ * antes de tiempo lo dejaria mirando a un cable muerto para siempre.
++ * That is, here the CSID starts listening BEFORE the PHY exists. If the
++ * receiver latches its interface to the PHY at the moment it starts, doing it
++ * too early would leave it looking at a dead wire forever.
 + *
-+ * Escribiendo 1 en este parametro se vuelve a aplicar la configuracion del
-+ * receptor y la orden de arranque del RDI, con el sensor ya transmitiendo. Si
-+ * entonces empiezan a llegar paquetes, el fallo es de orden.
++ * Writing 1 to this parameter reapplies the receiver configuration
++ * and the RDI start command, with the sensor already transmitting. If
++ * packets then start arriving, the bug is one of ordering.
 + */
 +static struct csid_device *diag_csid_guardado;
 +static int diag_reaplicar_set(const char *val, const struct kernel_param *kp);
@@ -60,7 +60,7 @@ This does NOT fix anything on its own: it is for deciding.
 +static int diag_reaplicar;
 +module_param_cb(diag_reaplicar, &diag_reaplicar_ops, &diag_reaplicar, 0644);
 +MODULE_PARM_DESC(diag_reaplicar,
-+	"Escribir 1 para reaplicar la configuracion del receptor con el sensor ya transmitiendo.");
++	"Write 1 to reapply the receiver configuration with the sensor already streaming.");
 +
  static unsigned int diag_pkts;
  module_param(diag_pkts, uint, 0644);
@@ -87,7 +87,7 @@ This does NOT fix anything on its own: it is for deciding.
 +	if (ret || !diag_reaplicar || !csid)
 +		return ret;
 +
-+	dev_info(csid->camss->dev, "csid%d: reaplicando la configuracion del receptor\n",
++	dev_info(csid->camss->dev, "csid%d: reapplying the receiver configuration\n",
 +		 csid->id);
 +
 +	for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)
