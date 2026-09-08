@@ -32,7 +32,7 @@ PKGS="$WORK/packages/edge/$ARCH"
 # but NOT github.io pages, and this URL cannot change without breaking every
 # installed phone.
 REPO_URL="${REPO_URL:-https://utsugi-pmos.github.io/utsugi-pmaports}"
-GH_REMOTE="${GH_REMOTE:-git@github.com:jjolmo/utsugi-pmaports.git}"
+GH_REMOTE="${GH_REMOTE:-git@github.com:utsugi-pmos/utsugi-pmaports.git}"
 
 red()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green(){ printf '\033[32m%s\033[0m\n' "$*"; }
