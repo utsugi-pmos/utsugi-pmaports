@@ -13,11 +13,9 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 
 ## Status
 
-The repository is live: 54 signed packages, including the metapackages. What is
-still missing are the six own applications (poconav, screenglaze, appsvivas,
-app-usage, smart-unlock, lost-phone), which get their own repositories and then
-join `utsugi-surya-full`. The mobiletaskswitcher patch that keeps applications
-alive ships with `appsvivas`, so it arrives with them.
+The repository is live and signed, metapackages included. The
+six own applications each live in their own repository under the same
+organisation and are built from a tagged tarball.
 
 ## Install it on a phone
 

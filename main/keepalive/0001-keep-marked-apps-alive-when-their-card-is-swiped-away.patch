@@ -1,0 +1,100 @@
+--- a/kwin/mobiletaskswitcher/package/contents/ui/Task.qml
++++ b/kwin/mobiletaskswitcher/package/contents/ui/Task.qml
+@@ -5,6 +5,7 @@
+ 
+ pragma ComponentBehavior: Bound
+ 
++import QtCore
+ import QtQuick
+ import QtQuick.Layouts
+ 
+@@ -43,7 +44,57 @@
+     opacity: 1 - dragOffset / taskSwitcher.height
+ 
+ //BEGIN functions
++    // Applications the user marked as always alive, comma separated, by
++    // Wayland app_id:
++    //
++    //     [General]
++    //     apps=org.kde.plasma.dialer,org.kde.spacebar
++    //
++    // Read once and cached. QSettings does NOT notice the file being rewritten
++    // from outside -- measured: it kept serving the old value for 13 s after an
++    // external rewrite. So changing the list means reloading the effect:
++    //
++    //   qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.unloadEffect mobiletaskswitcher
++    //   qdbus6 org.kde.KWin /Effects org.kde.kwin.Effects.loadEffect mobiletaskswitcher
++    //
++    // Re-reading it on every closeApp() is not an option either: a synchronous
++    // XMLHttpRequest against file:// hangs, and inside KWin that would freeze
++    // the compositor.
++    Settings {
++        id: keepAliveSettings
++        // No category: QSettings reserves "General" and would look for a
++        // [%General] section instead of the plain [General] one.
++        // Qt 6 named this "location", not "fileName" as in Qt.labs.settings.
++        location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/keepaliverc"
++    }
++
++    // A window matches if any of its identifiers is on the list. Three are
++    // checked because desktopFileName is empty for some clients (notably
++    // XWayland ones), where resourceClass is what carries the id.
++    function isKeptAlive(): bool {
++        const raw = keepAliveSettings.value("apps", "");
++        if (!raw) {
++            return false;
++        }
++
++        const normalize = id => String(id || "").replace(/\.desktop$/, "").toLowerCase();
++
++        const wanted = String(raw).split(/[,\s]+/).map(normalize).filter(id => id.length > 0);
++        const mine = [delegate.window.desktopFileName,
++                      delegate.window.resourceClass,
++                      delegate.window.resourceName].map(normalize);
++
++        return mine.some(id => id.length > 0 && wanted.indexOf(id) >= 0);
++    }
++
+     function closeApp(): void {
++        // Minimizing keeps the process and its surface alive, so reopening from
++        // the home screen is instant: folio calls launchOrActivateApp(), which
++        // activates the existing window instead of spawning a new process.
++        if (delegate.isKeptAlive()) {
++            delegate.minimizeApp();
++            return;
++        }
+         delegate.window.closeWindow();
+     }
+ 
+@@ -145,6 +196,17 @@
+             to: 0
+             onFinished: {
+                 if (to != 0) { // close app
++                    // An always-alive app is only minimized, so its task stays
++                    // in the list. Snap the card back right away instead of
++                    // waiting out uncloseTimer: the bounce is what tells the
++                    // user this one does not close.
++                    if (delegate.isKeptAlive()) {
++                        delegate.closeApp();
++                        yAnimator.to = 0;
++                        yAnimator.restart();
++                        return;
++                    }
++
+                     delegate.taskSwitcherHelpers.lastClosedTask = delegate.currentIndex;
+                     delegate.closeApp();
+                     uncloseTimer.start();
+@@ -197,7 +259,12 @@
+                     icon.width: Kirigami.Units.iconSizes.smallMedium
+                     icon.height: Kirigami.Units.iconSizes.smallMedium
+                     onClicked: {
+-                        delegate.taskSwitcherHelpers.lastClosedTask = delegate.currentIndex;
++                        // Do not record a closed task for an always-alive app:
++                        // its task never leaves the list, so the index fixup in
++                        // TaskSwitcher.onTasksCountChanged would run stale.
++                        if (!delegate.isKeptAlive()) {
++                            delegate.taskSwitcherHelpers.lastClosedTask = delegate.currentIndex;
++                        }
+                         delegate.closeApp()
+                     }
+                 }

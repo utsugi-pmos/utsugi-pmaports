@@ -1,16 +1,16 @@
 #!/bin/sh
 # What was left of the last hang.
 #
-#   caja-negra              the last hang, with a verdict
-#   caja-negra --lista      all saved traces
-#   caja-negra --latidos    the raw heartbeats, to inspect by hand
-#   caja-negra --estado     what is installed right now
+#   blackbox              the last hang, with a verdict
+#   blackbox --lista      all saved traces
+#   blackbox --latidos    the raw heartbeats, to inspect by hand
+#   blackbox --estado     what is installed right now
 #
 # All of this lives in RAM that survives the reboot (ramoops). The files are
 # owned by root, so the script relaunches itself with sudo if needed.
 set -eu
 
-ARCHIVO=/var/log/caja-negra
+ARCHIVO=/var/log/blackbox
 [ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
 
 # The most recent trace: first the archive itself, and if nothing has been
@@ -24,10 +24,10 @@ ultimo() {
 
 # The DISK heartbeat ('ultimo-latido') is the good source: on this phone it is the
 # only one that survives. The pmsg one carries the whole history, but it only
-# appears the day ramoops works here -- see the header of caja-negra-latido.
+# appears the day ramoops works here -- see the header of blackbox-heartbeat.
 latidos_de() {
-	grep -a '^caja-negra ' "$1/pmsg-ramoops-0" 2>/dev/null || true
-	grep -a '^caja-negra ' "$1/ultimo-latido" 2>/dev/null || true
+	grep -a '^blackbox ' "$1/pmsg-ramoops-0" 2>/dev/null || true
+	grep -a '^blackbox ' "$1/ultimo-latido" 2>/dev/null || true
 }
 
 campo() {  # campo <line> <name>  ->  the value, or empty
@@ -52,16 +52,16 @@ case "${1:-}" in
 	printf 'console awake on suspend        %s\n' \
 		"$(cat /sys/module/printk/parameters/console_suspend 2>/dev/null)  (N = yes, which is what we want)"
 	printf 'console level                   %s\n' "$(cut -f1 /proc/sys/kernel/printk)  (7 = everything)"
-	printf 'heartbeat timer                 %s\n' "$(systemctl is-active caja-negra-latido.timer 2>/dev/null)"
+	printf 'heartbeat timer                 %s\n' "$(systemctl is-active blackbox-heartbeat.timer 2>/dev/null)"
 	printf 'ramoops                         %s KB of console, %s KB of messages\n' \
 		"$(($(cat /sys/module/ramoops/parameters/console_size) / 1024))" \
 		"$(($(cat /sys/module/ramoops/parameters/pmsg_size) / 1024))"
 	# 'Finished', not 'Started': for a oneshot service systemd logs
 	# "Starting"/"Finished", so counting "Started" always gave zero.
 	printf 'sign of life right now          %s\n' \
-		"$(cut -d' ' -f2 /var/log/caja-negra/latido 2>/dev/null || echo 'none yet')"
+		"$(cut -d' ' -f2 /var/log/blackbox/latido 2>/dev/null || echo 'none yet')"
 	printf 'heartbeats in this boot         %s\n' \
-		"$(journalctl -u caja-negra-latido.service -b --no-pager 2>/dev/null | grep -c Finished || true)"
+		"$(journalctl -u blackbox-heartbeat.service -b --no-pager 2>/dev/null | grep -c Finished || true)"
 	exit 0 ;;
 esac
 
@@ -86,7 +86,7 @@ if [ -z "$ult" ]; then
 else
 	t="$(campo "$ult" t)"
 	arranque="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
-	# The line is: caja-negra <date> t=... up=...  -- the date is the 2nd field.
+	# The line is: blackbox <date> t=... up=...  -- the date is the 2nd field.
 	echo "Last heartbeat:  $(printf '%s\n' "$ult" | cut -d' ' -f2)"
 	echo "  the phone had been on for $(campo "$ult" up) s"
 	echo "  screen $(campo "$ult" luz), suspends $(campo "$ult" susp) (good/bad), charge $(campo "$ult" carga)"

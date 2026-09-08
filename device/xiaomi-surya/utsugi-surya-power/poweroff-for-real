@@ -1,5 +1,5 @@
 #!/bin/sh
-# The power-off of this phone, as the ExecStop of apagar-de-verdad.service:
+# The power-off of this phone, as the ExecStop of poweroff-for-real.service:
 # the first unit systemd stops when poweroff.target is the goal.
 #
 # Measured on 2026-09-05 (surya/docs/BOOT-03): the ordinary shutdown of
@@ -56,7 +56,7 @@ esac
 # this, because journald is already being stopped when this runs -- looking for
 # it there and finding nothing was mistaken for "the script did not run", and
 # cost an afternoon. This file is the only place that says whether it acted.
-echo "$(date '+%F %T') $modo -f" >> /var/log/apagar-de-verdad.log 2>/dev/null
+echo "$(date '+%F %T') $modo -f" >> /var/log/poweroff-for-real.log 2>/dev/null
 
 for b in /sys/class/backlight/*/brightness; do echo 0 > "$b" 2>/dev/null; done
 sync

@@ -3,7 +3,7 @@
 #
 # TWO THINGS THAT ARE LOST FOR DIFFERENT REASONS
 # ----------------------------------------------
-# 1. The LAST SIGN OF LIFE (/var/log/caja-negra/latido). It is a one-line
+# 1. The LAST SIGN OF LIFE (/var/log/blackbox/latido). It is a one-line
 #    file that the heartbeat OVERWRITES every 30 s. If it is not moved aside now, the first
 #    heartbeat of this boot overwrites the one from the freeze -- exactly the data of interest.
 #    That is why the heartbeat timer starts AFTER this service.
@@ -21,7 +21,7 @@
 set -eu
 
 ORIGEN=/var/lib/systemd/pstore
-BASE=/var/log/caja-negra
+BASE=/var/log/blackbox
 LATIDO="$BASE/latido"
 
 mkdir -p "$BASE"

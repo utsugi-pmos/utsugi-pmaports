@@ -10,7 +10,7 @@ IgnoreOnIsolate=yes
 
 [Service]
 Type=simple
-ExecStart=/usr/libexec/utsugi-surya/sincronizar-journal
+ExecStart=/usr/libexec/utsugi-surya/journal-sync
 KillMode=mixed
 TimeoutStopSec=1
 

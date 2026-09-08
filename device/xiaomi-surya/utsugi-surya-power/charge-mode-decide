@@ -1,6 +1,6 @@
 #!/bin/sh
 # Decides whether this boot is "the cable was plugged into me" or "a person
-# turned me on", and leaves the answer in /run/modo-carga so the other
+# turned me on", and leaves the answer in /run/charge-mode so the other
 # units can read it.
 #
 # WHY IT CAN BE KNOWN
@@ -22,7 +22,7 @@
 # reason. If one day it does publish it -or it is added-, change only this function.
 set -u
 
-RUN=/run/modo-carga
+RUN=/run/charge-mode
 USB_CHG=16      # BIT(4)
 DC_CHG=8        # BIT(3)
 KPDPWR=128      # BIT(7)

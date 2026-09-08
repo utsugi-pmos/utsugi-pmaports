@@ -1,11 +1,11 @@
 #!/bin/sh
 # Chooses where the audio comes out of the POCO X3 NFC (surya).
 #
-#   salida-audio todo        both speakers  <- the normal one
-#   salida-audio altavoz     only the bottom one
-#   salida-audio audifono    only the top one, the one you hold to your ear
-#   salida-audio cascos      3.5 mm jack
-#   salida-audio estado      only reports, changes nothing
+#   audio-output todo        both speakers  <- the normal one
+#   audio-output altavoz     only the bottom one
+#   audio-output audifono    only the top one, the one you hold to your ear
+#   audio-output cascos      3.5 mm jack
+#   audio-output estado      only reports, changes nothing
 #
 # Accepted aliases: auricular=audifono, ambos=todo, arriba=audifono, abajo=altavoz.
 #

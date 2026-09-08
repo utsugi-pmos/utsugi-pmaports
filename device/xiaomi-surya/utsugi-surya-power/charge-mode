@@ -3,7 +3,7 @@
 #
 # It does not start the graphical session -- Plasma is held from starting by a
 # condition, see the setting-- and instead this runs: Plymouth is thrown off the
-# screen and the battery is drawn on the framebuffer with 'pantalla-de-carga'.
+# screen and the battery is drawn on the framebuffer with 'charge-screen'.
 #
 # Plymouth would do for text, and that is how it started, but its drawing on this phone is
 # the postmarketOS logo: the first real test looked like a hung boot.
@@ -18,7 +18,7 @@
 # so the normal session comes up. It is the emergency exit if this fails.
 set -u
 
-RUN=/run/modo-carga
+RUN=/run/charge-mode
 QG=/sys/class/power_supply/qcom_qg
 CHG=/sys/class/power_supply/pm8150b-charger
 APAGAR_PANTALLA=45   # s without touching anything before turning off the screen
@@ -45,7 +45,7 @@ pintar() {
 	ahora=$(date +%s)
 	v="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 	if [ "$v" != "$ultimo" ] || [ $(( ahora - ultimo_t )) -ge 60 ]; then
-		pantalla-de-carga 2>/dev/null
+		charge-screen 2>/dev/null
 		ultimo="$v"
 		ultimo_t="$ahora"
 	fi
@@ -57,7 +57,7 @@ arrancar_el_movil() {
 	brillo "$TENUE"
 	# Screen to black before releasing it: otherwise, the drawn battery stays
 	# underneath until the compositor paints its first frame.
-	pantalla-de-carga --solo-limpiar 2>/dev/null
+	charge-screen --solo-limpiar 2>/dev/null
 	# Plasma was skipped by condition; now that the file is gone, it starts.
 	systemctl reset-failed plasma-mobile.service 2>/dev/null
 	systemctl start plasma-mobile.service
@@ -67,7 +67,7 @@ arrancar_el_movil() {
 
 # The screen is ours from here: Plymouth goes and the logo is cleared.
 plymouth quit 2>/dev/null
-pantalla-de-carga --limpiar 2>/dev/null
+charge-screen --limpiar 2>/dev/null
 ultimo_t=$(date +%s)
 ultimo="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 
@@ -85,7 +85,7 @@ while :; do
 	else
 		sin_cable=$(( sin_cable + 1 ))
 		if [ "$sin_cable" -ge 2 ]; then
-			pantalla-de-carga --solo-limpiar 2>/dev/null
+			charge-screen --solo-limpiar 2>/dev/null
 			exec systemctl poweroff
 		fi
 	fi

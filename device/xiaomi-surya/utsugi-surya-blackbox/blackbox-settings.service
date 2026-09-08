@@ -16,7 +16,7 @@ RemainAfterExit=yes
 # this phone dies -- suspend and resume -- nothing was being saved.
 #
 # With this, the suspend and resume printk DO get recorded, and after a hang they
-# are read with 'caja-negra'.
+# are read with 'blackbox'.
 ExecStart=/bin/sh -c 'echo N > /sys/module/printk/parameters/console_suspend'
 
 # 2. Let more than just errors reach the console.

@@ -57,7 +57,7 @@ mal="$(cat /sys/power/suspend_stats/fail 2>/dev/null || echo ?)"
 # The time is written TWICE: readable for whoever reads it by eye, and in seconds
 # since 1970 so the reader can subtract without having to interpret formats --
 # busybox's 'date -d' does not swallow just anything.
-LINEA="$(printf 'caja-negra %s t=%s up=%s susp=%s/%s luz=%s carga=%s' \
+LINEA="$(printf 'blackbox %s t=%s up=%s susp=%s/%s luz=%s carga=%s' \
 	"$(date -Iseconds)" \
 	"$(date +%s)" \
 	"$(cut -d. -f1 /proc/uptime)" \
@@ -71,8 +71,8 @@ LINEA="$(printf 'caja-negra %s t=%s up=%s susp=%s/%s luz=%s carga=%s' \
 #
 # The archiver takes this file away at boot, BEFORE the first new
 # heartbeat. Otherwise, the next boot would overwrite the last mark of the hang.
-mkdir -p /var/log/caja-negra
-printf '%s\n' "$LINEA" | dd of=/var/log/caja-negra/latido conv=fsync 2>/dev/null
+mkdir -p /var/log/blackbox
+printf '%s\n' "$LINEA" | dd of=/var/log/blackbox/latido conv=fsync 2>/dev/null
 
 # And also to persistent RAM, which costs nothing. Today it does not survive on this
 # phone (see the header), but if one day it is fixed, the whole history

@@ -1,14 +1,14 @@
 [Unit]
 Description=Check whether the phone was powered on by the charger or by a person
-Documentation=file:///usr/libexec/utsugi-surya/modo-carga-decidir
+Documentation=file:///usr/libexec/utsugi-surya/charge-mode-decide
 # After sysinit because it needs debugfs mounted and the PMIC probed, and
 # before Plasma because what it decides is precisely whether Plasma boots.
 After=sysinit.target
-Before=plasma-mobile.service modo-carga.service
+Before=plasma-mobile.service charge-mode.service
 
 [Service]
 Type=oneshot
-ExecStart=/usr/libexec/utsugi-surya/modo-carga-decidir
+ExecStart=/usr/libexec/utsugi-surya/charge-mode-decide
 
 [Install]
 WantedBy=graphical.target
