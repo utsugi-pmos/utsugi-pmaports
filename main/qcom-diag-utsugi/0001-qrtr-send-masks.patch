@@ -1,10 +1,10 @@
 From: cidwel <cidwel@gmail.com>
-Subject: [PATCH] peripheral-qrtr: enviar las mascaras al peripheral
+Subject: [PATCH] peripheral-qrtr: send the masks to the peripheral
 
-La ruta rpmsg llama a diag_cntl_send_masks() al encontrar un peripheral,
-pero la ruta QRTR no lo hace nunca. En plataformas Qualcomm con kernel
-mainline (que usan QRTR) el modem nunca recibe las mascaras y su canal
-de datos permanece mudo, aunque el saludo de caracteristicas se complete.
+The rpmsg path calls diag_cntl_send_masks() when it finds a peripheral, but
+the QRTR path never does. On Qualcomm platforms with a mainline kernel (which
+use QRTR) the modem never receives the masks and its data channel stays mute,
+even though the feature handshake completes.
 --- a/router/peripheral-qrtr.c
 +++ b/router/peripheral-qrtr.c
 @@ -95,6 +95,26 @@

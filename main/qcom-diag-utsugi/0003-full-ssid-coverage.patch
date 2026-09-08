@@ -1,14 +1,14 @@
 From: cidwel <cidwel@gmail.com>
-Subject: [PATCH] masks: cubrir todo el espacio de SSID, no el 1,3%
+Subject: [PATCH] masks: cover the whole SSID space, not 1.3% of it
 
-La tabla de rangos que trae diag-router cubre 647 SSIDs de 49252, un 1,3%,
-con un hueco de 38735 seguidos entre 10417 y 49151. Los subsistemas cuyo
-SSID cae en un hueco no reciben mascara y por tanto no emiten nunca.
+The range table diag-router ships covers 647 SSIDs out of 49252, 1.3%, with a
+gap of 38735 consecutive ones between 10417 and 49151. Subsystems whose SSID
+falls in a gap receive no mask and therefore never emit.
 
-Buscando por que el modem no dice nada de RF: MCPM y RFLM caen fuera de la
-tabla. Se sustituye por un teselado completo de 200 rangos de 256 SSIDs.
-Cada mascara ocupa 1 KB, muy por debajo del maximo de paquete que anuncia
-el modem (32 KB).
+While looking for why the modem says nothing about RF: MCPM and RFLM fall
+outside the table. It is replaced by a complete tiling of 200 ranges of 256
+SSIDs each. Each mask takes 1 KB, well below the maximum packet size the modem
+advertises (32 KB).
 
 --- a/router/masks.h
 +++ b/router/masks.h

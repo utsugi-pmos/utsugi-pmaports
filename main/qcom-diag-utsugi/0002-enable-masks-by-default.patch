@@ -1,12 +1,12 @@
-Habilitar todas las mascaras de mensajes al arrancar.
+Enable every message mask at start-up.
 
-El estado inicial de las mascaras es DIAG_CTRL_MASK_INVALID, asi que cuando
-diag_cntl_send_masks() empuja las mascaras al peripheral recien encontrado le
-esta diciendo "no emitas nada". Sin un cliente que mande explicitamente el
-comando 0x7D, el modem nunca abre su flujo de log.
+The initial state of the masks is DIAG_CTRL_MASK_INVALID, so when
+diag_cntl_send_masks() pushes the masks to a freshly found peripheral it is
+telling it "emit nothing". Without a client explicitly sending command 0x7D,
+the modem never opens its log stream.
 
-Para depurar el modem necesitamos el flujo desde el primer instante, antes de
-que ningun cliente pueda conectarse. Arrancamos con todo habilitado.
+To debug the modem we need the stream from the very first moment, before any
+client could have connected. So we start with everything enabled.
 
 --- a/router/masks.c
 +++ b/router/masks.c
