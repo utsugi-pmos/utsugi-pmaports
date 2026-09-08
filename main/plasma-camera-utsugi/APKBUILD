@@ -4,7 +4,7 @@ maintainer="Bart Ribbers <bribbers@disroot.org>"
 _orig=plasma-camera
 pkgname=$_orig-utsugi
 pkgver=2.1.1
-pkgrel=10
+pkgrel=11
 # FORK of plasma-camera. Same files as upstream, so it claims upstream's name with a
 # versioned provides and a replaces: apk then refuses to have both installed and
 # every package that depends on "plasma-camera" is satisfied by this one.
@@ -71,6 +71,6 @@ lang() {
 
 sha512sums="
 0a7a6e4bcce5fcb483291e15bca3a4537a4f00a8b7ab4fbd3f38e775ec8757a4b99e4fd4124435e734f865a167a61e836945520005c4058bc41757216e8a325f  plasma-camera-2.1.1.tar.xz
-f96c3aa764e9a15a5576758425ec2ade8877446326f0887e26fd2a36fa6211e221772b8b63f419a2e22b955509c8cbc038cfa0e3912f07b81753adcedc99e1a9  0001-plasma-camera-zoom-bar-with-ultra-wide-crossover.patch
-489dae113dd6beface7fb45d751c847e11fea1a445f8b44bd3b619a54036b1af8cfc46235dde211e349cba9208d032ac27c9ccbbc72578baebcd7ab63dffbd88  0002-plasma-camera-tap-to-focus.patch
+4db14a25c9d3ab162f172b1773c88164f7c8eec139a86f7f230eccf55db930aa5ad9d1e11a97c6e36da41d890a5af510b777f9217415bd80e79dd49d15684af4  0001-plasma-camera-zoom-bar-with-ultra-wide-crossover.patch
+5e7d59f29f994b1438ce7438f9c27dec780c017025fde540cad313bde5cdf0b90d537f4b3e88d316eee256c184bf88fc23c9f310adf1aeef7db15babd8f132ec  0002-plasma-camera-tap-to-focus.patch
 "
