@@ -184,15 +184,15 @@ caused nor when it was caused.
  	  module will be called hi556.
  
 +config VIDEO_SURYA_CAM_SCAN
-+	tristate "Buscador de sensores en el bus CCI del Xiaomi POCO X3 NFC"
++	tristate "Sensor scanner on the CCI bus of the Xiaomi POCO X3 NFC"
 +	depends on OF && I2C
 +	help
-+	  Instrumento de diagnostico, no un driver. Enciende la secuencia de
-+	  encendido de una camara -alimentaciones, reloj y reset- y barre el bus
-+	  buscando quien contesta y con que identificador, para averiguar en que
-+	  direccion viven los sensores que el device tree todavia no declara.
++	  Diagnostic instrument, not a driver. It runs the power-on
++	  sequence of a camera -supplies, clock and reset- and sweeps the bus
++	  looking for who answers and with which id, to find out at which
++	  address the sensors the device tree does not declare yet live.
 +
-+	  Va como modulo y se carga a mano.
++	  It builds as a module and is loaded by hand.
 +
  config VIDEO_HI846
  	tristate "Hynix Hi-846 sensor support"
@@ -217,17 +217,17 @@ caused nor when it was caused.
 -	/* Sk Hynix Hi-259 Macro @ ? */
 -	/* Sk Hynix Hi-1337 Ultrawide @ ? */
 +	/*
-+	 * Aqui cuelgan el gran angular (Hi-1337), el macro (Hi-259) y el de
-+	 * profundidad, y no se sabe ni en que direccion contestan ni con que
-+	 * GPIO se les suelta el reset.
++	 * The wide-angle (Hi-1337), the macro (Hi-259) and the depth one hang
++	 * here, and it is not known at which address they answer nor with which
++	 * GPIO their reset is released.
 +	 *
-+	 * Este nodo NO es un sensor: es el instrumento que lo averigua. Enciende
-+	 * la secuencia completa y barre el bus soltando un GPIO candidato cada
-+	 * vez. Va en una direccion que nadie usa -0x7f- para no chocar con los
-+	 * cuatro chips que ya contestan (0x51, 0x54, 0x59 y 0x5c).
++	 * This node is NOT a sensor: it is the instrument that finds it out. It runs
++	 * the full sequence and sweeps the bus releasing one candidate GPIO at a
++	 * time. It sits at an address nobody uses -0x7f- so as not to clash with the
++	 * four chips that already answer (0x51, 0x54, 0x59 and 0x5c).
 +	 *
-+	 * Cuando se sepa quien es quien, este nodo se sustituye por los sensores
-+	 * de verdad y el modulo se borra.
++	 * Once we know who is who, this node is replaced by the real
++	 * sensors and the module is deleted.
 +	 */
 +	buscador@7f {
 +		compatible = "xiaomi,surya-cam-scan";
@@ -236,18 +236,18 @@ caused nor when it was caused.
 +		pinctrl-names = "default";
 +		pinctrl-0 = <&cam_mclk2_active &cam_mclk3_active>;
 +
-+		/* LOS DOS. El device tree de fabrica (atoll-camera-sensor-qrd.dtsi
-+		 * del kernel que publica Xiaomi) dice que el sensor de este bus
-+		 * -cci-device 1, cci-master 0- va con CAMIF_MCLK3 en el gpio16 y
-+		 * CAM_RESET3 en el gpio24. El primer barrido levanto solo MCLK2 y
-+		 * no desperto a nadie. Se encienden los dos para no depender de
-+		 * acertar, que es barato. */
++		/* BOTH. The factory device tree (atoll-camera-sensor-qrd.dtsi
++		 * from the kernel Xiaomi publishes) says that the sensor on this bus
++		 * -cci-device 1, cci-master 0- goes with CAMIF_MCLK3 on gpio16 and
++		 * CAM_RESET3 on gpio24. The first sweep brought up only MCLK2 and
++		 * woke nobody. Both are enabled so as not to depend on
++		 * guessing right, which is cheap. */
 +		clocks = <&camcc CAMCC_MCLK2_CLK>, <&camcc CAMCC_MCLK3_CLK>;
 +		clock-names = "mclk2", "mclk3";
 +
 +		/*
-+		 * Las alimentaciones son las que quedan libres y encajan en
-+		 * tension. Si el sensor no despierta con estas, el propio
++		 * The supplies are the ones left free that fit in
++		 * voltage. If the sensor does not wake with these, the
 +		 * resultado lo dira y se prueban otras.
 +		 */
 +		vddio-supply = <&vreg_l13a_1p8>;
@@ -255,46 +255,46 @@ caused nor when it was caused.
 +		vddd-supply = <&vreg_camera_vdig>;
 +
 +		/*
-+		 * Candidatos a reset. NO son una suposicion: salen de la tabla
-+		 * de dueños del propio movil,
++		 * Reset candidates. They are NOT a guess: they come from the
++		 * ownership table of the phone itself,
 +		 *     /sys/kernel/debug/pinctrl/3500000.pinctrl/pinmux-pins
-+		 * quedandose con los que estan sin reclamar. Los vecinos de los
-+		 * resets conocidos -el 23 de la frontal y el 25 de la trasera-
-+		 * van primero, que es donde suele caer el que falta.
++		 * keeping the ones that are unclaimed. The neighbours of the
++		 * known resets -23 of the front camera and 25 of the rear one-
++		 * go first, which is where the missing one usually falls.
 +		 *
-+		 * El primer intento metia el 27 y el 28, y eso rompio el barrido
-+		 * entero: son los pines del bus i2c del propio CCI1.
++		 * The first attempt included 27 and 28, and that broke the whole
++		 * sweep: they are the i2c bus pins of CCI1 itself.
 +		 */
 +		/*
-+		 * SOLO el 24. El barrido ya cumplio su papel y encontro que es
-+		 * este el reset del bus: soltandolo aparece un chip en 0x21 que
-+		 * antes no esta.
++		 * ONLY 24. The sweep already did its job and found that this
++		 * is the bus reset: releasing it a chip appears at 0x21 that
++		 * was not there before.
 +		 *
-+		 * Los demas se quitan A PROPOSITO. El modulo los pedia en
-+		 * exclusiva y eso los dejaba inaccesibles desde fuera, asi que
-+		 * `gpioset` contestaba "ocupado" y no se podia tantear el pin de
-+		 * STANDBY sin recompilar. Dejandolos libres, el resto de la
-+		 * busqueda se hace desde el espacio de usuario.
++		 * The rest are removed ON PURPOSE. The module requested them
++		 * exclusively and that left them unreachable from outside, so
++		 * `gpioset` answered "busy" and the STANDBY pin could not be
++		 * probed without recompiling. Leaving them free, the rest of the
++		 * search is done from userspace.
 +		 */
 +		/*
-+		 * La primera ronda solo probo 11 pines del tlmm, elegidos por
-+		 * estar cerca de los de camara. Contando bien, en este movil hay
-+		 * 83 pines del tlmm SIN DUEÑO: aquello cubrio el 13%, y el
-+		 * "barrido completo" que se dio por bueno no lo era.
++		 * The first round only tried 11 tlmm pins, chosen for
++		 * being close to the camera ones. Counting properly, this phone has
++		 * 83 tlmm pins WITH NO OWNER: that covered 13%, and the
++		 * "complete sweep" that was taken as good was not.
 +		 *
-+		 * Esta lista amplia a todo lo libre por debajo del 59 -de ahi
-+		 * para arriba empieza el rango reservado y el de radio- y añade
-+		 * los 16 GPIO libres de los dos PMIC, que es donde el device
-+		 * tree de fabrica podria haber puesto el standby y que hasta
-+		 * ahora no se habian mirado.
++		 * This list extends to everything free below 59 -from there
++		 * upwards the reserved and radio ranges start- and adds
++		 * the 16 free GPIOs of the two PMICs, which is where the factory
++		 * device tree could have put standby and which until
++		 * now had not been looked at.
 +		 *
-+		 * El indice en ESTA lista es lo que sale en los mensajes del
-+		 * modulo, asi que el orden importa y no se toca sin actualizar
-+		 * la tabla de CAMARA-06.
++		 * The index in THIS list is what shows up in the module
++		 * messages, so the order matters and is not touched without updating
++		 * the CAMARA-06 table.
 +		 */
-+		probe-gpios = <&tlmm 24 GPIO_ACTIVE_HIGH>,   /* 0: el reset, encontrado */
-+			      /* 1..19: lo que queda libre en el tlmm por debajo del 59.
-+			       * El 15 y el 16 se saltan: son nuestros dos MCLK. */
++		probe-gpios = <&tlmm 24 GPIO_ACTIVE_HIGH>,   /* 0: the reset, found */
++			      /* 1..19: what is left free in the tlmm below 59.
++			       * 15 and 16 are skipped: they are our two MCLKs. */
 +			      <&tlmm 2 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 3 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 5 GPIO_ACTIVE_HIGH>,
@@ -303,19 +303,19 @@ caused nor when it was caused.
 +			      <&tlmm 11 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 21 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 22 GPIO_ACTIVE_HIGH>,
-+			      <&tlmm 26 GPIO_ACTIVE_HIGH>,  /* dara -EIO: IRQ del aw8695 */
++			      <&tlmm 26 GPIO_ACTIVE_HIGH>,  /* will give -EIO: aw8695 IRQ */
 +			      <&tlmm 29 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 30 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 32 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 33 GPIO_ACTIVE_HIGH>,
-+			      <&tlmm 37 GPIO_ACTIVE_HIGH>,  /* dara -EIO: IRQ del NFC */
++			      <&tlmm 37 GPIO_ACTIVE_HIGH>,  /* will give -EIO: NFC IRQ */
 +			      <&tlmm 42 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 43 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 48 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 57 GPIO_ACTIVE_HIGH>,
 +			      <&tlmm 58 GPIO_ACTIVE_HIGH>,
-+			      /* 20..28: los libres del PM6150 (pmic@0, 10 lineas).
-+			       * Se numeran desde 1, como en el resto de mainline. */
++			      /* 20..28: the free ones of the PM6150 (pmic@0, 10 lines).
++			       * They are numbered from 1, as in the rest of mainline. */
 +			      <&pm6150_gpios 1 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150_gpios 3 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150_gpios 4 GPIO_ACTIVE_HIGH>,
@@ -325,7 +325,7 @@ caused nor when it was caused.
 +			      <&pm6150_gpios 8 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150_gpios 9 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150_gpios 10 GPIO_ACTIVE_HIGH>,
-+			      /* 29..35: los libres del PM6150L (pmic@4, 12 lineas). */
++			      /* 29..35: the free ones of the PM6150L (pmic@4, 12 lines). */
 +			      <&pm6150l_gpios 1 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150l_gpios 3 GPIO_ACTIVE_HIGH>,
 +			      <&pm6150l_gpios 5 GPIO_ACTIVE_HIGH>,
@@ -343,8 +343,8 @@ caused nor when it was caused.
  		bias-disable;
 +	};
 +
-+	/* MCLK2 vive en el gpio15: el mapa de pines del SoC pone cam_mclk en
-+	 * los gpio 13, 14 y 15, y los dos primeros ya son de la frontal y la
++	/* MCLK2 lives on gpio15: the SoC pin map puts cam_mclk on
++	 * gpio 13, 14 and 15, and the first two already belong to the front and the
 +	 * trasera. */
 +	cam_mclk3_active: cam-mclk3-active-state {
 +		pins = "gpio16";
@@ -366,39 +366,39 @@ caused nor when it was caused.
 @@ -0,0 +1,448 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Buscador de sensores de camara en el bus CCI del Xiaomi POCO X3 NFC.
++ * Camera sensor scanner on the CCI bus of the Xiaomi POCO X3 NFC.
 + *
-+ * POR QUE EXISTE
++ * WHY IT EXISTS
 + * --------------
-+ * El movil tiene cuatro camaras traseras. Dos funcionan; las otras -gran
-+ * angular Hi-1337, macro Hi-259 y profundidad- cuelgan de cci1_i2c0, que en el
-+ * device tree esta VACIO. Y para escribirles un driver hace falta saber dos
-+ * cosas que nadie dice: en que direccion contestan y con que GPIO se les quita
-+ * el reset.
++ * The phone has four rear cameras. Two work; the others -wide-angle
++ * Hi-1337, macro Hi-259 and depth- hang off cci1_i2c0, which in the
++ * device tree is EMPTY. And to write a driver for them you need to know two
++ * things nobody tells: at which address they answer and with which GPIO their
++ * reset is released.
 + *
-+ * Escanear desde el espacio de usuario NO sirve, y esta medido: con la trasera
-+ * alimentada, en ese bus contestan 0x51, 0x54, 0x59 y 0x5c, pero ninguno
-+ * responde al registro de identificacion de los SK Hynix (0x0f16, que en el
-+ * hi846 de mainline devuelve 46 08). O sea que no son sensores: los sensores
++ * Scanning from userspace does NOT work, and it is measured: with the rear camera
++ * powered, on that bus 0x51, 0x54, 0x59 and 0x5c answer, but none of them
++ * responds to the SK Hynix id register (0x0f16, which on the
++ * mainline hi846 returns 46 08). That is, they are not sensors: the sensors
 + * siguen apagados.
 + *
-+ * Y no basta con encender rieles a mano, porque un sensor necesita ademas su
-+ * MCLK -que solo levanta un driver- y que se le suelte el reset.
++ * And turning rails on by hand is not enough, because a sensor also needs its
++ * MCLK -which only a driver brings up- and its reset released.
 + *
-+ * QUE HACE ESTE MODULO
++ * WHAT THIS MODULE DOES
 + * --------------------
-+ * Enciende la secuencia entera igual que la haria un driver de verdad
-+ * -alimentaciones, reloj, espera- y despues, por cada GPIO candidato de reset:
++ * It runs the whole sequence just like a real driver would
++ * -supplies, clock, wait- and then, for each candidate reset GPIO:
 + *
-+ *     lo suelta, barre el bus entero, y lo vuelve a poner
++ *     it releases it, sweeps the whole bus, and puts it back
 + *
-+ * De cada direccion que conteste lee el identificador de Hynix y el registro
-+ * 0x0000, que es donde lo llevan los Sony y los Samsung. Asi una sola prueba
-+ * contesta las dos preguntas a la vez.
++ * From every address that answers it reads the Hynix id and register
++ * 0x0000, which is where Sony and Samsung keep theirs. This way a single test
++ * answers both questions at once.
 + *
-+ * Va como MODULO y no como driver normal a proposito: se carga a mano cuando se
-+ * quiere medir, se lee el dmesg, y se descarga. Un fallo aqui no puede dejar el
-+ * movil sin arrancar.
++ * It is a MODULE and not a normal driver on purpose: it is loaded by hand when
++ * you want to measure, dmesg is read, and it is unloaded. A bug here cannot leave the
++ * phone unable to boot.
 + */
 +
 +#include <linux/clk.h>
@@ -408,74 +408,74 @@ caused nor when it was caused.
 +#include <linux/module.h>
 +#include <linux/regulator/consumer.h>
 +
-+/* Los mismos tres nombres que usa el driver hi846, para poder reutilizar su
-+ * device tree tal cual cuando esto se convierta en el driver de verdad. */
++/* The same three names the hi846 driver uses, so as to be able to reuse its
++ * device tree as is when this becomes the real driver. */
 +static const char * const surya_supplies[] = { "vddio", "vdda", "vddd" };
 +
-+/* Tope de candidatos. Ahora la lista trae 36 -el reset, 19 pines libres del
-+ * tlmm y 16 de los dos PMIC- y el margen es para poder añadir mas en el device
-+ * tree sin tocar el codigo. OJO: si la lista del device tree crece por encima
-+ * de esto, el modulo la RECORTA en silencio, asi que los dos numeros que
-+ * imprime al arrancar -utiles y totales- son la comprobacion de que se ha
-+ * probado todo. */
++/* Candidate cap. The list now has 36 -the reset, 19 free pins of the
++ * tlmm and 16 from the two PMICs- and the headroom is to be able to add more in the device
++ * tree without touching the code. WATCH OUT: if the device tree list grows beyond
++ * this, the module TRUNCATES it silently, so the two numbers it
++ * prints at startup -usable and total- are the check that everything
++ * has been tried. */
 +#define SURYA_MAX_RESETS 48
 +
-+/* Lo que hay que apagar al descargar el modulo, y solo se rellena en el camino
-+ * de `mantener`, que es el unico que deja el probe enlazado. */
++/* What has to be turned off when the module is unloaded, and it is only filled in on the
++ * `mantener` path, which is the only one that leaves probe bound. */
 +struct surya_encendido {
 +	struct regulator_bulk_data *supplies;
 +	struct clk_bulk_data *relojes;
 +	int nrelojes;
 +	struct gpio_desc *reset;
-+	struct gpio_desc *standby;	/* NULL si se dejo sin standby */
++	struct gpio_desc *standby;	/* NULL if left without standby */
 +};
 +
-+/* Con esto puesto al indice de un candidato, el modulo NO apaga al terminar:
-+ * deja ese reset suelto, los relojes girando y los rieles encendidos, y se
-+ * queda enlazado. Sirve para seguir hurgando desde el espacio de usuario con
-+ * i2ctransfer, que es mucho mas rapido que recompilar el kernel por cada
-+ * registro que uno quiera leer.
++/* With this set to a candidate index, the module does NOT power off when it finishes:
++ * it leaves that reset released, the clocks spinning and the rails on, and stays
++ * bound. It is useful to keep poking from userspace with
++ * i2ctransfer, which is much faster than recompiling the kernel for each
++ * register one wants to read.
 + *
-+ * Lo que queda encendido lo apaga surya_cam_scan_remove() al descargar el
-+ * modulo. Hacerlo importa mas de lo que parece: ni clk_bulk_prepare_enable ni
-+ * regulator_bulk_enable son devm, asi que sin ese remove devres liberaba los
-+ * reguladores con la cuenta de habilitacion en pie -tres WARN en
-+ * regulator_bulk_free, uno por riel- y los dejaba encendidos para siempre, con
-+ * el kernel ya marcado. Y un kernel marcado es exactamente el estado en el que
-+ * aparecio el interbloqueo del UFS.
++ * Whatever is left on is turned off by surya_cam_scan_remove() when the module is
++ * unloaded. Doing it matters more than it seems: neither clk_bulk_prepare_enable nor
++ * regulator_bulk_enable are devm, so without that remove devres freed the
++ * regulators with the enable count still standing -three WARNs in
++ * regulator_bulk_free, one per rail- and left them on forever, with
++ * the kernel already tainted. And a tainted kernel is exactly the state in which
++ * the UFS deadlock showed up.
 + *
-+ * Para verlo hay que mirar el DELTA en regulator_summary, no el numero suelto:
-+ * cam_avdd1 -el vdda de este nodo- ya sale con uso 1 y open 0 recien arrancado,
-+ * asi que ese valor por si solo no dice nada. Lo que delataba la fuga es que
-+ * subia a 2 al cargar y se QUEDABA en 2 despues del rmmod. Ahora vuelve a 1. */
++ * To see it you have to look at the DELTA in regulator_summary, not the bare number:
++ * cam_avdd1 -the vdda of this node- already shows use 1 and open 0 right after boot,
++ * so that value on its own says nothing. What gave the leak away is that it
++ * went up to 2 on load and STAYED at 2 after the rmmod. Now it goes back to 1. */
 +static int mantener = -1;
 +module_param(mantener, int, 0644);
 +MODULE_PARM_DESC(mantener,
-+		 "indice del gpio candidato que queda suelto con todo encendido; -1 apaga y sale");
++		 "index of the candidate gpio left released with everything on; -1 powers off and exits");
 +
 +/*
 + * Registros de identificacion.
 + *
-+ * EL FALLO QUE COSTO TODA LA INVESTIGACION: el 0x0f16 se copio del driver
++ * THE BUG THAT COST THE WHOLE INVESTIGATION: 0x0f16 was copied from the driver
 + * hi846 de mainline -donde HI846_REG_CHIP_ID_L vale 0x0f16 y devuelve 46 08- y
-+ * se dio por hecho que el Hi-1337, por ser tambien SK Hynix, lo tendria en el
++ * and it was assumed that the Hi-1337, being SK Hynix too, would have it at the
 + * mismo sitio. NO lo tiene.
 + *
-+ * El Hi-1337 pone su identificador en 0x0716, y ahi contesta 1337 limpio. En
-+ * 0x0f16 devuelve 0000, que es lo que se estuvo leyendo ronda tras ronda como
-+ * "el sensor no despierta". El sensor llevaba despierto desde que se encontro
-+ * el reset; lo que no despertaba era la pregunta.
++ * The Hi-1337 puts its id at 0x0716, and there it answers a clean 1337. At
++ * 0x0f16 it returns 0000, which is what was being read round after round as
++ * "the sensor does not wake". The sensor had been awake ever since
++ * the reset was found; what was not waking up was the question.
 + *
-+ * Se dejan los dos: si algun dia aparece un Hi-846 de verdad en este bus, hay
-+ * que poder distinguirlo.
++ * Both are kept: if a real Hi-846 ever shows up on this bus, we have
++ * to be able to tell it apart.
 + */
 +#define REG_ID_HI1337	0x0716
 +#define REG_ID_HI846	0x0f16
 +#define REG_ID_SMIA	0x0000
 +
-+/* Tamaño de salida a plena resolucion. Sirve de segunda confirmacion: el
-+ * Hi-1337 da 0x1070 x 0x0c30, o sea 4208 x 3120, que es justo lo que dicen los
-+ * modos extraidos del blob de fabrica. */
++/* Output size at full resolution. It serves as a second confirmation: the
++ * Hi-1337 gives 0x1070 x 0x0c30, that is 4208 x 3120, exactly what the
++ * modes extracted from the factory blob say. */
 +#define REG_ANCHO	0x0b12
 +#define REG_ALTO	0x0b14
 +
@@ -502,9 +502,9 @@ caused nor when it was caused.
 +	return i2c_transfer(cl->adapter, &m, 1) == 1;
 +}
 +
-+/* El reset se PULSA, no se suelta y ya: la secuencia de fabrica lo baja, deja
-+ * asentar, y lo sube. Si el standby cambia mientras el reset esta suelto, el
-+ * sensor no se entera. */
++/* The reset is PULSED, not just released: the factory sequence drives it low, lets
++ * it settle, and drives it high. If standby changes while reset is released, the
++ * sensor does not notice. */
 +static int escribir16(struct i2c_client *cl, u16 addr, u16 reg, u8 val)
 +{
 +	u8 buf[3] = { reg >> 8, reg & 0xff, val };
@@ -514,36 +514,36 @@ caused nor when it was caused.
 +}
 +
 +/*
-+ * LA SONDA
++ * THE PROBE
 + *
-+ * Existe por una limitacion medida: en el bus del CCI, i2ctransfer contesta
-+ * "Not supported" -el adaptador no hace las transacciones combinadas que usa- y
-+ * desde el espacio de usuario solo se llega con i2cget/i2cdump, que son de 8
-+ * bits. Pero los sensores de este bus hablan con registros de 16 bits. O sea
-+ * que CADA hipotesis de 16 bits costaba recompilar el kernel: diez minutos por
++ * It exists because of a measured limitation: on the CCI bus, i2ctransfer answers
++ * "Not supported" -the adapter does not do the combined transactions it uses- and
++ * from userspace you can only get there with i2cget/i2cdump, which are 8
++ * bit. But the sensors on this bus speak with 16-bit registers. That is,
++ * EVERY 16-bit hypothesis cost a kernel rebuild: ten minutes per
 + * pregunta.
 + *
-+ * Con esto, mientras `mantener` sostiene rieles y relojes, se pregunta desde
-+ * fuera y sin recompilar nada:
++ * With this, while `mantener` holds rails and clocks, you ask from
++ * outside without recompiling anything:
 + *
 + *     echo "21 0f16"      > /sys/module/surya_cam_scan/parameters/sonda
 + *     echo "21 0a00 01"   > /sys/module/surya_cam_scan/parameters/sonda
 + *     dmesg | tail -1
 + *
-+ * Dos campos leen dos bytes (el registro y el siguiente); tres escriben un byte
-+ * y releen para ver que ha cuajado. La respuesta sale por dmesg y no por el
-+ * propio fichero porque el parametro es de solo escritura.
++ * Two fields read two bytes (the register and the next one); three write one byte
++ * and read back to see what stuck. The answer comes out on dmesg and not on the
++ * file itself because the parameter is write-only.
 + */
-+static struct i2c_client *sonda_cliente;
++static struct i2c_client *probe_client;
 +
-+static int sonda_set(const char *val, const struct kernel_param *kp)
++static int probe_set(const char *val, const struct kernel_param *kp)
 +{
-+	struct i2c_client *cl = READ_ONCE(sonda_cliente);
++	struct i2c_client *cl = READ_ONCE(probe_client);
 +	unsigned int addr, reg, dato = 0;
 +	u16 leido;
 +	int n, ret;
 +
-+	/* Solo hay bus si el probe se quedo enlazado, o sea con `mantener`. */
++	/* There is a bus only if probe stayed bound, that is with `mantener`. */
 +	if (!cl)
 +		return -ENODEV;
 +
@@ -568,10 +568,10 @@ caused nor when it was caused.
 +	return 0;
 +}
 +
-+static const struct kernel_param_ops sonda_ops = { .set = sonda_set };
-+module_param_cb(sonda, &sonda_ops, NULL, 0200);
++static const struct kernel_param_ops probe_ops = { .set = probe_set };
++module_param_cb(sonda, &probe_ops, NULL, 0200);
 +MODULE_PARM_DESC(sonda,
-+		 "\"dir reg\" lee 16 bits, \"dir reg dato\" escribe 8 y relee; la respuesta sale por dmesg");
++		 "\"addr reg\" reads 16 bits, \"addr reg data\" writes 8 and reads back; the answer comes out on dmesg");
 +
 +static void pulso_reset(struct gpio_desc *rst)
 +{
@@ -581,13 +581,13 @@ caused nor when it was caused.
 +	usleep_range(10000, 12000);
 +}
 +
-+static void barrer(struct i2c_client *cl, const char *cuando)
++static void sweep(struct i2c_client *cl, const char *when)
 +{
 +	unsigned int a;
 +	int hallados = 0;
 +
 +	for (a = 0x08; a <= 0x77; a++) {
-+		u16 hi1337 = 0, hi846 = 0, smia = 0, ancho = 0, alto = 0;
++		u16 hi1337 = 0, hi846 = 0, smia = 0, width = 0, height = 0;
 +
 +		if (a == cl->addr || !contesta(cl, a))
 +			continue;
@@ -596,17 +596,17 @@ caused nor when it was caused.
 +		leer16(cl, a, REG_ID_HI1337, &hi1337);
 +		leer16(cl, a, REG_ID_HI846, &hi846);
 +		leer16(cl, a, REG_ID_SMIA, &smia);
-+		leer16(cl, a, REG_ANCHO, &ancho);
-+		leer16(cl, a, REG_ALTO, &alto);
++		leer16(cl, a, REG_ANCHO, &width);
++		leer16(cl, a, REG_ALTO, &height);
 +		dev_info(&cl->dev,
 +			 "%s: 0x%02x contesta  hi1337(0x0716)=%04x hi846(0x0f16)=%04x smia(0x0000)=%04x  %ux%u\n",
-+			 cuando, a, hi1337, hi846, smia, ancho, alto);
++			 when, a, hi1337, hi846, smia, width, height);
 +		if (hi1337 == 0x1337)
-+			dev_info(&cl->dev, "%s: 0x%02x ES EL Hi-1337, el gran angular\n",
-+				 cuando, a);
++			dev_info(&cl->dev, "%s: 0x%02x IS THE Hi-1337, the wide-angle\n",
++				 when, a);
 +	}
 +	if (!hallados)
-+		dev_info(&cl->dev, "%s: nadie contesta\n", cuando);
++		dev_info(&cl->dev, "%s: nobody answers\n", when);
 +}
 +
 +static int surya_cam_scan_probe(struct i2c_client *cl)
@@ -621,13 +621,13 @@ caused nor when it was caused.
 +	unsigned int i;
 +	int ret;
 +
-+	/* EN EL MONTON, no en la pila: devm_regulator_bulk_get() se QUEDA con el
-+	 * puntero a este array y lo vuelve a leer al liberar, que aqui ocurre
-+	 * siempre porque el probe termina en -ENODEV a proposito. Con el array
-+	 * en la pila de probe() eso es leer memoria muerta: el kernel reventaba
-+	 * con un NULL deref en devm_regulator_bulk_release, quedaba marcado, y
-+	 * al rato el UFS se interbloqueaba apagando su reloj y el movil se
-+	 * quedaba con 35 procesos clavados en espera de disco. */
++	/* ON THE HEAP, not on the stack: devm_regulator_bulk_get() KEEPS the
++	 * pointer to this array and reads it again on release, which here happens
++	 * always because probe ends in -ENODEV on purpose. With the array
++	 * on the probe() stack that is reading dead memory: the kernel blew up
++	 * with a NULL deref in devm_regulator_bulk_release, got tainted, and
++	 * a while later the UFS deadlocked turning its clock off and the phone
++	 * was left with 35 processes stuck in disk wait. */
 +	supplies = devm_kcalloc(&cl->dev, ARRAY_SIZE(surya_supplies),
 +				sizeof(*supplies), GFP_KERNEL);
 +	if (!supplies)
@@ -638,19 +638,19 @@ caused nor when it was caused.
 +
 +	ret = devm_regulator_bulk_get(&cl->dev, ARRAY_SIZE(surya_supplies), supplies);
 +	if (ret)
-+		return dev_err_probe(&cl->dev, ret, "sin alimentaciones\n");
++		return dev_err_probe(&cl->dev, ret, "no supplies\n");
 +
 +	nrelojes = devm_clk_bulk_get_all(&cl->dev, &relojes);
 +	if (nrelojes < 0)
-+		return dev_err_probe(&cl->dev, nrelojes, "sin relojes\n");
++		return dev_err_probe(&cl->dev, nrelojes, "no clocks\n");
 +
-+	/* La frecuencia se pone AQUI y no con assigned-clocks en el device
-+	 * tree: aquello lo aplica el nucleo al registrar el nodo, sin driver
-+	 * de por medio, y colgaba el arranque. */
-+	/* 19,2 MHz. El device tree generico del QRD dice 24 MHz, pero el
-+	 * fichero de fabrica de ESTE modulo -powerSetting del
++	/* The frequency is set HERE and not with assigned-clocks in the device
++	 * tree: that is applied by the kernel when the node is registered, with no driver
++	 * involved, and it hung the boot. */
++	/* 19.2 MHz. The generic QRD device tree says 24 MHz, but the
++	 * factory file of THIS module -powerSetting of
 +	 * com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin- pide
-+	 * 0x0124f800 = 19200000. Manda el del modulo. */
++	 * 0x0124f800 = 19200000. The module one wins. */
 +	for (i = 0; i < (unsigned int)nrelojes; i++) {
 +		ret = clk_set_rate(relojes[i].clk, 19200000);
 +		if (ret)
@@ -659,14 +659,14 @@ caused nor when it was caused.
 +					     relojes[i].id);
 +	}
 +
-+	/* Los candidatos a reset, como salidas en reposo -activo bajo, o sea el
-+	 * sensor EN reset- para no despertar nada antes de tiempo.
++	/* The reset candidates, as outputs at rest -active low, that is the
++	 * sensor IN reset- so as not to wake anything too early.
 +	 *
-+	 * Se piden UNO A UNO y se salta el que falle. Pedirlos en bloque con
-+	 * devm_gpiod_get_array_optional() hacia que un solo pin con dueño
-+	 * abortara el barrido ENTERO con -EINVAL, y eso fue justo lo que paso:
-+	 * el gpio27 lo tiene pedido ac4b000.cci porque es su linea de i2c. Un
-+	 * instrumento de tanteo no puede caerse porque un tanteo sea malo. */
++	 * They are requested ONE BY ONE and the failing one is skipped. Requesting them as a block with
++	 * devm_gpiod_get_array_optional() made a single owned pin
++	 * abort the WHOLE sweep with -EINVAL, and that is exactly what happened:
++	 * gpio27 is requested by ac4b000.cci because it is its i2c line. A
++	 * probing instrument cannot fall over because one probe is bad. */
 +	ncand = gpiod_count(&cl->dev, "probe");
 +	if (ncand < 0)
 +		ncand = 0;
@@ -691,7 +691,7 @@ caused nor when it was caused.
 +	ret = clk_bulk_prepare_enable(nrelojes, relojes);
 +	if (ret) {
 +		regulator_bulk_disable(ARRAY_SIZE(surya_supplies), supplies);
-+		return dev_err_probe(&cl->dev, ret, "no arranca el reloj\n");
++		return dev_err_probe(&cl->dev, ret, "clock does not start\n");
 +	}
 +
 +	dev_info(&cl->dev, "alimentado, %d relojes a %lu Hz, %u gpios utiles de %d\n",
@@ -700,22 +700,22 @@ caused nor when it was caused.
 +	usleep_range(10000, 12000);
 +
 +	/*
-+	 * La secuencia de fabrica del gran angular -powerSetting del
-+	 * com.qti.sensormodule del propio movil- es:
++	 * The factory sequence of the wide-angle -powerSetting of the
++	 * com.qti.sensormodule of the phone itself- is:
 +	 *
 +	 *     STANDBY=1 -> RESET=0 -> VIO -> MCLK -> RESET=1
 +	 *
-+	 * O sea que el standby va ANTES del reset. Por eso no vale soltar el
-+	 * reset y luego ir probando pines: hay que poner el candidato y
-+	 * DESPUES pulsar el reset, que es lo que hace este bucle.
++	 * That is, standby goes BEFORE reset. That is why it is no good to release
++	 * reset and then try pins one by one: you have to set the candidate and
++	 * THEN pulse the reset, which is what this loop does.
 +	 *
-+	 * El primer gpio de la lista es el reset, ya encontrado (tlmm 24). Los
-+	 * demas son candidatos a standby.
++	 * The first gpio in the list is the reset, already found (tlmm 24). The
++	 * rest are standby candidates.
 +	 */
-+	barrer(cl, "en reset, referencia");
++	sweep(cl, "en reset, referencia");
 +
 +	pulso_reset(resets[0]);
-+	barrer(cl, "reset pulsado, sin standby");
++	sweep(cl, "reset pulsed, no standby");
 +
 +	for (i = 1; i < nresets; i++) {
 +		char etq[64];
@@ -724,7 +724,7 @@ caused nor when it was caused.
 +		usleep_range(5000, 6000);
 +		pulso_reset(resets[0]);
 +		snprintf(etq, sizeof(etq), "standby en candidato #%u", pin[i]);
-+		barrer(cl, etq);
++		sweep(cl, etq);
 +		gpiod_set_value_cansleep(resets[i], 0);
 +		gpiod_set_value_cansleep(resets[0], 0);
 +		usleep_range(5000, 6000);
@@ -737,8 +737,8 @@ caused nor when it was caused.
 +			gpiod_set_value_cansleep(resets[mantener], 1);
 +		pulso_reset(resets[0]);
 +
-+		/* Se queda enlazado, asi que hay que dejar apuntado que hay
-+		 * cosas encendidas y quien las apaga. */
++		/* It stays bound, so we have to note down that there are
++		 * things powered on and who turns them off. */
 +		e = devm_kzalloc(&cl->dev, sizeof(*e), GFP_KERNEL);
 +		if (!e) {
 +			clk_bulk_disable_unprepare(nrelojes, relojes);
@@ -751,10 +751,10 @@ caused nor when it was caused.
 +		e->reset = resets[0];
 +		e->standby = mantener ? resets[mantener] : NULL;
 +		i2c_set_clientdata(cl, e);
-+		WRITE_ONCE(sonda_cliente, cl);
++		WRITE_ONCE(probe_client, cl);
 +
 +		dev_info(&cl->dev,
-+			 "SE QUEDA DESPIERTO: reset (candidato #%u) pulsado, standby en candidato #%u, todo encendido\n",
++			 "STAYING AWAKE: reset (candidate #%u) pulsed, standby on candidate #%u, everything on\n",
 +			 pin[0], mantener ? pin[mantener] : pin[0]);
 +		return 0;
 +	}
@@ -767,26 +767,26 @@ caused nor when it was caused.
 +	return -ENODEV;
 +}
 +
-+/* Solo se llama cuando el probe se quedo enlazado, o sea en el camino de
-+ * `mantener`. Cuando el barrido termina normal el probe devuelve -ENODEV, no hay
-+ * enlace, y esto no corre: por eso no hace falta ninguna bandera. */
++/* Only called when probe stayed bound, that is on the
++ * `mantener` path. When the sweep ends normally probe returns -ENODEV, there is no
++ * bind, and this does not run: that is why no flag is needed. */
 +static void surya_cam_scan_remove(struct i2c_client *cl)
 +{
 +	struct surya_encendido *e = i2c_get_clientdata(cl);
 +
-+	/* Antes de nada, que la sonda deje de tener un cliente que se va. */
-+	WRITE_ONCE(sonda_cliente, NULL);
++	/* First of all, make the probe stop holding a client that is going away. */
++	WRITE_ONCE(probe_client, NULL);
 +
 +	if (!e)
 +		return;
 +
-+	/* El mismo orden que la secuencia de apagado de fabrica del gran angular
-+	 * (RESET=0 -> MCLK=0 -> VIO=0 -> STANDBY=0): el sensor vuelve a reset
-+	 * antes de quitarle reloj y corriente, y el standby se baja al final.
++	/* The same order as the factory power-off sequence of the wide-angle
++	 * (RESET=0 -> MCLK=0 -> VIO=0 -> STANDBY=0): the sensor goes back into reset
++	 * before clock and power are removed, and standby is driven low at the end.
 +	 *
-+	 * Bajar el standby importa aunque parezca un detalle: al liberar el
-+	 * descriptor el pin se queda como estaba, o sea accionado, y eso
-+	 * envenena la medida siguiente sin que se vea por ningun lado. */
++	 * Driving standby low matters even if it looks like a detail: when the
++	 * descriptor is released the pin stays as it was, that is asserted, and that
++	 * poisons the next measurement without showing anywhere. */
 +	gpiod_set_value_cansleep(e->reset, 0);
 +	clk_bulk_disable_unprepare(e->nrelojes, e->relojes);
 +	regulator_bulk_disable(ARRAY_SIZE(surya_supplies), e->supplies);
@@ -799,9 +799,9 @@ caused nor when it was caused.
 +	{ .compatible = "xiaomi,surya-cam-scan" },
 +	{ }
 +};
-+/* A PROPOSITO sin MODULE_DEVICE_TABLE: con ella udev genera el modalias y
-+ * carga el modulo solo en cuanto aparece el nodo, y este modulo menea GPIO
-+ * de dueño desconocido. Asi solo entra con modprobe. */
++/* ON PURPOSE without MODULE_DEVICE_TABLE: with it udev generates the modalias and
++ * loads the module by itself as soon as the node appears, and this module wiggles GPIOs
++ * of unknown ownership. This way it only comes in with modprobe. */
 +
 +static struct i2c_driver surya_cam_scan_driver = {
 +	.driver = { .name = "surya-cam-scan", .of_match_table = surya_cam_scan_of },
@@ -810,5 +810,5 @@ caused nor when it was caused.
 +};
 +module_i2c_driver(surya_cam_scan_driver);
 +
-+MODULE_DESCRIPTION("Buscador de sensores en el bus CCI del surya");
++MODULE_DESCRIPTION("Sensor scanner on the surya CCI bus");
 +MODULE_LICENSE("GPL");

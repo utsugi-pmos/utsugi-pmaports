@@ -243,27 +243,27 @@ has to be turned on by hand first with surya/camara/encender-camaras).
  &cci0_i2c0 {
 -	/* Sony IMX682 Main @ 50 */
 +	/*
-+	 * El 0x50 que decia el comentario de antes es la EEPROM de
-+	 * calibracion del modulo, no el sensor: contesta incluso con la
-+	 * camara sin alimentar. El 0x10 que dicen los drivers del mismo chip
-+	 * para MediaTek tampoco vale aqui: medido con el sensor alimentado y
-+	 * con reloj, en este movil aparece en 0x1a.
++	 * The 0x50 that the earlier comment mentioned is the module
++	 * calibration EEPROM, not the sensor: it answers even with the
++	 * camera unpowered. The 0x10 that the drivers for the same chip
++	 * on MediaTek give does not work here either: measured with the sensor powered and
++	 * clocked, on this phone it shows up at 0x1a.
 +	 */
 +	camera@1a {
 +		compatible = "sony,imx682";
 +		reg = <0x1a>;
 +
-+		/* CAM1_RST_N, segun los nombres de pin de este mismo fichero */
++		/* CAM1_RST_N, per the pin names in this same file */
 +		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
 +		pinctrl-names = "default";
 +		pinctrl-0 = <&cam_mclk1_active>;
 +
 +		/*
-+		 * 24 MHz, NO los 19,2 del Android de fabrica: las tablas de
-+		 * registros del driver estan calculadas para 24 y adaptarlas
-+		 * obligaria a recalcular el PLL del sensor. El camcc del
-+		 * SM7150 admite las dos. Si se cambia aqui, hay que cambiarlo
-+		 * tambien en el driver.
++		 * 24 MHz, NOT the 19.2 of the factory Android: the driver's
++		 * register tables are calculated for 24 and adapting them
++		 * would require recalculating the sensor PLL. The camcc of the
++		 * SM7150 supports both. If it is changed here, it has to be changed
++		 * in the driver too.
 +		 */
 +		clocks = <&camcc CAMCC_MCLK1_CLK>;
 +		clock-names = "xvclk";
@@ -277,9 +277,9 @@ has to be turned on by hand first with surya/camara/encender-camaras).
 +		port {
 +			imx682_ep: endpoint {
 +				/*
-+				 * Ojo, no es una errata: el lado del sensor
-+				 * numera los carriles desde 1 y el de CAMSS
-+				 * desde 0. Son los mismos dos cables.
++				 * Careful, this is not a typo: the sensor side
++				 * numbers the lanes from 1 and the CAMSS side
++				 * from 0. They are the same two wires.
 +				 */
 +				data-lanes = <1 2>;
 +				link-frequencies = /bits/ 64 <1020000000>;
@@ -296,14 +296,14 @@ has to be turned on by hand first with surya/camara/encender-camaras).
  
 -	/* ovti,wl2866d (cam regulator) @ 28 */
 +	/*
-+	 * Los cuatro carriles de las camaras. Al arrancar Linux este chip los
-+	 * deja APAGADOS, y por eso ningun sensor contestaba en los buses CCI.
++	 * The four camera lanes. At Linux boot this chip leaves them
++	 * OFF, and that is why no sensor answered on the CCI buses.
 +	 *
-+	 * Van marcados como siempre encendidos a proposito, y es un atajo de
-+	 * puesta en marcha, no el estado final: todavia no se sabe cual de los
-+	 * cuatro alimenta a cada uno de los cinco sensores. Encenderlos todos
-+	 * cuesta unos miliamperios y evita depurar a ciegas; cuando se sepa el
-+	 * reparto, cada sensor pedira el suyo y esto se quita.
++	 * They are marked always-on on purpose, and it is a bring-up
++	 * shortcut, not the final state: it is not known yet which of the
++	 * four powers each of the five sensors. Turning them all on
++	 * costs a few milliamps and avoids debugging blind; once the
++	 * assignment is known, each sensor will request its own and this goes away.
 +	 */
 +	wl2866d: regulator@28 {
 +		compatible = "willsemi,wl2866d";
@@ -362,35 +362,35 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 @@ -0,0 +1,894 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Sony IMX682 - camara trasera del Xiaomi POCO X3 NFC (surya).
++ * Sony IMX682 - rear camera of the Xiaomi POCO X3 NFC (surya).
 + *
-+ * DE DONDE SALE ESTE DRIVER
++ * WHERE THIS DRIVER COMES FROM
 + * -------------------------
-+ * No existe ningun imx682.c en Linux, ni parche enviado a linux-media. Las
-+ * tablas de registros salen del driver GPL de MediaTek para EL MISMO sensor y
-+ * EL MISMO proveedor de modulo (imx682sunny), que es uno de los dos que monta
-+ * este movil.
++ * There is no imx682.c in Linux, nor any patch sent to linux-media. The
++ * register tables come from the MediaTek GPL driver for THE SAME sensor and
++ * THE SAME module vendor (imx682sunny), which is one of the two fitted to
++ * this phone.
 + *
-+ * DOS DECISIONES QUE HAY QUE ENTENDER ANTES DE TOCAR NADA
++ * TWO DECISIONS TO UNDERSTAND BEFORE TOUCHING ANYTHING
 + * ------------------------------------------------------
-+ * 1. MCLK a 24 MHz, no a los 19,2 que usa el Android de fabrica. Las tablas de
-+ *    origen estan calculadas para 24 MHz, y adaptarlas obligaria a recalcular
-+ *    los multiplicadores del PLL del sensor, que es justo donde se cuela un
-+ *    error que da un sensor que arranca y no emite nada. El reloj de camara
-+ *    del SM7150 admite 24 MHz (camcc-sm7150.c), asi que no hace falta.
-+ *    Si se cambia el reloj, hay que cambiarlo TAMBIEN en el device tree
-+ *    (assigned-clock-rates) o el PLL quedara mal y no habra imagen.
++ * 1. MCLK at 24 MHz, not the 19.2 the factory Android uses. The source
++ *    tables are calculated for 24 MHz, and adapting them would require recalculating
++ *    the sensor PLL multipliers, which is exactly where an error slips in
++ *    that gives a sensor which starts and emits nothing. The camera clock
++ *    of the SM7150 supports 24 MHz (camcc-sm7150.c), so it is not needed.
++ *    If the clock is changed, it has to be changed ALSO in the device tree
++ *    (assigned-clock-rates) or the PLL will be wrong and there will be no image.
 + *
-+ * 2. D-PHY de 2 carriles. CAMSS solo admite D-PHY, y 2 carriles funciona tanto
-+ *    si la placa tiene 2 como si tiene 4, porque los carriles 0 y 1 siempre
-+ *    estan cableados. El sensor se configura para eso con 0x0111=0x02 y
-+ *    0x0114=0x01, que ya vienen en las tablas.
++ * 2. D-PHY de 2 lanes. CAMSS solo admite D-PHY, y 2 lanes funciona tanto
++ *    whether the board has 2 or 4, because lanes 0 and 1 are always
++ *    wired. The sensor is configured for that with 0x0111=0x02 and
++ *    0x0114=0x01, which already come in the tables.
 + *
-+ * LO QUE ESTE DRIVER NO HACE
++ * WHAT THIS DRIVER DOES NOT DO
 + * --------------------------
-+ * Un solo modo, 8000x6000 a unos 5 fps, sin autofoco, sin HDR y sin PDAF. Es
-+ * el unico modo que la rama D-PHY del driver de origen define. Primero que
-+ * salga una imagen; afinar viene despues.
++ * A single mode, 8000x6000 at about 5 fps, no autofocus, no HDR and no PDAF. It is
++ * the only mode the D-PHY branch of the source driver defines. First get an
++ * image out; tuning comes later.
 + */
 +
 +#include <linux/clk.h>
@@ -416,7 +416,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +#define IMX682_REG_EXPOSURE		0x0202	/* 16 bits */
 +#define IMX682_REG_ANALOG_GAIN		0x0204	/* 16 bits */
 +
-+/* Margen que Sony exige entre la exposicion y el alto del fotograma. */
++/* Margin Sony requires between the exposure and the frame height. */
 +#define IMX682_EXPOSURE_MARGIN		48
 +#define IMX682_EXPOSURE_MIN		4
 +#define IMX682_EXPOSURE_STEP		1
@@ -426,21 +426,21 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +#define IMX682_ANA_GAIN_STEP		1
 +
 +/*
-+ * Del PLL de la tabla de modo: INCK 24 MHz / IOP_PREPLLCK_DIV 4 *
-+ * IOP_PLL_MPY 340 = 2040 MHz, y en D-PHY la senal es de doble flanco, asi que
-+ * la frecuencia de enlace es la mitad.
++ * From the PLL in the mode table: INCK 24 MHz / IOP_PREPLLCK_DIV 4 *
++ * IOP_PLL_MPY 340 = 2040 MHz, and in D-PHY the signal is double edge, so
++ * the link frequency is half of that.
 + *
-+ * El multiplicador original era 416, que dan 1248 MHz y 2,5 Gbps por carril
-+ * -el maximo de D-PHY 1.2, que el fabricante aprovecha entero-. El CSIPHY del
-+ * SM7150 no llega ahi: su reloj temporizador se queda en 300 MHz y CAMSS
-+ * aborta con "Pixel clock is too high for CSIPHY". Ver el comentario de la
-+ * tabla del modo.
++ * The original multiplier was 416, which gives 1248 MHz and 2.5 Gbps per lane
++ * -the D-PHY 1.2 maximum, which the manufacturer uses in full-. The CSIPHY of the
++ * SM7150 does not get there: its timer clock tops out at 300 MHz and CAMSS
++ * aborts with "Pixel clock is too high for CSIPHY". See the comment on the
++ * mode table.
 + */
 +#define IMX682_LINK_FREQ		1020000000LL
 +#define IMX682_DATA_LANES		2
 +#define IMX682_BITS_PER_PIXEL		10
 +
-+/* pixeles por segundo que salen por el enlace, que es lo que espera V4L2 */
++/* pixels per second coming out of the link, which is what V4L2 expects */
 +#define IMX682_PIXEL_RATE \
 +	(IMX682_LINK_FREQ * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL)
 +
@@ -451,10 +451,10 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	u8 val;
 +};
 +
-+/* Ajuste global del sensor, rama D-PHY de 2 carriles.
-+ * Copiado literal del driver GPL de MediaTek para el mismo sensor y el mismo
-+ * proveedor de modulo (imx682sunny). Vale tal cual porque aqui el MCLK se
-+ * pone a 24 MHz, que es para lo que estan calculados sus multiplicadores. */
++/* Global sensor setup, 2-lane D-PHY branch.
++ * Copied verbatim from the MediaTek GPL driver for the same sensor and the same
++ * module vendor (imx682sunny). It works as is because here the MCLK is
++ * set to 24 MHz, which is what its multipliers are calculated for. */
 +static const struct imx682_reg imx682_global[] = {
 +	{ 0x0136, 0x18 },
 +	{ 0x0137, 0x00 },
@@ -628,21 +628,21 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	{ 0xB07C, 0x02 },
 +};
 +
-+/* Modo 8000x6000, RAW10, 2 carriles D-PHY.
++/* Modo 8000x6000, RAW10, 2 lanes D-PHY.
 + *
-+ * UNICO CAMBIO respecto a la tabla de origen: los dos multiplicadores del
-+ * PLL bajan de 360/416 a 294/340. El de origen deja el enlace en 1248 MHz,
-+ * o sea 2,5 Gbps por carril, y el CSIPHY del SM7150 no llega: su reloj
-+ * temporizador se queda en 300 MHz y CAMSS aborta con
-+ * "Pixel clock is too high for CSIPHY". Con 340 el enlace queda en 1020 MHz
-+ * y pasa con margen.
++ * THE ONLY CHANGE from the source table: the two multipliers of the
++ * PLL drop from 360/416 to 294/340. The source one leaves the link at 1248 MHz,
++ * that is 2.5 Gbps per lane, and the SM7150 CSIPHY does not get there: its timer
++ * clock tops out at 300 MHz and CAMSS aborts with
++ * "Pixel clock is too high for CSIPHY". With 340 the link ends up at 1020 MHz
++ * and it passes with margin.
 + *
-+ * Se bajan LOS DOS y en la misma proporcion a proposito. Bajar solo el de
-+ * salida dejaria al sensor generando pixeles mas deprisa de lo que puede
-+ * sacarlos, y eso no da un error: da imagen corrupta, que es mucho peor de
++ * BOTH are lowered and in the same proportion on purpose. Lowering only the
++ * output one would leave the sensor producing pixels faster than it can
++ * push them out, and that does not give an error: it gives a corrupt image, which is much worse to
 + * diagnosticar.
 + *
-+ * El precio son unos 4,2 fotogramas por segundo a 48 megapixeles. */
++ * The price is about 4.2 frames per second at 48 megapixels. */
 +static const struct imx682_reg imx682_8000x6000[] = {
 +	{ 0x0112, 0x0A },
 +	{ 0x0113, 0x0A },
@@ -825,7 +825,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +		ret = imx682_write(s, r[i].addr, r[i].val);
 +		if (ret) {
 +			dev_err(&s->client->dev,
-+				"fallo al escribir 0x%04x (registro %u de %u): %d\n",
++				"failed to write 0x%04x (register %u of %u): %d\n",
 +				r[i].addr, i, n, ret);
 +			return ret;
 +		}
@@ -839,8 +839,8 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	int ret;
 +
 +	/*
-+	 * Orden que pide Sony: tensiones, luego reloj, y el reset el ultimo.
-+	 * Al reves el sensor arranca sin reloj estable y se queda mudo sin dar
++	 * Order Sony requires: voltages, then clock, and the reset last.
++	 * The other way round the sensor starts without a stable clock and stays mute without giving
 +	 * ningun error.
 +	 */
 +	ret = regulator_enable(s->dovdd);
@@ -891,7 +891,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	struct imx682 *s = container_of(ctrl->handler, struct imx682, ctrls);
 +	int ret;
 +
-+	/* Sin alimentacion no hay a quien escribirle; no es un error. */
++	/* With no power there is nobody to write to; this is not an error. */
 +	if (!pm_runtime_get_if_in_use(&s->client->dev))
 +		return 0;
 +
@@ -930,8 +930,8 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +		return ret;
 +
 +	/*
-+	 * LINK_FREQ y PIXEL_RATE no son opcionales: sin ellos el CSIPHY de
-+	 * CAMSS aborta con "Cannot get CSI2 transmitter's link frequency" y
++	 * LINK_FREQ and PIXEL_RATE are not optional: without them the CSIPHY of
++	 * CAMSS aborts with "Cannot get CSI2 transmitter's link frequency" and
 +	 * no llega a configurarse nada.
 +	 */
 +	s->link_freq = v4l2_ctrl_new_int_menu(h, NULL, V4L2_CID_LINK_FREQ,
@@ -958,9 +958,9 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +				      1, m->vts_def - m->height);
 +
 +	/*
-+	 * EXPOSURE y ANALOGUE_GAIN son los que usa el revelado por software de
-+	 * libcamera para su control automatico. Sin ellos llega imagen, pero
-+	 * negra o quemada, y parece un fallo de captura cuando no lo es.
++	 * EXPOSURE and ANALOGUE_GAIN are the ones the software processing in
++	 * libcamera uses for its automatic control. Without them an image arrives, but
++	 * black or blown out, and it looks like a capture failure when it is not.
 +	 */
 +	s->exposure = v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_EXPOSURE,
 +					IMX682_EXPOSURE_MIN,
@@ -974,7 +974,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	if (h->error) {
 +		ret = h->error;
-+		dev_err(&s->client->dev, "fallo al crear los controles: %d\n", ret);
++		dev_err(&s->client->dev, "failed to create the controls: %d\n", ret);
 +		v4l2_ctrl_handler_free(h);
 +		return ret;
 +	}
@@ -1020,7 +1020,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	ret = imx682_start_streaming(s);
 +	if (ret) {
-+		dev_err(dev, "no arranca la transmision: %d\n", ret);
++		dev_err(dev, "streaming does not start: %d\n", ret);
 +		pm_runtime_put(dev);
 +	}
 +	return ret;
@@ -1074,7 +1074,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +{
 +	struct imx682 *s = to_imx682(sd);
 +
-+	/* Un solo modo: se acepta lo que pidan y se devuelve el que hay. */
++	/* A single mode: whatever is asked for is accepted and the one that exists is returned. */
 +	imx682_fill_fmt(s->mode, &fmt->format);
 +	*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
 +	return 0;
@@ -1118,7 +1118,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	if (((hi << 8) | lo) != IMX682_CHIP_ID)
 +		return dev_err_probe(&s->client->dev, -ENODEV,
-+				     "contesta, pero dice 0x%04x y no 0x%04x\n",
++				     "it answers, but says 0x%04x and not 0x%04x\n",
 +				     (hi << 8) | lo, IMX682_CHIP_ID);
 +
 +	dev_info(&s->client->dev, "IMX682 detectado (0x%04x)\n", IMX682_CHIP_ID);
@@ -1140,16 +1140,16 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	s->xvclk = devm_clk_get(dev, "xvclk");
 +	if (IS_ERR(s->xvclk))
-+		return dev_err_probe(dev, PTR_ERR(s->xvclk), "falta el reloj\n");
++		return dev_err_probe(dev, PTR_ERR(s->xvclk), "clock missing\n");
 +
 +	ret = clk_set_rate(s->xvclk, IMX682_XVCLK_HZ);
 +	if (ret)
-+		return dev_err_probe(dev, ret, "el reloj no acepta %d Hz\n",
++		return dev_err_probe(dev, ret, "the clock does not accept %d Hz\n",
 +				     IMX682_XVCLK_HZ);
 +
 +	s->reset = devm_gpiod_get(dev, "reset", GPIOD_OUT_HIGH);
 +	if (IS_ERR(s->reset))
-+		return dev_err_probe(dev, PTR_ERR(s->reset), "falta el reset\n");
++		return dev_err_probe(dev, PTR_ERR(s->reset), "reset missing\n");
 +
 +	s->dovdd = devm_regulator_get(dev, "dovdd");
 +	if (IS_ERR(s->dovdd))
@@ -1196,7 +1196,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	ret = v4l2_async_register_subdev_sensor(&s->sd);
 +	if (ret) {
-+		dev_err_probe(dev, ret, "no se registra el subdispositivo\n");
++		dev_err_probe(dev, ret, "the subdevice does not register\n");
 +		goto err_pm;
 +	}
 +
@@ -1320,32 +1320,32 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 @@ -0,0 +1,166 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
-+ * Will Semiconductor WL2866D: cuatro LDOs para las camaras.
++ * Will Semiconductor WL2866D: four LDOs for the cameras.
 + *
-+ * POR QUE HACE FALTA
++ * WHY IT IS NEEDED
 + * ------------------
-+ * Los cinco sensores del Xiaomi POCO X3 NFC (surya) cuelgan de este chip.
-+ * Linux no lo soporta, asi que sus cuatro carriles se quedan APAGADOS al
-+ * arrancar y ningun sensor contesta en los buses CCI. Esa es la razon, medida,
-+ * de que la camara "no exista" en este movil.
++ * The five sensors of the Xiaomi POCO X3 NFC (surya) hang off this chip.
++ * Linux does not support it, so its four lanes stay OFF at
++ * boot and no sensor answers on the CCI buses. That is the reason, measured,
++ * why the camera "does not exist" on this phone.
 + *
-+ * EL MAPA DE REGISTROS, Y COMO SE COMPROBO
++ * THE REGISTER MAP, AND HOW IT WAS CHECKED
 + * ----------------------------------------
-+ * No hay hoja de datos publica. El mapa se reconstruyo del driver de fabrica
-+ * del propio surya (drivers/misc/wl2866d.c de su kernel Android) y se
-+ * comprobo LEYENDO EL CHIP: al arrancar tiene 0x64 0x64 0x80 0x80 en los
-+ * cuatro registros de tension, que es exactamente lo que predicen las
-+ * formulas de abajo (1,2 V los digitales y 2,8 V los analogicos). Que los
-+ * valores de fabrica cuadren con la formula al bit es lo que convierte esto
-+ * en una lectura y no en una suposicion.
++ * There is no public datasheet. The map was reconstructed from the factory driver
++ * of surya itself (drivers/misc/wl2866d.c of its Android kernel) and it was
++ * checked BY READING THE CHIP: at boot it holds 0x64 0x64 0x80 0x80 in the
++ * four voltage registers, which is exactly what the formulas
++ * below predict (1.2 V the digital ones and 2.8 V the analog ones). That the
++ * factory values match the formula bit for bit is what turns this
++ * into a reading and not a guess.
 + *
 + *   0x03  DVDD1     microvoltios = 600000 + valor * 6000
 + *   0x04  DVDD2     idem
 + *   0x05  AVDD1     microvoltios = 1200000 + valor * 12500
 + *   0x06  AVDD2     idem
-+ *   0x0E  encendido, un bit por LDO
++ *   0x0E  enable, one bit per LDO
 + *
-+ * El Android de fabrica escribe 0x55 0x55 0x80 0x88, o sea 1,11 V digital y
++ * The factory Android writes 0x55 0x55 0x80 0x88, that is 1.11 V digital and
 + * 2,80 / 2,90 V analogico.
 + */
 +
@@ -1368,10 +1368,10 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 +enum { WL2866D_DVDD1, WL2866D_DVDD2, WL2866D_AVDD1, WL2866D_AVDD2 };
 +
 +/*
-+ * Los cuatro registros de tension son consecutivos desde 0x03, y el bit de
-+ * encendido de cada LDO es su propio indice dentro de 0x0E. Se generan con una
-+ * macro para que esa correspondencia quede escrita una sola vez: separarla en
-+ * cuatro estructuras a mano es justo donde se cuela una errata que enciende el
++ * The four voltage registers are consecutive from 0x03, and the enable
++ * bit of each LDO is its own index within 0x0E. They are generated with a
++ * macro so that correspondence is written down only once: splitting it into
++ * four hand-written structs is exactly where a typo slips in that powers the
 + * carril equivocado.
 + */
 +#define WL2866D_LDO(_id, _nombre, _min, _paso)				\
@@ -1426,22 +1426,22 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 +
 +	regmap = devm_regmap_init_i2c(client, &wl2866d_regmap);
 +	if (IS_ERR(regmap))
-+		return dev_err_probe(dev, PTR_ERR(regmap), "sin regmap\n");
++		return dev_err_probe(dev, PTR_ERR(regmap), "no regmap\n");
 +
 +	/*
-+	 * El chip no responde por I2C hasta que su pin de habilitacion esta
-+	 * alto. En surya ese pin lo lleva el PMIC (pm6150l gpio1).
++	 * The chip does not respond over I2C until its enable pin is
++	 * high. On surya that pin is driven by the PMIC (pm6150l gpio1).
 +	 */
 +	enable = devm_gpiod_get_optional(dev, "enable", GPIOD_OUT_HIGH);
 +	if (IS_ERR(enable))
-+		return dev_err_probe(dev, PTR_ERR(enable), "sin gpio de habilitacion\n");
++		return dev_err_probe(dev, PTR_ERR(enable), "no enable gpio\n");
 +
 +	/*
-+	 * Comprobacion de que hay alguien ahi, y de que es lo que creemos.
-+	 * No existe registro de identificacion, asi que se usa lo unico
-+	 * fiable: el registro de tension de DVDD1 vale 0x64 de fabrica.
-+	 * Es debil como identificacion, pero distingue "el chip no esta" de
-+	 * "el chip esta y ya lo toco alguien", que es lo que importa al
++	 * Check that somebody is there, and that it is what we think it is.
++	 * There is no ID register, so the only reliable
++	 * thing is used: the DVDD1 voltage register reads 0x64 from the factory.
++	 * It is weak as an ID, but it tells "the chip is not there" from
++	 * "the chip is there and somebody already touched it" apart, which is what matters at
 +	 * depurar.
 +	 */
 +	ret = regmap_read(regmap, WL2866D_REG_DVDD1, &val);
@@ -1460,7 +1460,7 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 +		rdev = devm_regulator_register(dev, &wl2866d_regs[i], &config);
 +		if (IS_ERR(rdev))
 +			return dev_err_probe(dev, PTR_ERR(rdev),
-+					     "no se registra %s\n",
++					     "%s does not register\n",
 +					     wl2866d_regs[i].name);
 +	}
 +

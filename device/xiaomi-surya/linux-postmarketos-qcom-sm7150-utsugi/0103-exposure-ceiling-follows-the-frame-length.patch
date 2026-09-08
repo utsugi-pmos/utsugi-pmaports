@@ -66,23 +66,23 @@ but that means relying on a chain of headers that can change.
  	int ret;
  
 +	/*
-+	 * EL TECHO DE LA EXPOSICION SIGUE A LA LONGITUD DE TRAMA
++	 * THE EXPOSURE CEILING FOLLOWS THE FRAME LENGTH
 +	 *
-+	 * La exposicion no puede pasar de la trama, o sea alto mas blanco
-+	 * vertical. El rango se fijaba solo al cambiar de modo, con el vts por
-+	 * defecto, asi que alargar la trama no servia de nada: medido, con
++	 * The exposure cannot exceed the frame, that is height plus vertical
++	 * blanking. The range was only set when changing mode, with the default
++	 * vts, so lengthening the frame did nothing: measured, with
 +	 * vertical_blanking=6000 aceptado, `exposure` se quedaba en max=1632
 +	 * -1680 de vts_def menos 48 de margen-.
 +	 *
-+	 * En penumbra eso deja la imagen en ruido del sensor, y el ruido NO se
-+	 * desenfoca porque se anade despues de la optica: el autoenfoque no
-+	 * puede converger por mucho que la lente se mueva bien.
++	 * In low light that leaves the image as sensor noise, and the noise is NOT
++	 * blurred because it is added after the optics: autofocus
++	 * cannot converge no matter how well the lens moves.
 +	 *
-+	 * Va ANTES del pm_runtime_get_if_in_use de abajo a proposito. Ese
-+	 * devuelve si el sensor esta apagado, y el rango hay que moverlo
-+	 * IGUALMENTE: quien ajusta los mandos suele hacerlo con la camara
-+	 * parada, y si el techo no se entera, la exposicion que pida despues
-+	 * se recorta en silencio contra el limite viejo.
++	 * It goes BEFORE the pm_runtime_get_if_in_use below on purpose. That one
++	 * returns if the sensor is powered off, and the range has to be moved
++	 * ANYWAY: whoever adjusts the controls usually does it with the camera
++	 * stopped, and if the ceiling does not find out, the exposure requested later
++	 * is silently clamped against the old limit.
 +	 */
 +	if (ctrl->id == V4L2_CID_VBLANK) {
 +		int techo = s->mode->height + ctrl->val - IMX682_EXPOSURE_MARGIN;
@@ -92,6 +92,6 @@ but that means relying on a chain of headers that can change.
 +					 IMX682_EXPOSURE_STEP, valor);
 +	}
 +
- 	/* Sin alimentacion no hay a quien escribirle; no es un error. */
+ 	/* With no power there is nobody to write to; this is not an error. */
  	if (!pm_runtime_get_if_in_use(&s->client->dev))
  		return 0;

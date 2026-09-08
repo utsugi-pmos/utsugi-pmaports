@@ -106,51 +106,51 @@ the ultra-wide has its own path.
      color: "black"
  
 +    // ------------------------------------------------------------------
-+    // ZOOM POR PELLIZCO, CON CRUCE AL GRAN ANGULAR POR DEBAJO DEL 1x
++    // PINCH ZOOM, WITH A CROSSOVER TO THE WIDE ANGLE BELOW 1x
 +    // ------------------------------------------------------------------
-+    // El valor se lee SIEMPRE en el centro y lo que se mueve es la regla, como
-+    // en un medidor de grados. Se maneja SOLO con pellizco: arrastrar el
++    // The value is ALWAYS read at the center and what moves is the ruler, as
++    // on a dial gauge. It is driven ONLY by pinch: dragging the
 +    // indicador no hace nada, a proposito.
 +    //
-+    // El 1x es SIEMPRE la camara principal, no "la que este puesta": si el zoom
-+    // significara una cosa distinta segun donde estes, no significaria nada.
++    // 1x is ALWAYS the main camera, not "whichever one is selected": if zoom
++    // meant a different thing depending on where you are, it would mean nothing.
 +
-+    // La camara mas ancha, identificada por su nodo del device tree.
++    // The widest camera, identified by its device tree node.
 +    //
-+    // Esto es LO UNICO especifico de este telefono, y es inevitable: libcamera
-+    // no publica distancia focal ni campo de vision. De las camaras de este
-+    // movil solo se sabe Model y Location, y hay DOS traseras. El orden de la
-+    // lista tampoco vale: cambia entre arranques.
++    // This is the ONLY thing specific to this phone, and it is unavoidable: libcamera
++    // exposes neither focal length nor field of view. Of this phone's
++    // cameras only Model and Location are known, and there are TWO rear ones. The list
++    // order is no good either: it changes between boots.
 +    readonly property string nodoGranAngular: "camera@21"
 +    readonly property string nodoPrincipal: "camera@1a"
 +
-+    // Cuanto mas ancho ve el gran angular. PROVISIONAL Y SIN MEDIR: es la
-+    // relacion de campo de vision entre las dos traseras y libcamera no la
-+    // publica. Ver camara/medir-el-factor-del-gran-angular.
++    // How much wider the wide angle sees. PROVISIONAL AND UNMEASURED: it is the
++    // field of view ratio between the two rear cameras and libcamera does not
++    // expose it. See camara/medir-el-factor-del-gran-angular.
 +    readonly property real factorGranAngular: 0.6
 +    readonly property real zoomMaximo: 8.0
 +
-+    // Margen para comparar con el 1x.
++    // Margin for comparing against 1x.
 +    //
-+    // HACE FALTA. El zoom sale de una exponencial, asi que en el 1x vale
-+    // 0,99999998 y un "< 1.0" a secas se metia en la rama del gran angular:
-+    // la camara aparecia en gran angular marcando 1,0x.
++    // IT IS NEEDED. The zoom comes from an exponential, so at 1x it is
++    // 0.99999998 and a plain "< 1.0" fell into the wide angle branch:
++    // the camera showed up as wide angle reading 1.0x.
 +    readonly property real epsilon: 0.005
 +
-+    // Los valores a los que el zoom se pega: el tope del gran angular y los
-+    // enteros. Son los que la gente busca -"ponme 2x"- y los que la regla
-+    // rotula, asi que el numero y la marca coinciden siempre.
++    // The values the zoom snaps to: the wide angle limit and the
++    // integers. They are the ones people look for -"give me 2x"- and the ones the ruler
++    // labels, so the number and the tick always match.
 +    readonly property var topes: [factorGranAngular, 1, 2, 3, 4, 5, 6, 7, 8]
 +
-+    // El iman es RELATIVO, no absoluto.
++    // The magnet is RELATIVE, not absolute.
 +    //
-+    // Un margen fijo de, digamos, 0,05 se nota bien en el 1x -es un 5%- y es
-+    // imperceptible en el 8x, donde vale un 0,6%. En relativo, pegarse cuesta
-+    // lo mismo en todo el recorrido, que es lo que hace que se sienta parejo.
++    // A fixed margin of, say, 0.05 is quite noticeable at 1x -it is 5%- and is
++    // imperceptible at 8x, where it is 0.6%. In relative terms, snapping costs
++    // the same over the whole range, which is what makes it feel even.
 +    readonly property real iman: 0.05
 +
-+    // Zona muerta: mientras se esta dentro del iman el valor se queda CLAVADO
-+    // en el tope. Sin eso el numero tiembla alrededor del 2,0 y no da la
++    // Dead zone: while inside the magnet the value stays PINNED
++    // at the stop. Without that the number wobbles around 2.0 and does not give the
 +    // sensacion de haberse enganchado a nada.
 +    function pegar(z) {
 +        for (const tope of topes) {
@@ -189,9 +189,9 @@ the ultra-wide has its own path.
 +        const destino = idDeNodo(quiereAngular ? nodoGranAngular : nodoPrincipal);
 +        if (destino !== "" && root.camera.cameraDevice !== destino) {
 +            if (root.camera.busy) {
-+                // Se reintenta cuando deje de estarlo. Sin esto, un cambio
-+                // pedido mientras la camara arranca se perdia PARA SIEMPRE, y
-+                // la app se quedaba en gran angular marcando 1,0x.
++                // It is retried when it stops being so. Without this, a change
++                // requested while the camera starts was lost FOREVER, and
++                // the app stayed on wide angle reading 1.0x.
 +                reintento.running = true;
 +            } else {
 +                root.camera.cameraDevice = destino;
@@ -215,31 +215,31 @@ the ultra-wide has its own path.
 +
 +    onZoomPedidoChanged: aplicarZoom()
 +
-+    // Y tambien al arrancar: la camara puede venir puesta en el gran angular de
-+    // una sesion anterior, y entonces no hay ningun cambio de zoom que dispare
-+    // la correccion.
++    // And also at startup: the camera may come set to the wide angle from
++    // a previous session, and then there is no zoom change to trigger
++    // the correction.
 +    Component.onCompleted: aplicarZoom()
 +
 +    Connections {
 +        target: root.camera
 +
 +        function onCameraDeviceChanged() {
-+            // Al pasar a la frontal con el boton de rotar, el zoom vuelve al 1x:
-+            // heredar un 4x sin saber por que es desconcertante.
++            // When switching to the front camera with the flip button, zoom returns to 1x:
++            // inheriting a 4x without knowing why is disconcerting.
 +            if (!root.enTrasera) {
 +                if (root.zoomPedido !== 1.0) {
 +                    root.zoomPedido = 1.0;
 +                }
 +                return;
 +            }
-+            // Y si alguien nos deja en una trasera que no corresponde al zoom
-+            // actual, se corrige. Hace falta: la aplicacion RESTAURA la camara
-+            // de la sesion anterior DESPUES de que corra Component.onCompleted,
-+            // asi que arrancaba en gran angular marcando 1,0x y la correccion
-+            // del arranque llegaba demasiado pronto para servir de algo.
++            // And if somebody leaves us on a rear camera that does not match the
++            // current zoom, it is corrected. It is needed: the application RESTORES the camera
++            // from the previous session AFTER Component.onCompleted runs,
++            // so it started on wide angle reading 1.0x and the startup
++            // correction came too early to be of any use.
 +            //
-+            // No hay bucle: aplicarZoom solo asigna cuando la camara no es ya
-+            // la que toca, asi que a la segunda vuelta no hace nada.
++            // There is no loop: aplicarZoom only assigns when the camera is not already
++            // the right one, so on the second pass it does nothing.
 +            root.aplicarZoom();
 +        }
 +    }
@@ -252,9 +252,9 @@ the ultra-wide has its own path.
  
 -    VideoOutput {
 -        id: viewfinder
-+    // El recorte va en el CONTENEDOR y el aumento en el VideoOutput: la imagen
-+    // crece hacia fuera y lo que sobra se corta, que es lo que hace un zoom
-+    // digital. Sin el clip, la imagen ampliada se saldria del visor.
++    // The clipping goes on the CONTAINER and the magnification on the VideoOutput: the image
++    // grows outwards and what sticks out is cut, which is what a digital zoom
++    // does. Without the clip, the magnified image would spill out of the viewfinder.
 +    Item {
 +        anchors.fill: parent
 +        clip: true
@@ -269,10 +269,10 @@ the ultra-wide has its own path.
 +        }
 +    }
 +
-+    // EL PELLIZCO, que es la unica forma de mover el zoom.
++    // THE PINCH, which is the only way to move the zoom.
 +    //
-+    // Sin animacion de por medio: una animacion sobre la escala hace que la
-+    // imagen persiga al dedo con retraso y da la sensacion de que se atasca.
++    // With no animation in between: an animation on the scale makes the
++    // image to chase the finger with a lag and gives the feeling that it gets stuck.
 +    PinchHandler {
 +        id: pellizco
 +
@@ -297,10 +297,10 @@ the ultra-wide has its own path.
 +    }
 +
 +    // ------------------------------------------------------------------
-+    // LA REGLA
++    // THE RULER
 +    // ------------------------------------------------------------------
-+    // Marca fija y pequena en el centro; lo que se desliza es la regla. Solo se
-+    // ve mientras se pellizca y un momento despues, para no tapar el encuadre.
++    // A small fixed tick at the center; what slides is the ruler. It is only
++    // visible while pinching and for a moment after, so as not to cover the framing.
 +    Item {
 +        id: regla
 +
@@ -325,8 +325,8 @@ the ultra-wide has its own path.
 +            function onZoomPedidoChanged() { visibleUnRato.restart(); }
 +        }
 +
-+        // Cuantos pixeles ocupa duplicar el zoom. Con esto, una pantalla cubre
-+        // algo mas de tres duplicaciones, que se recorre comodo con dos dedos.
++        // How many pixels a doubling of the zoom takes. With this, one screen covers
++        // a bit more than three doublings, which is comfortable to cover with two fingers.
 +        readonly property real pixelesPorDoble: width / 3.2
 +
 +        function posicion(z) {
@@ -347,8 +347,8 @@ the ultra-wide has its own path.
 +                width: 1
 +                height: regla.height
 +
-+                // Un tope es donde el zoom se engancha; se pinta mas marcado
-+                // para que se vea a que se va a pegar antes de soltarlo.
++                // A stop is where the zoom snaps; it is drawn more prominently
++                // so it can be seen what it will snap to before releasing.
 +                readonly property bool esEntero: root.topes.some(function (tp) {
 +                    return Math.abs(modelData - tp) < 0.001;
 +                })
@@ -376,7 +376,7 @@ the ultra-wide has its own path.
 +            }
 +        }
 +
-+        // La marca del centro: pequena, fija, y es la que manda.
++        // The center tick: small, fixed, and it is the one that rules.
 +        Rectangle {
 +            anchors.horizontalCenter: parent.horizontalCenter
 +            y: parent.height * 0.42
@@ -387,8 +387,8 @@ the ultra-wide has its own path.
 +        }
 +    }
  
-+    // El valor, encima de la marca. Este si se ve siempre: es el estado de la
-+    // camara, y no saber en que zoom estas fue una de las quejas del pellizco
++    // The value, above the tick. This one is always visible: it is the state of the
++    // camera, and not knowing what zoom you are at was one of the complaints about the pinch
 +    // anterior.
 +    QQC2.Label {
 +        anchors {
@@ -417,17 +417,17 @@ the ultra-wide has its own path.
              enabled: !root.camera.busy && root.camera.cameraDeviceIds.length > 1
  
 -            onTriggered: root.camera.switchToNextCamera();
-+            // ALTERNA TRASERA <-> FRONTAL, sin pasar por el gran angular.
++            // TOGGLES REAR <-> FRONT, without going through the wide angle.
 +            //
-+            // Antes llamaba a switchToNextCamera(), que recorre TODAS: de la
-+            // principal iba al gran angular y de ahi a la frontal. Desde que el
-+            // gran angular se alcanza con el zoom, ese recorrido rompe el boton:
-+            // la correccion del visor devuelve el gran angular a la principal en
-+            // cuanto el zoom vale 1x, asi que el boton rebotaba y no llegaba a la
-+            // frontal nunca. El usuario lo veia como un error al rotar.
++            // It used to call switchToNextCamera(), which cycles through ALL of them: from the
++            // main one it went to the wide angle and from there to the front. Since the
++            // wide angle is reached with the zoom, that cycle breaks the button:
++            // the viewfinder correction sends the wide angle back to the main one as
++            // soon as the zoom is 1x, so the button bounced back and never reached the
++            // front camera. The user saw it as a bug when flipping.
 +            //
-+            // Los nodos son los mismos que usa Viewfinder.qml, y por el mismo
-+            // motivo: libcamera no publica que camara es cual.
++            // The nodes are the same ones Viewfinder.qml uses, and for the same
++            // reason: libcamera does not expose which camera is which.
 +            onTriggered: {
 +                const frontal = "camera@10";
 +                const principal = "camera@1a";
@@ -439,7 +439,7 @@ the ultra-wide has its own path.
 +                        return;
 +                    }
 +                }
-+                // Si este telefono no es el esperado, al menos que rote algo.
++                // If this phone is not the expected one, at least let it flip something.
 +                root.camera.switchToNextCamera();
 +            }
          }

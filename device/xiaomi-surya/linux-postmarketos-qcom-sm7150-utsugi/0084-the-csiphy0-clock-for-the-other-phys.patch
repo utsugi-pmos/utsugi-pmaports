@@ -115,8 +115,8 @@ exhausting the CSID and CSIPHY register spaces.
  		.reg = { "csiphy2" },
  		.interrupt = { "csiphy2" },
 @@ -1805,15 +1807,16 @@
- 		 * que casa por nombre en rate_set- y tenia {0}, mientras los
- 		 * 384/400 MHz iban a parar a "cphy_rx_src", que no lleva tasa.
+ 		 * which matches by name in rate_set- and had {0}, while the
+ 		 * 384/400 MHz ended up on "cphy_rx_src", which carries no rate.
  		 */
  		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
 -			   "cphy_rx_src", "csiphy3", "csiphy3_timer_src",

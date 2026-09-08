@@ -33,7 +33,7 @@ a call and without rebooting.
 
 ### 2. The mapping token
 
-    /sys/module/q6core/parameters/mapeo_token    [0]
+    /sys/module/q6core/parameters/mapping_token    [0]
 
 q6asm -which maps memory on this very phone without breaking a sweat- fills in
 the token of the APR packet; we were leaving it at zero. It is the last cheap
@@ -41,7 +41,7 @@ difference that was left and it was never tried.
 
 ### 3. A trigger that tests ONLY the mapping
 
-    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/probar_mapeo
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/test_mapping
 
 It reserves 4 KiB, maps them, unmaps them and traces. Without registering
 anything afterwards.
@@ -71,19 +71,19 @@ point 3 is for.
 +++ b/sound/soc/qcom/qdsp6/q6core.c
 @@ -341,6 +341,18 @@
   * en memoria y pasarle un asa. Enviandolo en banda contesta ADSP_EBADPARAM (2),
-  * que es lo que pasaba con el parche tal cual venia de aguas arriba.
+  * which is what happened with the patch as it came from upstream.
   */
 +/*
-+ * Token de la cabecera APR al mapear memoria. q6asm -que mapea memoria en este
-+ * mismo movil sin problemas- lo rellena; nosotros lo dejabamos a cero. Es la
-+ * ultima diferencia barata que quedaba y nunca se probo.
++ * APR header token when mapping memory. q6asm -which maps memory on this
++ * same phone without trouble- fills it in; we left it at zero. It is the
++ * last cheap difference left and it was never tested.
 + *
-+ * Se declara AQUI, y no con los demas parametros, porque q6core_map_memory()
-+ * esta antes en el fichero y en C no se puede usar lo que aun no existe.
++ * It is declared HERE, and not with the other parameters, because q6core_map_memory()
++ * comes earlier in the file and in C you cannot use what does not exist yet.
 + */
-+static unsigned int mapeo_token;
-+module_param(mapeo_token, uint, 0644);
-+MODULE_PARM_DESC(mapeo_token, "token del paquete APR al mapear memoria");
++static unsigned int mapping_token;
++module_param(mapping_token, uint, 0644);
++MODULE_PARM_DESC(mapping_token, "APR packet token when mapping memory");
 +
  static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)
  {
@@ -92,61 +92,61 @@ point 3 is for.
  					   APR_HDR_LEN(APR_HDR_SIZE), APR_PKT_VER);
  	pkt->hdr.pkt_size = pkt_size;
  	pkt->hdr.opcode = AVCS_CMD_SHARED_MEM_MAP_REGIONS;
-+	pkt->hdr.token = mapeo_token;
++	pkt->hdr.token = mapping_token;
  
  	cmd->mem_pool_id = ADSP_MEMORY_MAP_SHMEM8_4K_POOL;
  	cmd->num_regions = 1;
 @@ -451,6 +464,33 @@
- MODULE_PARM_DESC(registro_por_memoria,
- 		 "0 = pegado al paquete (como el Pixel 3a), 1 = memoria compartida (PELIGRO: reinicia el movil)");
+ MODULE_PARM_DESC(register_through_memory,
+ 		 "0 = inline in the packet (like the Pixel 3a), 1 = shared memory (DANGER: reboots the phone)");
  
 +/*
-+ * COMO SE ENMARCA EL BLOQUE, ajustable para poder barrer sin recompilar.
++ * HOW THE BLOCK IS FRAMED, adjustable to be able to sweep without recompiling.
 + *
-+ * El bloque de topologias vive en la ACDB precedido de un u32 con su tamano.
-+ * El Pixel 3a salta ese u32 y manda el resto (offset 4, tamano tal cual), y es
-+ * lo que haciamos. El DSP de este movil lo rechaza con ADSP_EBADPARAM (2), y
-+ * lo rechaza IGUAL con la calibracion de surya y con la del Pixel 4a, o sea
-+ * que el contenido no es la variable: lo es el marco.
++ * The topology block lives in the ACDB preceded by a u32 with its size.
++ * The Pixel 3a skips that u32 and sends the rest (offset 4, size as-is), and that is
++ * what we did. The DSP of this phone rejects it with ADSP_EBADPARAM (2), and
++ * it rejects it THE SAME with the surya calibration and with the Pixel 4a one, that is
++ * the content is not the variable: the frame is.
 + *
-+ *   topo_offset  bytes que se saltan del principio   [4]
-+ *   topo_delta   se suma al tamano declarado         [0]
++ *   topo_offset  bytes skipped from the start        [4]
++ *   topo_delta   added to the declared size          [0]
 + *
-+ * Combinaciones que tiene sentido probar:
-+ *   4  0   como el Pixel 3a  (rechazado)
-+ *   0  4   mandar tambien el u32 de tamano, contandolo
-+ *   0  0   empezar en el u32 pero sin contarlo
-+ *   4 -4   por descarte
++ * Combinations worth testing:
++ *   4  0   like the Pixel 3a  (rejected)
++ *   0  4   also send the size u32, counting it
++ *   0  0   start at the u32 but without counting it
++ *   4 -4   by elimination
 + */
 +static int topo_offset = 4;
 +module_param(topo_offset, int, 0644);
-+MODULE_PARM_DESC(topo_offset, "bytes que se saltan del principio del bloque");
++MODULE_PARM_DESC(topo_offset, "bytes skipped from the start of the block");
 +
 +static int topo_delta;
 +module_param(topo_delta, int, 0644);
-+MODULE_PARM_DESC(topo_delta, "se suma al tamano declarado al DSP");
++MODULE_PARM_DESC(topo_delta, "added to the size declared to the DSP");
 +
 +
- /* Como lo hace el parche del Pixel 3a: el bloque va dentro del paquete. */
+ /* The way the Pixel 3a patch does it: the block goes inside the packet. */
  static int q6core_register_topologies_inband(struct device *dev, u32 size,
  					     const void *data)
 @@ -756,10 +796,21 @@
  	}
  
  	size = *(const u32 *) (fw->data + topo_off);
--	dev_info(dev, "registrando topologias: %u bytes desde %s (adsp %s)\n",
+-	dev_info(dev, "registering topologies: %u bytes from %s (adsp %s)\n",
 -		 size, fw_name,
 +
 +	/* Marco ajustable, ver topo_offset / topo_delta. */
 +	if (topo_offset < 0 || (u32)topo_offset > size ||
 +	    (int)size + topo_delta <= 0) {
-+		dev_err(dev, "marco invalido: offset %d delta %d sobre %u bytes\n",
++		dev_err(dev, "invalid frame: offset %d delta %d over %u bytes\n",
 +			topo_offset, topo_delta, size);
 +		ret = -EINVAL;
 +		goto release_fw;
 +	}
 +
-+	dev_info(dev, "registrando topologias: %u bytes desde %s (marco %+d %+d, adsp %s)\n",
++	dev_info(dev, "registering topologies: %u bytes from %s (frame %+d %+d, adsp %s)\n",
 +		 size, fw_name, topo_offset, topo_delta,
  		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
 -	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);
@@ -157,21 +157,21 @@ point 3 is for.
  
 @@ -779,6 +830,53 @@
  }
- static DEVICE_ATTR_WO(registrar_topologias);
+ static DEVICE_ATTR_WO(register_topologies);
  
 +/*
-+ * Prueba SOLO el mapeo de memoria, 4 KiB, sin registrar nada detras.
++ * Tests ONLY the memory mapping, 4 KiB, without registering anything behind it.
 + *
-+ *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/probar_mapeo
++ *     echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/test_mapping
 + *
-+ * Existe para separar dos cosas que hasta ahora iban juntas: si lo que tumba
-+ * el movil es el mapeo en si, o el comando de registro que venia despues. Sin
-+ * separarlas no se puede saber cual arreglar.
++ * It exists to separate two things that until now went together: whether what takes
++ * the phone down is the mapping itself, or the registration command that came after. Without
++ * separating them there is no way to know which one to fix.
 + *
-+ * PELIGRO: si el mapeo es lo que tumba, esto reinicia el movil. Pero reiniciar
-+ * cuesta 90 segundos y no cuesta ninguna llamada, asi que sale a cuenta.
++ * DANGER: if the mapping is what takes it down, this reboots the phone. But rebooting
++ * costs 90 seconds and costs no call, so it is worth it.
 + */
-+static ssize_t probar_mapeo_store(struct device *dev,
++static ssize_t test_mapping_store(struct device *dev,
 +				  struct device_attribute *attr,
 +				  const char *buf, size_t count)
 +{
@@ -182,7 +182,7 @@ point 3 is for.
 +
 +	rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
 +	if (rc) {
-+		dev_err(dev, "no se pudo fijar la mascara de DMA: %d\n", rc);
++		dev_err(dev, "could not set the DMA mask: %d\n", rc);
 +		return rc;
 +	}
 +
@@ -190,8 +190,8 @@ point 3 is for.
 +	if (!p)
 +		return -ENOMEM;
 +
-+	dev_info(dev, "probando SOLO el mapeo: 4 KiB en %pad, token %#x\n",
-+		 &phys, mapeo_token);
++	dev_info(dev, "testing ONLY the mapping: 4 KiB at %pad, token %#x\n",
++		 &phys, mapping_token);
 +
 +	rc = q6core_map_memory(core, phys, SZ_4K);
 +	dev_info(dev, "mapeo: rc=%d handle=%#x\n", rc, core->mem_map_handle);
@@ -204,17 +204,17 @@ point 3 is for.
 +	dma_free_coherent(dev, SZ_4K, p, phys);
 +	return count;
 +}
-+static DEVICE_ATTR_WO(probar_mapeo);
++static DEVICE_ATTR_WO(test_mapping);
 +
  static int q6core_probe(struct apr_device *adev)
  {
  	g_core = kzalloc_obj(*g_core);
 @@ -812,6 +910,9 @@
- 	if (device_create_file(&adev->dev, &dev_attr_registrar_topologias))
- 		dev_warn(&adev->dev, "sin disparador de registro en sysfs\n");
+ 	if (device_create_file(&adev->dev, &dev_attr_register_topologies))
+ 		dev_warn(&adev->dev, "no registration trigger in sysfs\n");
  
-+	if (device_create_file(&adev->dev, &dev_attr_probar_mapeo))
-+		dev_warn(&adev->dev, "sin disparador de prueba de mapeo\n");
++	if (device_create_file(&adev->dev, &dev_attr_test_mapping))
++		dev_warn(&adev->dev, "no mapping test trigger\n");
 +
  	return 0;
  }

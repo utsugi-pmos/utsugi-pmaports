@@ -45,17 +45,17 @@ Still to be checked on hardware.
  					};
 +
 +					/*
-+					 * Servicios de voz del ADSP: son los que
-+					 * llevan el audio de una llamada entre el
-+					 * modem y el codec. Sin ellos la llamada se
-+					 * establece pero no se oye nada.
++					 * ADSP voice services: they are the ones that
++					 * carry the audio of a call between the
++					 * modem and the codec. Without them the call is
++					 * established but nothing is heard.
 +					 *
-+					 * Copiados del arbol de sdm670-mainline, que
-+					 * es el SoC hermano y donde estan probados en
-+					 * hardware. Van SIN qcom,protection-domain, a
-+					 * proposito: apr.c registra en el arranque los
-+					 * servicios que no la declaran, y esa es la
-+					 * configuracion que alli funciona.
++					 * Copied from the sdm670-mainline tree, which
++					 * is the sibling SoC and where they are tested on
++					 * hardware. They go WITHOUT qcom,protection-domain, on
++					 * purpose: apr.c registers at boot the
++					 * services that do not declare it, and that is the
++					 * configuration that works there.
 +					 */
 +					q6mvm: service@9 {
 +						compatible = "qcom,q6mvm";
@@ -90,9 +90,9 @@ Still to be checked on hardware.
 +		/*
 +		 * LPASS audio macros y SoundWire.
 +		 *
-+		 * Direcciones e IRQ tomadas del device tree downstream de ESTE
-+		 * SoC. Ojo con el nombre: en el arbol de Qualcomm el SM7150 se
-+		 * llama "atoll", no sm7150 ni sm6150. El fichero bueno es
++		 * Addresses and IRQ taken from the downstream device tree of THIS
++		 * SoC. Watch out for the name: in the Qualcomm tree the SM7150 is
++		 * called "atoll", not sm7150 nor sm6150. The right file is
 +		 * arch/arm64/boot/dts/qcom/atoll-audio-overlay.dtsi:
 +		 *
 +		 *   rx-macro 0x62ee0000   swr-rx 0x62ef0000  (SPI 297)
@@ -100,11 +100,11 @@ Still to be checked on hardware.
 +		 *   wsa-macro 0x62640000  swr-wsa 0x62650000
 +		 *   va-macro 0x62f20000   (island muxsel 0x627A0000)
 +		 *
-+		 * Los bindings son los de sm8250, que comparte arquitectura APR.
++		 * The bindings are the sm8250 ones, which shares the APR architecture.
 +		 *
-+		 * NO usar las direcciones del device tree de sm6150 (0x62ec0000
-+		 * y vecinas): son de otro SoC. Que los platform_device se creen
-+		 * no valida nada, Linux los instancia con cualquier "reg".
++		 * Do NOT use the addresses from the sm6150 device tree (0x62ec0000
++		 * and neighbours): they are from another SoC. That the platform_devices get created
++		 * validates nothing, Linux instantiates them with any "reg".
 +		 */
 +		rxmacro: codec@62ee0000 {
 +			compatible = "qcom,sm8250-lpass-rx-macro";
@@ -201,26 +201,26 @@ Still to be checked on hardware.
 +			reg = <0 0x62f20000 0 0x1000>;
 +
 +			/*
-+			 * Se pide el voto "macro" (bloque 3) pero NO el "dcodec".
++			 * The "macro" vote (block 3) is requested but NOT the "dcodec" one.
 +			 *
-+			 * El AFE de este SoC solo conoce tres bloques, segun su
++			 * The AFE of this SoC only knows three blocks, according to its
 +			 * propio cabecero downstream q6afe-v2.h:
 +			 *     NONE 0, AVTIMER 2, MACRO 3
-+			 * No hay bloque 4. Mainline pide siempre macro Y dcodec
-+			 * (0x3 y 0x4) porque en el SM8250 los dos existen, y aqui
-+			 * el dcodec devuelve EBADPARAM (error 0x3) sobre el opcode
++			 * There is no block 4. Mainline always requests macro AND dcodec
++			 * (0x3 and 0x4) because on the SM8250 both exist, and here
++			 * the dcodec returns EBADPARAM (error 0x3) on the opcode
 +			 * AFE_CMD_REMOTE_LPASS_CORE_HW_VOTE_REQUEST (0x100f4).
 +			 *
-+			 * Los relojes son opcionales en el driver
-+			 * (devm_clk_bulk_get_optional), asi que omitir "dcodec"
++			 * The clocks are optional in the driver
++			 * (devm_clk_bulk_get_optional), so omitting "dcodec"
 +			 * simplemente no emite ese voto.
 +			 *
-+			 * Y el "mclk" es el del TX (0x30C), no el de VA (0x30B).
-+			 * En este SoC el macro VA no tiene reloj propio: multiplexa
-+			 * el del TX. El device tree downstream lo dice literalmente:
++			 * And the "mclk" is the TX one (0x30C), not the VA one (0x30B).
++			 * On this SoC the VA macro has no clock of its own: it multiplexes
++			 * the TX one. The downstream device tree says it literally:
 +			 *     qcom,va-clk-mux-select = <1>;
 +			 *     qcom,default-clk-id = <TX_CORE_CLK>;
-+			 * Pedir LPASS_CLK_ID_VA_CORE_MCLK hace que el AFE conteste
++			 * Asking for LPASS_CLK_ID_VA_CORE_MCLK makes the AFE answer
 +			 * EFAILED (error 0x2) en clk_prepare_enable(va->mclk).
 +			 */
 +			clocks = <&q6afecc LPASS_CLK_ID_TX_CORE_MCLK LPASS_CLK_ATTRIBUTE_COUPLE_NO>,
@@ -251,10 +251,10 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
  		pinctrl-names = "default";
  		model = "POCO X3";
  
-+		/* El codec entra como auxiliar y las rutas conectan sus ADC con el
-+		 * macro TX. Sin audio-routing, DAPM no enciende MIC BIAS ni une
-+		 * ADCn_OUTPUT con TX SWR_ADCn, y el flujo corre sin datos. */
-+		/* wcd9375 no va de aux-dev: es un DAI del enlace de captura. */
++		/* The codec comes in as an auxiliary and the routes connect its ADCs with the
++		 * TX macro. Without audio-routing, DAPM does not turn on MIC BIAS nor join
++		 * ADCn_OUTPUT with TX SWR_ADCn, and the stream runs with no data. */
++		/* wcd9375 is not an aux-dev: it is a DAI of the capture link. */
 +
 +		audio-routing =
 +			"AMIC1", "MIC BIAS1",
@@ -264,8 +264,8 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +			"TX SWR_ADC2", "ADC2_OUTPUT",
 +			"TX SWR_ADC3", "ADC3_OUTPUT",
 +
-+			/* Cascos del jack de 3,5 mm. Salen por el codec, no por
-+			 * los amplificadores tas2562: son un camino aparte. */
++			/* Headphones of the 3.5 mm jack. They come out through the codec, not through
++			 * the tas2562 amplifiers: they are a separate path. */
 +			"IN1_HPHL", "HPHL_OUT",
 +			"IN2_HPHR", "HPHR_OUT";
 +
@@ -278,12 +278,12 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
  		};
 +
 +		/*
-+		 * Reproduccion por el codec: es la unica salida de los cascos
-+		 * del jack de 3,5 mm. Sin este enlace no hay ningun camino
-+		 * hacia HPHL/HPHR y el jack no suena, que es lo que pasaba.
++		 * Playback through the codec: it is the only output of the headphones
++		 * of the 3.5 mm jack. Without this link there is no path
++		 * to HPHL/HPHR and the jack does not sound, which is what was happening.
 +		 *
-+		 * Simetrico al de captura: DAI 0 del codec es el de
-+		 * reproduccion y el 1 el de captura.
++		 * Symmetric to the capture one: DAI 0 of the codec is the playback
++		 * one and 1 the capture one.
 +		 */
 +		rx-dai-link {
 +			link-name = "WCD Playback";
@@ -324,9 +324,9 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		};
 +
 +		/*
-+		 * Audio de la llamada. El DSP hace de puente entre el modem y
-+		 * el codec, asi que este enlace no lleva ni platform ni codec:
-+		 * solo publica el DAI de voz para que q6voiced abra la sesion.
++		 * Call audio. The DSP acts as a bridge between the modem and
++		 * the codec, so this link carries neither platform nor codec:
++		 * it only publishes the voice DAI so that q6voiced opens the session.
 +		 */
 +		voicemmode1-dai-link {
 +			link-name = "VoiceMMode1";
@@ -337,7 +337,7 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		};
 +	};
 +
-+	/* El codec solo aporta MIC BIAS a los microfonos digitales. */
++	/* The codec only provides MIC BIAS to the digital microphones. */
 +	wcd9375: audio-codec {
 +		compatible = "qcom,wcd9375-codec";
 +
@@ -351,12 +351,12 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		vdd-mic-bias-supply = <&vreg_bob>;
 +
 +		/*
-+		 * 1800 mV, que es lo que pone Xiaomi para ESTE codec en
++		 * 1800 mV, which is what Xiaomi sets for THIS codec in
 +		 * atoll-audio-overlay.dtsi (qcom,cdc-micbias1-mv = <1800>),
-+		 * no 2700. Con 2,7 V el amplificador interno del microfono
-+		 * puede quedarse pegado a la alimentacion y no entregar
-+		 * senal alterna, que es justo el sintoma medido: el ADC
-+		 * convierte y su ganancia analogica escala el ruido, pero
++		 * not 2700. With 2.7 V the internal amplifier of the microphone
++		 * can stick to the supply rail and not deliver
++		 * an AC signal, which is exactly the measured symptom: the ADC
++		 * converts and its analog gain scales the noise, but
 +		 * no aparece nada acustico.
 +		 */
 +		qcom,micbias1-microvolt = <1800000>;
@@ -413,23 +413,23 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		compatible = "sdw20217010a00";
 +		reg = <0 3>;
 +		/*
-+		 * Puerto 1 del esclavo (ADC1)      -> puerto 2 del maestro
-+		 * Puerto 2 del esclavo (ADC2, ADC3) -> puerto 3 del maestro
-+		 * Puerto 3 del esclavo (DMIC0-3, MBHC) -> puerto 4
-+		 * Puerto 4 del esclavo (DMIC4-7)   -> puerto 5
++		 * Port 1 of the slave (ADC1)       -> port 2 of the master
++		 * Slave port 2 (ADC2, ADC3) -> master port 3
++		 * Slave port 3 (DMIC0-3, MBHC) -> port 4
++		 * Slave port 4 (DMIC4-7)   -> port 5
 +		 *
-+		 * Sale de atoll-audio-overlay.dtsi de Xiaomi, que es el fichero
-+		 * de ESTE SoC (el SM7150 se llama "atoll" en el arbol de
++		 * Comes from Xiaomi's atoll-audio-overlay.dtsi, which is the file
++		 * of THIS SoC (the SM7150 is called "atoll" in the tree of
 +		 * Qualcomm; sm6150 es otro):
 +		 *   qcom,swr-port-mapping = <1 PCM_OUT1 0xF>,
 +		 *       <2 ADC1 0x1>, <2 ADC2 0x2>,
 +		 *       <3 ADC3 0x1>, <3 ADC4 0x2>, ...
-+		 * y en el codec
++		 * and in the codec
 +		 *   qcom,tx_swr_ch_map = <0 ADC1 0x1 0 ADC1>,
 +		 *       <1 ADC2 0x1 0 ADC3>, <1 ADC3 0x2 0 ADC4>, ...
-+		 * o sea: ADC2 del codec viaja en el canal "ADC3" del maestro,
-+		 * que vive en el puerto 3. El <2 2 4 5> anterior lo mandaba al
-+		 * puerto 2 y colisionaba con ADC1.
++		 * that is: the codec ADC2 travels on the master's "ADC3" channel,
++		 * which lives on port 3. The previous <2 2 4 5> sent it to
++		 * port 2 and collided with ADC1.
 +		 */
 +		qcom,tx-port-mapping = <2 3 4 5>;
 +	};
@@ -441,9 +441,9 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		direction = <Q6ASM_DAI_TX>;
 +	};
 +
-+	/* MultiMedia3: frontend dedicado de captura. Es el que usa el UCM de
-+	 * la comunidad para los microfonos. MultiMedia1 es bidireccional y al
-+	 * grabar por el, q6asm intenta abrir un flujo de escritura y falla. */
++	/* MultiMedia3: dedicated capture frontend. It is the one the community
++	 * UCM uses for the microphones. MultiMedia1 is bidirectional and when
++	 * recording through it, q6asm tries to open a write stream and fails. */
 +	dai@2 {
 +		reg = <MSM_FRONTEND_DAI_MULTIMEDIA3>;
 +		direction = <Q6ASM_DAI_TX>;
@@ -464,9 +464,9 @@ diff -ruN a/drivers/pinctrl/qcom/pinctrl-sm7150-lpass-lpi.c b/drivers/pinctrl/qc
  	LPI_PINGROUP(0, 0, slimbus_clk, swr_tx_clk, _, _),
 -	LPI_PINGROUP(1, 2, swr_tx_data, audio_ref, _, _),
 +	/*
-+	 * swr_tx_data va en la funcion 3, no en la 1: el device tree
-+	 * downstream usa func3 para gpio19 (= gpio1 aqui). Con la 1 el bloque
-+	 * SoundWire no ve la linea de datos y ningun esclavo se presenta.
++	 * swr_tx_data goes on function 3, not on 1: the downstream device
++	 * tree uses func3 for gpio19 (= gpio1 here). With 1 the SoundWire
++	 * block does not see the data line and no slave enumerates.
 +	 */
 +	LPI_PINGROUP(1, 2, _, audio_ref, swr_tx_data, _),
  	LPI_PINGROUP(2, 4, slimbus_data, swr_tx_data, _, _),
@@ -474,16 +474,16 @@ diff -ruN a/drivers/pinctrl/qcom/pinctrl-sm7150-lpass-lpi.c b/drivers/pinctrl/qc
  	LPI_PINGROUP(4, 10, slimbus_data, swr_rx_data, prim_mclk_a, _),
 -	LPI_PINGROUP(5, 6, qua_mi2s_sclk, _, swr_rx_data, swr_tx_data),
 +	/*
-+	 * swr_rx_data en la funcion 1, no en la 3. gpio5 es la SEGUNDA linea de
-+	 * datos del SoundWire de reproduccion, y el device tree downstream la
-+	 * pide en func1 igual que gpio4:
++	 * swr_rx_data on function 1, not on 3. gpio5 is the SECOND data
++	 * line of the playback SoundWire, and the downstream device tree
++	 * requests it in func1 just like gpio4:
 +	 *
 +	 *   rx_swr_data_active { pins = "gpio4", "gpio5"; function = "func1"; }
 +	 *
-+	 * Con la funcion equivocada esa linea queda mal multiplexada y el bus
-+	 * colisiona ("SWR bus clsh detected"), el codec no acepta la
-+	 * configuracion de sus puertos y la reproduccion se queda en SETUP.
-+	 * Mismo tipo de error que tenia swr_tx_data en gpio1.
++	 * With the wrong function that line is mismuxed and the bus
++	 * collides ("SWR bus clsh detected"), the codec does not accept the
++	 * configuration of its ports and playback stays in SETUP.
++	 * Same kind of error swr_tx_data had on gpio1.
 +	 */
 +	LPI_PINGROUP(5, 6, swr_rx_data, _, qua_mi2s_sclk, swr_tx_data),
  	LPI_PINGROUP(6, LPI_NO_SLEW, qua_mi2s_ws, cdc_pdm_rx, _, _),
@@ -517,17 +517,17 @@ diff -ruN a/sound/soc/codecs/lpass-rx-macro.c b/sound/soc/codecs/lpass-rx-macro.
  	rx_macro_mclk_enable(rx, true);
  
 +	/*
-+	 * El bloque SoundWire necesita el pulso de reset alrededor de la
-+	 * habilitacion de su reloj, no solo en el probe. En el probe llega
-+	 * demasiado pronto: el maestro todavia no ha arrancado, y despues el
-+	 * bus da errores de comando, "read underflow" y colisiones, con lo que
-+	 * el codec no acepta la configuracion de sus puertos y la reproduccion
++	 * The SoundWire block needs the reset pulse around the
++	 * enabling of its clock, not only at probe. At probe it comes
++	 * too early: the master has not started yet, and afterwards the
++	 * bus gives command errors, "read underflow" and collisions, so that
++	 * the codec does not accept the configuration of its ports and playback
 +	 * falla en snd_soc_link_prepare().
 +	 *
-+	 * Es exactamente el mismo fallo que tenia el macro TX y que se arreglo
-+	 * en el parche 0021; alli tambien hubo que hacerlo UNA SOLA VEZ,
-+	 * porque esta funcion corre en cada arranque de flujo y resetear
-+	 * entonces tira al esclavo del bus a mitad de la preparacion.
++	 * It is exactly the same bug the TX macro had and that was fixed
++	 * in patch 0021; there too it had to be done ONLY ONCE,
++	 * because this function runs on every stream start and resetting
++	 * then drops the slave off the bus halfway through the prepare.
 +	 */
 +	if (!rx->swr_reset_done)
 +		regmap_update_bits(rx->regmap, CDC_RX_CLK_RST_CTRL_SWR_CONTROL,
@@ -561,17 +561,17 @@ diff -ruN a/sound/soc/codecs/lpass-tx-macro.c b/sound/soc/codecs/lpass-tx-macro.
  	tx_macro_mclk_enable(tx, true);
  
 +	/*
-+	 * El bloque SoundWire necesita un pulso de reset alrededor de la
-+	 * habilitacion de su reloj. Mainline solo lo da en el probe, que aqui
-+	 * llega demasiado pronto: el maestro no arranca el generador de trama
-+	 * y ningun esclavo se presenta en el bus.
++	 * The SoundWire block needs a reset pulse around the
++	 * enabling of its clock. Mainline only does it at probe, which here
++	 * comes too early: the master does not start the frame generator
++	 * and no slave enumerates on the bus.
 +	 *
-+	 * Pero el pulso tiene que darse UNA SOLA VEZ. Esta funcion se llama
-+	 * cada vez que el controlador SoundWire pide su reloj, o sea en cada
-+	 * arranque de flujo; si se resetea entonces, el esclavo se cae del bus
-+	 * en mitad de la preparacion del puerto ("Slave 1 state check1:
-+	 * UNATTACHED") y la captura sale a ceros. Downstream lleva la misma
-+	 * cuenta con tx_priv->reset_swr, que pone a false tras el primer pulso
++	 * But the pulse must be issued ONLY ONCE. This function is called
++	 * every time the SoundWire controller requests its clock, that is on every
++	 * stream start; if it is reset then, the slave falls off the bus
++	 * halfway through the port prepare ("Slave 1 state check1:
++	 * UNATTACHED") and capture comes out as zeros. Downstream keeps the same
++	 * count with tx_priv->reset_swr, which it sets to false after the first pulse
 +	 * (techpack/audio/asoc/codecs/bolero/tx-macro.c, tx_macro_swrm_clock).
 +	 */
 +	if ((tx->data->flags & LPASS_MACRO_FLAG_RESET_SWR) && !tx->swr_reset_done)
@@ -603,7 +603,7 @@ diff -ruN a/sound/soc/codecs/wcd937x.c b/sound/soc/codecs/wcd937x.c
 -		return -ETIMEDOUT;
 -	}
 +	if (!time_left)
-+		dev_warn(dev, "soundwire TX init timeout; sigo para poder diagnosticar\n");
++		dev_warn(dev, "soundwire TX init timeout; continuing so it can be diagnosed\n");
  
  	snd_soc_component_init_regmap(component, wcd937x->regmap);
  	ret = pm_runtime_resume_and_get(dev);
@@ -616,8 +616,8 @@ diff -ruN a/sound/soc/codecs/wcd937x-sdw.c b/sound/soc/codecs/wcd937x-sdw.c
  	WCD_SDW_CH(WCD937X_ADC2, WCD937X_ADC_2_3_PORT, BIT(0)),
 -	WCD_SDW_CH(WCD937X_ADC3, WCD937X_ADC_2_3_PORT, BIT(0)),
 +	/*
-+	 * ADC3 es el SEGUNDO canal de ese puerto, no el primero. Con BIT(0)
-+	 * los dos ADC piden el mismo canal y solo se puede usar uno. El arbol
++	 * ADC3 is the SECOND channel of that port, not the first. With BIT(0)
++	 * both ADCs request the same channel and only one can be used. The tree
 +	 * de Xiaomi lo dice explicitamente:
 +	 *   qcom,tx_swr_ch_map = ... <1 ADC2 0x1 0 ADC3>, <1 ADC3 0x2 0 ADC4>
 +	 */
@@ -899,9 +899,9 @@ diff -ruN a/sound/soc/qcom/qdsp6/q6cvp.c b/sound/soc/qcom/qdsp6/q6cvp.c
 +	cmd.param_data.param_size = sizeof(struct vss_param_vocproc_dev_channel_info);
 +	cmd.param_data.reserved = 0;
 +
-+	/* Mismo motivo que en q6cvp_send_media_format: en esta placa los dos
-+	 * sentidos llevan 2 canales, porque sm8250_be_hw_params_fixup() fuerza
-+	 * todos los backends a 2. */
++	/* Same reason as in q6cvp_send_media_format: on this board both
++	 * directions carry 2 channels, because sm8250_be_hw_params_fixup() forces
++	 * all backends to 2. */
 +	cmd.param_data.channel_info.num_channels = 2;
 +
 +	cmd.param_data.channel_info.bits_per_sample = 16;
@@ -934,17 +934,17 @@ diff -ruN a/sound/soc/qcom/qdsp6/q6cvp.c b/sound/soc/qcom/qdsp6/q6cvp.c
 +	cmd.param_data.media_format_info.port_id = port_id;
 +
 +	/*
-+	 * Los DOS sentidos van a 2 canales, no solo el de recepcion.
++	 * BOTH directions run at 2 channels, not just the receive one.
 +	 *
-+	 * El driver original declaraba 1 canal en transmision, que es lo que
-+	 * le corresponde en la placa del Pixel 3a. Aqui no: sm8250.c fuerza
-+	 * TODOS los backends a 2 canales en sm8250_be_hw_params_fixup(), asi
-+	 * que el puerto TX_CODEC_DMA_TX_3 lleva 2 y declararle 1 al DSP le
-+	 * hace leer la trama con el reparto equivocado.
++	 * The original driver declared 1 channel on transmit, which is what
++	 * is right on the Pixel 3a board. Not here: sm8250.c forces
++	 * ALL backends to 2 channels in sm8250_be_hw_params_fixup(), so
++	 * the TX_CODEC_DMA_TX_3 port carries 2 and declaring 1 to the DSP makes
++	 * it read the frame with the wrong layout.
 +	 *
-+	 * Encaja con lo medido en llamadas reales: la recepcion, que ya
-+	 * declaraba 2 y coincidia, SI se oye; la transmision, que declaraba 1
-+	 * y no coincidia, no llega al otro extremo.
++	 * It matches what was measured on real calls: the receive side, which
++	 * already declared 2 and matched, IS heard; the transmit side, which declared 1
++	 * and did not match, does not reach the far end.
 +	 */
 +	cmd.param_data.media_format_info.num_channels = 2;
 +
@@ -1358,7 +1358,7 @@ diff -ruN a/sound/soc/qcom/qdsp6/q6voice.c b/sound/soc/qcom/qdsp6/q6voice.c
 +	struct q6voice_session *mvm, *cvp;
 +	int ret;
 +
-+	/* DIAGNOSTICO: con que puertos y topologias se crea la sesion. */
++	/* DIAGNOSTIC: which ports and topologies the session is created with. */
 +	dev_info(dev, "start path %d: tx_port=%d (afe %#x) rx_port=%d (afe %#x) tx_topo=%u rx_topo=%u cvd_v2_3=%d\n",
 +		 p->type, p->tx_port, q6afe_get_port_id(p->tx_port),
 +		 p->rx_port, q6afe_get_port_id(p->rx_port),
@@ -1891,10 +1891,10 @@ diff -ruN a/sound/soc/qcom/qdsp6/q6voice-common.c b/sound/soc/qcom/qdsp6/q6voice
 +	}
 +
 +	/*
-+	 * DIAGNOSTICO. Registrar tambien las ordenes que SALEN BIEN, no solo
-+	 * las que fallan. Sin esto, una sesion de voz que se crea sin errores y
-+	 * no suena no deja ninguna traza y hay que adivinar a base de llamadas.
-+	 * Quitar cuando el audio de llamada este resuelto.
++	 * DIAGNOSTIC. Log the commands that SUCCEED too, not only
++	 * the ones that fail. Without this, a voice session that is created without errors and
++	 * makes no sound leaves no trace at all and has to be guessed at through calls.
++	 * Remove once call audio is solved.
 +	 */
 +	dev_info(s->dev, "cmd %#x ok (handle %#x)\n", hdr->opcode, s->handle);
 +

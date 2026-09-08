@@ -56,16 +56,16 @@ physically cannot be disconnected, and here it can.
  }
 
 +/*
-+ * camss_primer_sensor_del_csiphy - si este CSIPHY no tiene todavia ningun
++ * camss_first_sensor_of_csiphy - whether this CSIPHY does not yet have any
 + * sensor enlazado
 + *
-+ * En moviles con mas camaras que entradas CSI, dos sensores comparten CSIPHY a
-+ * traves de un conmutador MIPI. Solo el primero se deja activo; el segundo se
-+ * crea apagado y se conmuta desde el espacio de usuario. Si se dejaran los dos
-+ * activos, la validacion de la tuberia recorreria los dos y no capturaria
++ * On phones with more cameras than CSI inputs, two sensors share a CSIPHY
++ * through a MIPI switch. Only the first one is left enabled; the second one is
++ * created disabled and is switched from userspace. If both were left
++ * enabled, pipeline validation would walk both and would not capture
 + * ninguno.
 + */
-+static bool camss_primer_sensor_del_csiphy(struct media_entity *csiphy)
++static bool camss_first_sensor_of_csiphy(struct media_entity *csiphy)
 +{
 +	struct media_pad *sink = &csiphy->pads[MSM_CSIPHY_PAD_SINK];
 +	struct media_link *link;
@@ -85,14 +85,14 @@ physically cannot be disconnected, and here it can.
  		}
 
 +		/*
-+		 * NI inmutable NI activo si ya hay otro sensor en este CSIPHY.
-+		 * Un enlace inmutable no se puede apagar, y con dos sensores en
-+		 * la misma entrada eso deja las dos camaras inservibles.
++		 * NEITHER immutable NOR enabled if there is already another sensor on this CSIPHY.
++		 * An immutable link cannot be disabled, and with two sensors on
++		 * the same input that leaves both cameras unusable.
 +		 */
  		ret = media_create_pad_link(sensor, i, input,
  					    MSM_CSIPHY_PAD_SINK,
 -					    MEDIA_LNK_FL_IMMUTABLE | MEDIA_LNK_FL_ENABLED);
-+					    camss_primer_sensor_del_csiphy(input) ?
++					    camss_first_sensor_of_csiphy(input) ?
 +					    MEDIA_LNK_FL_ENABLED : 0);
  		if (ret < 0) {
  			camss_link_err(camss, sensor->name, input->name, ret);

@@ -35,8 +35,8 @@ single instrument.
 --- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.785071748 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:25:29.805631597 +0200
 @@ -49,6 +49,23 @@
-  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
-  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  * interrupts per frame this can turn into a storm, and this
+  * phone is sensitive to timing. Enable it by hand when needed.
   */
 +static unsigned int diag_pkts;
 +module_param(diag_pkts, uint, 0644);
@@ -44,7 +44,7 @@ single instrument.
 +
 +static unsigned int diag_crc;
 +module_param(diag_crc, uint, 0644);
-+MODULE_PARM_DESC(diag_crc, "Paquetes con CRC malo (contador de hardware, 0x168).");
++MODULE_PARM_DESC(diag_crc, "Packets with bad CRC (hardware counter, 0x168).");
 +
 +static unsigned int diag_pkt_hdr0;
 +module_param(diag_pkt_hdr0, uint, 0644);
@@ -53,33 +53,33 @@ single instrument.
 +
 +static unsigned int diag_bytes_rdi0;
 +module_param(diag_bytes_rdi0, uint, 0644);
-+MODULE_PARM_DESC(diag_bytes_rdi0, "Bytes contados por el RDI0 (0x3e0).");
++MODULE_PARM_DESC(diag_bytes_rdi0, "Bytes counted by RDI0 (0x3e0).");
 +
  static int cgc_en_reset = 1;
  module_param(cgc_en_reset, int, 0644);
  MODULE_PARM_DESC(cgc_en_reset,
 @@ -422,6 +439,36 @@
  				dev_info(csid->camss->dev,
- 					 "csid%d al parar: rx=0x%08x rdin%d=0x%08x\n",
+ 					 "csid%d at stop: rx=0x%08x rdin%d=0x%08x\n",
  					 csid->id, rx, i, rdi);
 +
 +				/*
-+				 * LOS CONTADORES DE HARDWARE.
++				 * THE HARDWARE COUNTERS.
 +				 *
-+				 * El mapa de registros del CSID de Qualcomm
-+				 * (cam_ife_csid170.h) declara contadores que
++				 * The Qualcomm CSID register map
++				 * (cam_ife_csid170.h) declares counters that
 +				 * mainline no lee NUNCA:
 +				 *
 +				 *   0x160  total de paquetes recibidos
 +				 *   0x168  total de errores de CRC
-+				 *   0x130  cabecera del ultimo paquete largo
++				 *   0x130  header of the last long packet
 +				 *   0x134  idem, segunda palabra
-+				 *   0x3e0  bytes contados por el RDI0
++				 *   0x3e0  bytes counted by RDI0
 +				 *
-+				 * Son un instrumento INDEPENDIENTE de los bits
-+				 * de interrupcion: si el contador de paquetes
-+				 * no es cero, es que si llegan y el fallo esta
-+				 * mas abajo. Y si es cero, lo confirma por un
++				 * They are an instrument INDEPENDENT of the
++				 * interrupt bits: if the packet counter
++				 * is not zero, then they do arrive and the failure is
++				 * further down. And if it is zero, it confirms it by a
 +				 * segundo camino.
 +				 */
 +				diag_pkts = readl_relaxed(csid->base + 0x160);

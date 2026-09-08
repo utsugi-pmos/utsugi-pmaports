@@ -33,19 +33,19 @@ Useful values:
  #define VSS_ICOMMON_CAL_NETWORK_ID_NONE			0x0001135E
  
 +/*
-+ * AJUSTABLES EN CALIENTE, para poder barrer configuraciones sin recompilar:
++ * TUNABLE AT RUNTIME, to sweep configurations without recompiling:
 + *
 + *   /sys/module/q6cvp/parameters/vocproc_mode
 + *   /sys/module/q6cvp/parameters/ec_ref_port
 + *
-+ * La sesion se creaba SIEMPRE con mezcla interna de eco y sin puerto de
-+ * referencia. Un cancelador de eco sin referencia puede comerse la voz
-+ * entera, que es justo el sintoma: se oye al otro extremo y a nosotros no.
-+ * Con esto se puede probar la otra combinacion dentro de una misma llamada.
++ * The session was ALWAYS created with internal echo mixing and without a
++ * reference port. An echo canceller without a reference can eat the whole
++ * voice, which is exactly the symptom: the far end is heard and we are not.
++ * This makes it possible to try the other combination within a single call.
 + */
 +static unsigned int vocproc_mode = VSS_IVOCPROC_VOCPROC_MODE_EC_INT_MIXING;
 +module_param(vocproc_mode, uint, 0644);
-+MODULE_PARM_DESC(vocproc_mode, "modo del vocproc (0x10F7C interno, 0x10F7D externo)");
++MODULE_PARM_DESC(vocproc_mode, "vocproc mode (0x10F7C internal, 0x10F7D external)");
 +
 +static unsigned int ec_ref_port = VSS_IVOCPROC_PORT_ID_NONE;
 +module_param(ec_ref_port, uint, 0644);

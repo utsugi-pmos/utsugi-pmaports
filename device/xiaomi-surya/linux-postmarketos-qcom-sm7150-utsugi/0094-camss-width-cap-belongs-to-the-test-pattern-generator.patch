@@ -50,25 +50,25 @@ would give garbage or zero packets, which is perfectly distinguishable.
  #define CAMSS_FRAME_MIN_WIDTH		1
 -#define CAMSS_FRAME_MAX_WIDTH		8191
 +/*
-+ * 8191 es 2^13-1, y ese limite de trece bits NO es del camino de captura: es
-+ * del GENERADOR DE PATRON del CSID, que programa el ancho en un campo de trece
++ * 8191 is 2^13-1, and that thirteen-bit limit is NOT from the capture path: it is
++ * from the CSID PATTERN GENERATOR, which programs the width in a thirteen-bit field
 + * bits y ya se enmascara solo:
 + *
 + *   camss-csid-gen2.c:  val |= (input_format->width & 0x1fff) << ...FRAME_WIDTH;
 + *
-+ * En el camino real por RDI el ancho no se le programa a nadie: el maestro de
-+ * escritura del VFE recibe WM_IMAGE_CFG_0_DEFAULT_WIDTH = 0xFFFF sin mirar el
-+ * formato. Aun asi el 8191 se copio como tope global en camss-video, csiphy,
++ * On the real path through RDI the width is not programmed anywhere: the VFE write
++ * master receives WM_IMAGE_CFG_0_DEFAULT_WIDTH = 0xFFFF without looking at the
++ * format. Even so the 8191 was copied as a global cap in camss-video, csiphy,
 + * csid y vfe, y ahi bloquea sensores perfectamente validos.
 + *
-+ * El sintoma en el surya, con el modo de 64 Mpx de la trasera:
++ * The symptom on the surya, with the 64 Mpx mode of the rear camera:
 + *
 + *   v4l2_subdev_link_validate_default: width does not match
 + *                                      (source 9248, sink 8191)
 + *   Failed to start media pipeline: -32
 + *
-+ * Se sube a 16383, que cubre de sobra los 9248 del IMX682 y deja el producto
-+ * ancho x alto lejos de desbordar los 32 bits en los calculos de tamano.
++ * It is raised to 16383, which amply covers the 9248 of the IMX682 and keeps the product
++ * width x height far from overflowing 32 bits in the size calculations.
 + */
 +#define CAMSS_FRAME_MAX_WIDTH		16383
  #define CAMSS_FRAME_MIN_HEIGHT		1

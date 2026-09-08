@@ -34,18 +34,18 @@ This moves it to the vendor's place, where D-PHY sets its 0x02.
  		usleep_range(1000, 1200);
 -		writel_relaxed(0x02, csiphy->base +
 +		/*
-+		 * El modo va AQUI, en el bloque comun, y no al final de la
-+		 * tabla de carriles. El fabricante lo tiene asi:
++		 * The mode goes HERE, in the common block, and not at the end of the
++		 * lane table. The vendor has it this way:
 +		 *
 +		 *     {0x0800, 0x03, 0x01, CSIPHY_DEFAULT_PARAMS},
 +		 *     {0x0800, 0x02, 0x00, CSIPHY_2PH_REGS},
 +		 *     {0x0800, 0x0E, 0x00, CSIPHY_3PH_REGS},
 +		 *
-+		 * y escribe TODO el bloque comun antes del while (lane_mask)
-+		 * que aplica los trios. Escribiendolo despues -que es lo que
-+		 * hacia la tabla C-PHY, con un 0x0E al final de cada trio- el
-+		 * valor final coincide pero el PHY pasa toda la configuracion
-+		 * del primer trio creyendose en D-PHY.
++		 * and writes the WHOLE common block before the while (lane_mask)
++		 * that applies the trios. Writing it afterwards -which is what
++		 * the C-PHY table did, with a 0x0E at the end of each trio- the
++		 * final value matches but the PHY goes through the whole configuration
++		 * of the first trio believing it is in D-PHY.
 +		 */
 +		writel_relaxed(cfg->cphy ? 0x0E : 0x02, csiphy->base +
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));

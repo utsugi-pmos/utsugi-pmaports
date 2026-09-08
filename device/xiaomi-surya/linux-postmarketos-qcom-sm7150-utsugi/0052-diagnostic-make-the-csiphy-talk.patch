@@ -54,7 +54,7 @@ known.
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, i));
  	}
  
-+	/* Acotado: si el enlace da ruido, esto se dispara sin parar. */
++	/* Bounded: if the link is noisy, this fires nonstop. */
 +	if (veces++ < 20)
 +		dev_info(csiphy->camss->dev,
 +			 "csiphy%d estado: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
@@ -70,30 +70,30 @@ known.
   * is not available
   */
 +/*
-+ * DIAGNOSTICO: la cuenta de asentamiento decide cuanto espera el PHY antes de
-+ * empezar a muestrear un carril. Si no cuadra con la velocidad real del
-+ * enlace, el PHY ve la señal -sus registros de estado no estan a cero- pero no
-+ * consigue sincronizar, y como las interrupciones van enmascaradas en
-+ * mainline, no se entera nadie.
++ * DIAGNOSTIC: the settle count decides how long the PHY waits before
++ * it starts sampling a lane. If it does not match the real link
++ * rate, the PHY sees the signal -its status registers are not zero- but it does not
++ * manage to synchronize, and since the interrupts are masked in
++ * mainline, nobody finds out.
 + *
-+ * La formula de mainline usa el MINIMO de la ventana T_HS_SETTLE de la norma
-+ * (85 ns + 6 UI) y luego resta 6 cuentas, con lo que a 845 MHz se queda en
-+ * unos 67 ns: por debajo de los 88 ns que pide la norma. Puede que ese margen
-+ * le valga a otros aparatos y a este no.
++ * The mainline formula uses the MINIMUM of the spec T_HS_SETTLE window
++ * (85 ns + 6 UI) and then subtracts 6 counts, so that at 845 MHz it ends up at
++ * about 67 ns: below the 88 ns the spec requires. That margin may
++ * be good enough for other devices and not for this one.
 + *
-+ * Se deja ajustable EN CALIENTE (0644) para poder barrerlo sin recompilar ni
-+ * reiniciar, que en este movil cuesta caro: se cuelga uno de cada cuatro
++ * It is left tunable AT RUNTIME (0644) so it can be swept without recompiling or
++ * reboot, which is expensive on this phone: one boot in four hangs
 + * arranques.
 + */
-+static int desenmascarar;
-+module_param(desenmascarar, int, 0644);
-+MODULE_PARM_DESC(desenmascarar,
-+	"1 = desenmascarar las interrupciones del CSIPHY. Falsea la medida: solo para saber si el PHY oye al sensor.");
++static int unmask;
++module_param(unmask, int, 0644);
++MODULE_PARM_DESC(unmask,
++	"1 = unmask the CSIPHY interrupts. It skews the measurement: only to find out whether the PHY hears the sensor.");
 +
 +static int settle_cnt_override = -1;
 +module_param(settle_cnt_override, int, 0644);
 +MODULE_PARM_DESC(settle_cnt_override,
-+	"Cuenta de asentamiento del CSIPHY. -1 = la calculada.");
++	"CSIPHY settle count. -1 = the computed one.");
 +
  static u8 csiphy_settle_cnt_calc(s64 link_freq, u32 timer_clk_rate)
  {
@@ -131,18 +131,18 @@ known.
  
 -	/* IRQ_MASK registers - disable all interrupts */
 +	/*
-+	 * Desenmascarar el PHY es CARO y falsea la medida: con el enlace sin
-+	 * enganchar dispara unas 8700 veces por segundo, y cada pasada del ISR
-+	 * hace 35 accesos a registro. Son 300.000 lecturas y escrituras por
-+	 * segundo sobre el mismo bloque que intenta sincronizar.
++	 * Unmasking the PHY is EXPENSIVE and skews the measurement: with the link
++	 * unlocked it fires about 8700 times per second, and each ISR pass
++	 * does 35 register accesses. That is 300,000 reads and writes per
++	 * second on the very block that is trying to synchronize.
 +	 *
-+	 * Asi que por defecto va como mainline, enmascarado, y solo se
-+	 * enciende cuando se quiere responder a la pregunta concreta de si el
-+	 * PHY oye al sensor -que se contesta mirando /proc/interrupts-.
++	 * So by default it behaves like mainline, masked, and it is only
++	 * is enabled when the specific question of whether the
++	 * PHY hears the sensor has to be answered -which is answered by looking at /proc/interrupts-.
 +	 */
  	for (i = 11; i < 22; i++) {
 -		writel_relaxed(0, csiphy->base +
-+		writel_relaxed(desenmascarar ? 0xff : 0, csiphy->base +
++		writel_relaxed(unmask ? 0xff : 0, csiphy->base +
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, i));
  	}
 +
@@ -174,10 +174,10 @@ known.
 -	val = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
 -	writel_relaxed(val, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
 +	/*
-+	 * DIAGNOSTICO: este registro es el que dice si al receptor CSI-2 le
-+	 * llegan paquetes y como. Mainline lo lee para limpiarlo y lo tira sin
-+	 * mirarlo, asi que un enlace que entrega basura -o que no entrega
-+	 * nada- no deja el menor rastro.
++	 * DIAGNOSTIC: this register is the one that says whether the CSI-2 receiver
++	 * gets packets and how. Mainline reads it to clear it and throws it away without
++	 * looking at it, so a link that delivers garbage -or that delivers
++	 * nothing- leaves not the slightest trace.
 +	 */
 +	rx_status = readl_relaxed(csid->base + CSID_CSI2_RX_IRQ_STATUS);
 +	writel_relaxed(rx_status, csid->base + CSID_CSI2_RX_IRQ_CLEAR);
@@ -194,7 +194,7 @@ known.
  		}
  
 +	if (veces < 25 && !csid->phy.en_vc)
-+		dev_info(csid->camss->dev, "csid%d rx=0x%08x (sin canal)\n",
++		dev_info(csid->camss->dev, "csid%d rx=0x%08x (no channel)\n",
 +			 csid->id, rx_status);
 +	veces++;
 +

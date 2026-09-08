@@ -72,15 +72,15 @@ boots cold.
 +	/*
 +	 * "NO LO SE" NO ES "VACIA".
 +	 *
-+	 * El promedio S2 lo acumula el hardware, y tras un arranque EN FRIO
-+	 * -no un reinicio, que conserva el PMIC- todavia no tiene muestras y
-+	 * lee cero. Con cero, la regla de abajo da 0 %, el espacio de usuario
-+	 * lo toma por bateria agotada y apaga el movil... que al encender
++	 * The S2 average is accumulated by the hardware, and after a COLD boot
++	 * -not a reboot, which keeps the PMIC- it has no samples yet and
++	 * reads zero. With zero, the rule below gives 0 %, userspace
++	 * takes it for a flat battery and powers the phone off... which on power-up
 +	 * vuelve a leer cero. Circulo cerrado.
 +	 *
-+	 * La ultima lectura del ADC no tiene ese problema: es instantanea y
-+	 * vale desde el primer momento. Es mas ruidosa que el promedio, y por
-+	 * eso solo se usa cuando el promedio no dice nada creible.
++	 * The last ADC reading does not have that problem: it is instantaneous and
++	 * is valid from the very first moment. It is noisier than the average, and that
++	 * is why it is only used when the average says nothing credible.
 +	 */
 +	if (voltage_now < voltage_min) {
 +		int ultimo;
@@ -105,13 +105,13 @@ boots cold.
 -		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 +		/*
 +		 * Decir siempre UNKNOWN tampoco es neutral: UPower lo combina
-+		 * con el porcentaje y, si este es bajo o cero, presenta la
-+		 * bateria como `empty` y dispara la accion de bateria critica.
++		 * with the percentage and, if it is low or zero, presents the
++		 * battery as `empty` and fires the critical battery action.
 +		 *
-+		 * La corriente ya basta para saberlo, y el driver la lee: la
-+		 * API la quiere positiva al cargar, y aqui ya viene invertida.
-+		 * El umbral de 50 mA es para no bailar entre estados con el
-+		 * ruido de la medida en reposo.
++		 * The current is already enough to know it, and the driver reads it: the
++		 * API wants it positive when charging, and here it already comes inverted.
++		 * The 50 mA threshold is to avoid bouncing between states with the
++		 * noise of the measurement at rest.
 +		 */
 +		ret = qcom_qg_get_current(chip, QG_LAST_ADC_I_DATA0_REG, &temp);
 +		if (ret)

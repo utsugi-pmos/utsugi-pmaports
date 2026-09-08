@@ -48,7 +48,7 @@ stuck together for the whole investigation.
 --- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
 @@ -227,5 +227,12 @@
- 		 * /dev/media0. O los dos, o ninguno.
+ 		 * /dev/media0. Either both, or neither.
  		 */
 +		port@0 {
 +			csiphy0_ep: endpoint {
@@ -62,12 +62,12 @@ stuck together for the whole investigation.
  				clock-lanes = <7>;
 @@ -251,6 +258,36 @@
  	 *
- 	 * Sony IMX682 Main @ 1a  (C-PHY, inutilizable con CAMSS)
+ 	 * Sony IMX682 Main @ 1a  (C-PHY, unusable with CAMSS)
  	 */
 +
 +	/*
-+	 * REACTIVADA para bisecar: hace falta un segundo sensor en otro CSIPHY
-+	 * para separar "falla nuestra camara" de "falla CAMSS en este SoC".
++	 * RE-ENABLED for bisecting: a second sensor on another CSIPHY is needed
++	 * to tell "our camera fails" from "CAMSS fails on this SoC" apart.
 +	 */
 +	camera@1a {
 +		compatible = "sony,imx682";

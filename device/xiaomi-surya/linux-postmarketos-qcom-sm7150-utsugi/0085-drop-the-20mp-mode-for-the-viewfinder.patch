@@ -56,26 +56,26 @@ to restore it when there is hardware development.
 -		},
 -	},
 +	/*
-+	 * El modo de 20 MP se queda FUERA de momento, y no porque este roto
-+	 * -funciona-, sino porque libcamera elige siempre el modo MAS GRANDE y
-+	 * con este declarado la camara de Plasma es inusable por dos motivos a
-+	 * la vez, los dos medidos en el movil:
++	 * The 20 MP mode is left OUT for now, and not because it is broken
++	 * -it works-, but because libcamera always picks the BIGGEST mode and
++	 * with this one declared the Plasma camera is unusable for two reasons at
++	 * once, both measured on the phone:
 +	 *
-+	 *   LENTITUD. El revelado de Bayer de libcamera va por CPU:
++	 *   SLOWNESS. The libcamera Bayer demosaicing runs on the CPU:
 +	 *
 +	 *       Debayer processed 30 frames in 1604557us, 53485 us/frame
 +	 *
-+	 *     53 ms por fotograma son 19 por segundo mal contados, y el visor
-+	 *     va a tirones. A 2592x1940 son cuatro veces menos pixeles.
++	 *     53 ms per frame is 19 per second at best, and the viewfinder
++	 *     stutters. At 2592x1940 there are four times fewer pixels.
 +	 *
-+	 *   OSCURIDAD. El de 5 MP sale de un agrupado 2x2, o sea cuatro veces
-+	 *     mas luz por pixel. Medido con la misma escena y la misma
-+	 *     exposicion, la mediana sobre el pedestal de negro (64) era ~6
-+	 *     veces mayor en el combinado.
++	 *   DARKNESS. The 5 MP one comes from a 2x2 binning, that is four times
++	 *     more light per pixel. Measured with the same scene and the same
++	 *     exposure, the median over the black pedestal (64) was ~6
++	 *     times higher in the binned one.
 +	 *
-+	 * O sea que el modo grande da menos imagen y cuesta cuatro veces mas.
-+	 * Se repone cuando haya revelado por hardware o alguna forma de
-+	 * sugerirle a libcamera que modo usar para el visor.
++	 * That is, the big mode gives less image and costs four times more.
++	 * It will be restored when there is hardware demosaicing or some way to
++	 * hint to libcamera which mode to use for the viewfinder.
 +	 *
 +	 *	{
 +	 *		.width = 5184,

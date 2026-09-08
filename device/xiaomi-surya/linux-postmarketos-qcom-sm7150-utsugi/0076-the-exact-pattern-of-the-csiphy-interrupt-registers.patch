@@ -18,51 +18,51 @@ vendor and it matches.
 0xff on all eleven was already tried (the PHY fires non-stop and not one piece
 of data arrives). The exact pattern is what is missing.
 
-    desenmascarar = 0   like mainline, everything zero
+    unmask = 0   like mainline, everything zero
                     1   everything 0xff
                     2   the vendor's pattern
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 13:30:18.537681089 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 13:30:18.558003605 +0200
 @@ -1065,6 +1065,10 @@
- MODULE_PARM_DESC(releer_registros,
- 	"1 = releer los registros del CSIPHY tras configurarlo y avisar de los que no cuadren.");
+ MODULE_PARM_DESC(readback_registers,
+ 	"1 = read the CSIPHY registers back after configuring it and report the ones that do not match.");
  
 +static const u8 patron_fabricante[11] = {
 +	0xFF, 0xFF, 0xFB, 0xFF, 0x7F, 0xFF, 0xFF, 0xEF, 0xFF, 0xFF, 0xFF
 +};
 +
- static int desenmascarar;
- module_param(desenmascarar, int, 0644);
- MODULE_PARM_DESC(desenmascarar,
+ static int unmask;
+ module_param(unmask, int, 0644);
+ MODULE_PARM_DESC(unmask,
 @@ -1395,8 +1399,35 @@
- 	 * enciende cuando se quiere responder a la pregunta concreta de si el
- 	 * PHY oye al sensor -que se contesta mirando /proc/interrupts-.
+ 	 * is enabled when the specific question of whether the
+ 	 * PHY hears the sensor has to be answered -which is answered by looking at /proc/interrupts-.
  	 */
 +	/*
-+	 * LOS ONCE REGISTROS QUE EL FABRICANTE NO DEJA A CERO.
++	 * THE ELEVEN REGISTERS THE VENDOR DOES NOT LEAVE AT ZERO.
 +	 *
-+	 * De csiphy_irq_reg_1_2[] del kernel Android del propio surya, en
-+	 * 0x082c..0x0854, que son justo estos CTRL11..CTRL21:
++	 * From csiphy_irq_reg_1_2[] of the Android kernel of the surya itself, at
++	 * 0x082c..0x0854, which are exactly these CTRL11..CTRL21:
 +	 *
 +	 *     FF FF FB FF 7F FF FF EF FF FF FF
 +	 *
-+	 * Mainline les escribe CERO a los once. Qualcomm los llama registros de
-+	 * interrupcion, y los valores tienen pinta de mascaras -tres de ellos
-+	 * con un bit suelto quitado-, pero es la ultima escritura del CSIPHY
-+	 * que queda sin probar, y a estas alturas conviene medir en vez de
++	 * Mainline writes ZERO to all eleven. Qualcomm calls them
++	 * interrupt registers, and the values look like masks -three of them
++	 * with a single bit removed-, but it is the last CSIPHY write
++	 * left untested, and at this point it is better to measure than to
 +	 * suponer.
 +	 *
-+	 *   desenmascarar = 0   como mainline: todo a cero
-+	 *                   1   todo a 0xff (ya probado: el PHY dispara, sin datos)
-+	 *                   2   el patron exacto del fabricante
++	 *   unmask = 0   like mainline: everything to zero
++	 *                   1   all 0xff (already tested: the PHY fires, no data)
++	 *                   2   the exact vendor pattern
 +	 */
  	for (i = 11; i < 22; i++) {
--		writel_relaxed(desenmascarar ? 0xff : 0, csiphy->base +
+-		writel_relaxed(unmask ? 0xff : 0, csiphy->base +
 +		u8 v;
 +
-+		if (desenmascarar == 2)
++		if (unmask == 2)
 +			v = patron_fabricante[i - 11];
-+		else if (desenmascarar)
++		else if (unmask)
 +			v = 0xff;
 +		else
 +			v = 0;

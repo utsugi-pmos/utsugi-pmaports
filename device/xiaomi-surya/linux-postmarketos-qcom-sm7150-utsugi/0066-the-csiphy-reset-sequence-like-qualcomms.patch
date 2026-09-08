@@ -23,19 +23,19 @@ values, checked automatically-, the common block is corrected to version 1.2
  	printk(KERN_DEBUG "csiphy_reset id %d with base %p and offset %d\n", csiphy->id, csiphy->base, regs->offset);
  
 +	/*
-+	 * El driver de Qualcomm (csiphy_reset_reg_1_2) apaga primero los tres
-+	 * registros del bloque comun y ESPERA, y solo despues pulsa el reset:
++	 * The Qualcomm driver (csiphy_reset_reg_1_2) first clears the three
++	 * common block registers and WAITS, and only then pulses the reset:
 +	 *
-+	 *     {0x0814, 0x00, espera 5 ms}   <- quitar la habilitacion de carriles
++	 *     {0x0814, 0x00, wait 5 ms}   <- clear the lane enable
 +	 *     {0x0818, 0x00}
 +	 *     {0x081C, 0x00}
 +	 *     {0x0800, 0x01, espera 1 ms}   <- pulso de reset
 +	 *     {0x0800, 0x00}
 +	 *
-+	 * Mainline solo pulsa 0x0800 y deja los otros tres como estuvieran. Es
-+	 * la ultima divergencia que queda con el flujo del fabricante: la tabla
-+	 * de carriles es copia exacta (115 de 115 entradas), el bloque comun ya
-+	 * esta corregido a la version 1.2 y los relojes tambien.
++	 * Mainline only pulses 0x0800 and leaves the other three as they were. It is
++	 * the last divergence left from the vendor flow: the lane
++	 * table is an exact copy (115 of 115 entries), the common block is
++	 * already fixed up to version 1.2 and so are the clocks.
 +	 */
 +	writel_relaxed(0x0, csiphy->base +
 +		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 5));

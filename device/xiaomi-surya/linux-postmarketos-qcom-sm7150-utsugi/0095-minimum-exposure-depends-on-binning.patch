@@ -51,20 +51,20 @@ guard, because a full disk produces data that looks good.
  	u32 crop_top;
  	u32 crop_height;
 +	/*
-+	 * Exposicion minima QUE ADMITE ESTE MODO, medida. No es la misma para
-+	 * todos: los dos modos con agrupado 4x4 dan un fotograma plano y alto
-+	 * -mediana 733 de mil veintitres- con exposicion 4 o 5, y funcionan a
-+	 * partir de 6. Los de 2x2 y el que no agrupa aceptan 4 sin problema.
++	 * Minimum exposure THIS MODE ACCEPTS, measured. It is not the same for
++	 * all of them: the two modes with 4x4 binning give a flat, bright frame
++	 * -median 733 out of one thousand and twenty-three- with exposure 4 or 5, and work from
++	 * 6 on. The 2x2 ones and the one that does not bin accept 4 with no problem.
 +	 */
 +	u32 exp_min;
- 	/* indice en imx682_link_freqs: cada modo tiene su PLL de salida */
+ 	/* index into imx682_link_freqs: each mode has its own output PLL */
  	u8 link_freq_idx;
  	const struct imx682_reg *regs;
 @@ -752,6 +759,7 @@
  		.vts_min = 1680,
  		.crop_top = 864,
  		.crop_height = 5216,	/* agrupado 4x4 -> 1304 */
-+		.exp_min = 6,		/* medido: con 4 o 5 sale plano */
++		.exp_min = 6,		/* measured: with 4 or 5 it comes out flat */
  		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
  		.regs = imx682_2312x1304,
  		.num_regs = ARRAY_SIZE(imx682_2312x1304),
@@ -72,7 +72,7 @@ guard, because a full disk produces data that looks good.
  		.vts_min = 1148,
  		.crop_top = 1312,
  		.crop_height = 4320,	/* agrupado 4x4 -> 1080 */
-+		.exp_min = 6,		/* medido: con 4 o 5 sale plano */
++		.exp_min = 6,		/* measured: with 4 or 5 it comes out flat */
  		.link_freq_idx = 3,	/* 520 MHz, PLL x325 */
  		.regs = imx682_1920x1080,
  		.num_regs = ARRAY_SIZE(imx682_1920x1080),
@@ -95,13 +95,13 @@ guard, because a full disk produces data that looks good.
 @@ -796,6 +807,7 @@
  		.vts_min = 7030,
  		.crop_top = 0,
- 		.crop_height = 6944,	/* sin agrupar, los 64 Mpx */
+ 		.crop_height = 6944,	/* unbinned, the full 64 Mpx */
 +		.exp_min = 4,
  		.link_freq_idx = 0,	/* 379,2 MHz, PLL x237 */
  		.regs = imx682_9248x6944,
  		.num_regs = ARRAY_SIZE(imx682_9248x6944),
 @@ -1097,7 +1109,7 @@
- 	 * negra o quemada, y parece un fallo de captura cuando no lo es.
+ 	 * black or blown out, and it looks like a capture failure when it is not.
  	 */
  	s->exposure = v4l2_ctrl_new_std(h, &imx682_ctrl_ops, V4L2_CID_EXPOSURE,
 -					IMX682_EXPOSURE_MIN,

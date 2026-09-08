@@ -67,13 +67,13 @@ camera uses it.
  			reg = <0x0 0x00ff1000 0x0 0x60>;
 +
 +			/*
-+			 * El CSIPHY v1.2 necesita esta referencia para resolver
-+			 * la senalizacion diferencial de alta velocidad. En
-+			 * mainline solo lo referencian los DSI, y se quedaba
-+			 * apagado: cuenta de uso 0, 0 mV. Sin el, el PHY ve las
-+			 * transiciones de baja potencia -que son de rail a
-+			 * rail- pero no engancha un solo sincronismo, y al CSID
-+			 * no le llega absolutamente nada.
++			 * The CSIPHY v1.2 needs this reference to resolve
++			 * the high-speed differential signalling. In
++			 * mainline only the DSIs reference it, and it stayed
++			 * off: use count 0, 0 mV. Without it, the PHY sees the
++			 * low-power transitions -which are rail to
++			 * rail- but does not lock a single sync, and nothing at all
++			 * reaches the CSID.
 +			 */
 +			regulator-always-on;
  		};

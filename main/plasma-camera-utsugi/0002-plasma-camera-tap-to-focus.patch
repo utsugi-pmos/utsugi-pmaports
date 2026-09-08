@@ -120,9 +120,9 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
  
      required property PlasmaCamera camera
 +
-+    // El autoenfoque, que vive en el gestor porque es donde pasan los
-+    // fotogramas. Puede ser nulo: si el servicio del motor no esta instalado,
-+    // el toque no hace nada en vez de romper.
++    // The autofocus, which lives in the manager because that is where the
++    // frames go through. It can be null: if the actuator service is not installed,
++    // the tap does nothing instead of breaking.
 +    property var enfocador: null
      property real bottomMargin: 0
  
@@ -131,20 +131,20 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
          }
      }
  
-+    // TOCAR PARA ENFOCAR
++    // TAP TO FOCUS
 +    // -------------------
-+    // Convive con el pellizco sin pelearse: un toque suelto no es un pellizco,
-+    // y Qt los distingue solo.
++    // It coexists with pinch without fighting it: a single tap is not a pinch,
++    // and Qt tells them apart on its own.
 +    TapHandler {
 +        enabled: root.camera.available && root.enfocador && root.enfocador.disponible
 +
 +        onTapped: (evento) => {
-+            // El punto hay que llevarlo a coordenadas de la IMAGEN, no de la
-+            // pantalla, y con el zoom puesto no es lo mismo: el visor esta
-+            // ampliado desde el centro, asi que solo se ve la parte central y
-+            // un toque en el borde cae mucho mas adentro de lo que parece. Sin
-+            // esto, con zoom la camara enfocaria en un sitio distinto del que
-+            // se toca, y desde fuera pareceria que el enfoque falla.
++            // The point has to be mapped to IMAGE coordinates, not to
++            // screen ones, and with zoom applied it is not the same: the viewfinder is
++            // magnified from the center, so only the central part is visible and
++            // a tap at the edge lands much further in than it seems. Without
++            // this, with zoom the camera would focus somewhere other than where
++            // it is tapped, and from outside it would look like focus is broken.
 +            const s = Math.max(0.0001, viewfinder.scale);
 +            const u = 0.5 + ((evento.position.x / root.width) - 0.5) / s;
 +            const v = 0.5 + ((evento.position.y / root.height) - 0.5) / s;
@@ -157,10 +157,10 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +        }
 +    }
 +
-+    // La mirilla: cuadrado blanco mientras busca, verde si lo logro y rojo si
-+    // no. Decir que NO se ha enfocado importa tanto como decir que si: sobre
-+    // una escena sin bordes la busqueda no puede converger, y callarlo dejaria
-+    // al usuario esperando algo que no va a pasar.
++    // The reticle: white square while searching, green if it succeeded and red if
++    // not. Saying that focus was NOT achieved matters as much as saying it was: on
++    // a scene with no edges the search cannot converge, and keeping quiet would leave
++    // the user waiting for something that is not going to happen.
 +    Rectangle {
 +        id: marca
 +
@@ -184,17 +184,17 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +
 +        Timer {
 +            id: relojDeLaMarca
-+            // Se queda un rato despues de terminar para que de tiempo a ver el
-+            // color del resultado, no solo la busqueda.
++            // It stays for a while after finishing so there is time to see the
++            // color of the result, not just the search.
 +            interval: 2500
 +            onTriggered: if (!root.enfocador || !root.enfocador.enfocando) marca.visible = false;
 +                         else restart()
 +        }
 +    }
 +
-     // EL PELLIZCO, que es la unica forma de mover el zoom.
+     // THE PINCH, which is the only way to move the zoom.
      //
-     // Sin animacion de por medio: una animacion sobre la escala hace que la
+     // With no animation in between: an animation on the scale makes the
 diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 --- a/src/plasmacamera/enfocador.cpp
 +++ b/src/plasmacamera/enfocador.cpp
@@ -214,46 +214,46 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +
 +namespace
 +{
-+// La tuberia del servicio `enfoque-surya`, que es quien mantiene el nodo del
-+// motor abierto. Sin el, la lente vuelve al origen en cuanto nadie lo sujeta.
++// The pipe of the `enfoque-surya` service, which is what keeps the actuator
++// node open. Without it, the lens returns to origin as soon as nobody holds it.
 +constexpr const char *kTuberia = "/run/enfoque-surya";
 +
-+constexpr int kMinimo = 0;
-+constexpr int kMaximo = 1023;
++constexpr int kMin = 0;
++constexpr int kMax = 1023;
 +
-+//! Etapas de la busqueda: cinco posiciones cada una, afinando alrededor.
-+constexpr int kPuntosPorEtapa = 5;
++//! Search stages: five positions each, refining around the best.
++constexpr int kPointsPerStage = 5;
 +constexpr int kEtapas = 3;
 +
 +/*!
-+ * Cuanto de la imagen se mira alrededor del punto tocado, en tanto por uno.
-+ * Un quinto del lado: bastante para tener bordes que medir, y bastante poco
-+ * para que enfocar "ahi" signifique algo.
++ * How much of the image is looked at around the tapped point, as a fraction of one.
++ * A fifth of the side: enough to have edges to measure, and little enough
++ * for focusing "there" to mean something.
 + */
 +constexpr qreal kLadoRecorte = 0.2;
 +
-+//! Por debajo de esto, la colina es ruido y no se toca la lente.
++//! Below this, the hill is noise and the lens is not touched.
 +constexpr double kRelacionMinima = 1.25;
 +}
 +
 +Enfocador::Enfocador(QObject *parent)
 +    : QObject(parent)
 +{
-+    // El servicio puede no estar instalado. Se comprueba una vez y se dice, en
-+    // vez de fallar en silencio cada vez que alguien toque la pantalla.
++    // The service may not be installed. It is checked once and reported, instead
++    // of failing silently every time somebody taps the screen.
 +    m_disponible = QFile::exists(QString::fromLatin1(kTuberia));
 +    if (!m_disponible) {
-+        qWarning() << "enfoque: no hay servicio en" << kTuberia
-+                   << "- el toque para enfocar no hara nada";
++        qWarning() << "focus: no service at" << kTuberia
++                   << "- tap to focus will do nothing";
 +    }
 +}
 +
 +bool Enfocador::pedirPosicion(int posicion)
 +{
-+    // O_NONBLOCK a proposito: abrir una tuberia para escribir BLOQUEA hasta
-+    // que haya alguien leyendo, y aqui se esta en el hilo de la interfaz. Si
-+    // el servicio no esta, esto falla con ENXIO al instante en vez de colgar
-+    // la aplicacion entera, que es exactamente lo que no puede pasar.
++    // O_NONBLOCK on purpose: opening a pipe for writing BLOCKS until
++    // there is somebody reading, and here we are on the UI thread. If
++    // the service is not there, this fails with ENXIO instantly instead of hanging
++    // the whole application, which is exactly what must not happen.
 +    const int fd = ::open(kTuberia, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
 +    if (fd < 0) {
 +        return false;
@@ -266,7 +266,7 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +
 +void Enfocador::moverA(int posicion)
 +{
-+    posicion = qBound(kMinimo, posicion, kMaximo);
++    posicion = qBound(kMin, posicion, kMax);
 +    if (pedirPosicion(posicion)) {
 +        setPosicion(posicion);
 +    }
@@ -280,16 +280,16 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    m_punto = QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0));
 +    Q_EMIT puntoChanged();
 +
-+    // Se empieza de cero aunque hubiera una busqueda en marcha: el usuario
-+    // acaba de decir donde quiere mirar, y las medidas de antes son de otro
-+    // sitio de la imagen.
++    // It starts from scratch even if a search was in progress: the user
++    // has just said where they want to look, and the earlier measurements are from another
++    // place in the image.
 +    m_medidas.clear();
 +    m_pendientes.clear();
 +    m_etapa = 0;
 +    setLogrado(false);
 +
-+    for (int i = 0; i < kPuntosPorEtapa; ++i) {
-+        m_pendientes.append(kMinimo + (kMaximo - kMinimo) * i / (kPuntosPorEtapa - 1));
++    for (int i = 0; i < kPointsPerStage; ++i) {
++        m_pendientes.append(kMin + (kMax - kMin) * i / (kPointsPerStage - 1));
 +    }
 +    ordenarDesdeDondeEsta();
 +    setEnfocando(true);
@@ -298,19 +298,19 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +
 +void Enfocador::ordenarDesdeDondeEsta()
 +{
-+    // RECORRER CADA ETAPA EN LA DIRECCION QUE EMPIECE MAS CERCA
++    // WALK EACH STAGE IN THE DIRECTION THAT STARTS CLOSER
 +    //
-+    // Un VCM es una bobina empujando la lente contra un muelle: cada salto
-+    // largo se OYE. Y la primera version pedia el recorrido en orden creciente
-+    // siempre, sin mirar donde habia quedado la lente, asi que entre etapa y
-+    // etapa hacia un viaje largo para nada:
++    // A VCM is a coil pushing the lens against a spring: every long
++    // jump is AUDIBLE. And the first version asked for the sweep in increasing order
++    // always, without looking at where the lens had been left, so between one stage
++    // and the next it made a long trip for nothing:
 +    //
-+    //     gruesa:  0 -> 256 -> 512 -> 767 -> 1023   (acaba arriba del todo)
++    //     coarse:  0 -> 256 -> 512 -> 767 -> 1023   (ends all the way up)
 +    //     fina:    1023 -> 256 -> ...               (767 de vuelta, inutil)
 +    //
-+    // Recorriendo cada etapa hacia el lado que empieza mas cerca, ese viaje
-+    // desaparece. Se miden las mismas posiciones y sale el mismo resultado:
-+    // solo cambia el orden, y con el, el ruido y el tiempo.
++    // Walking each stage towards the side that starts closer, that trip
++    // disappears. The same positions are measured and the same result comes out:
++    // only the order changes, and with it, the noise and the time.
 +    if (m_pendientes.size() < 2 || m_posicion < 0) {
 +        return;
 +    }
@@ -329,9 +329,9 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    }
 +    const int siguiente = m_pendientes.takeFirst();
 +    if (!pedirPosicion(siguiente)) {
-+        // El servicio se ha caido a mitad. Mejor rendirse que seguir midiendo
-+        // una lente que ya no se mueve y dar un resultado con buena pinta.
-+        qWarning() << "enfoque: la tuberia dejo de aceptar; se abandona";
++        // The service died halfway. Better to give up than to keep measuring
++        // a lens that no longer moves and give a result that looks good.
++        qWarning() << "focus: the pipe stopped accepting; giving up";
 +        setEnfocando(false);
 +        return;
 +    }
@@ -356,29 +356,29 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +        return;
 +    }
 +
-+    // Etapa terminada. Si queda alguna, se afina alrededor de la mejor con un
-+    // tramo del ancho de UN PASO de esta etapa a cada lado: menos se arriesga
-+    // a dejar fuera el maximo cuando la mejor cayo en el borde de la colina,
++    // Stage finished. If any is left, it refines around the best with a
++    // span the width of ONE STEP of this stage on each side: less risk of
++    // leaving the maximum out when the best fell on the edge of the hill,
 +    // y mas no afina nada.
 +    ++m_etapa;
 +    if (m_etapa < kEtapas) {
-+        int mejor = m_medidas.first().first;
++        int best = m_medidas.first().first;
 +        double valor = m_medidas.first().second;
-+        int menor = mejor, mayor = mejor;
++        int menor = best, mayor = best;
 +        for (const auto &m : std::as_const(m_medidas)) {
 +            if (m.second > valor) {
 +                valor = m.second;
-+                mejor = m.first;
++                best = m.first;
 +            }
 +            menor = qMin(menor, m.first);
 +            mayor = qMax(mayor, m.first);
 +        }
-+        const int paso = qMax(1, (mayor - menor) / (kPuntosPorEtapa - 1));
-+        const int desde = qBound(kMinimo, mejor - paso, kMaximo);
-+        const int hasta = qBound(kMinimo, mejor + paso, kMaximo);
-+        for (int i = 0; i < kPuntosPorEtapa; ++i) {
-+            const int p = desde + (hasta - desde) * i / (kPuntosPorEtapa - 1);
-+            // Repetir una posicion ya medida no anade nada y cuesta fotogramas.
++        const int step = qMax(1, (mayor - menor) / (kPointsPerStage - 1));
++        const int from = qBound(kMin, best - step, kMax);
++        const int to = qBound(kMin, best + step, kMax);
++        for (int i = 0; i < kPointsPerStage; ++i) {
++            const int p = from + (to - from) * i / (kPointsPerStage - 1);
++            // Repeating an already measured position adds nothing and costs frames.
 +            bool repetida = false;
 +            for (const auto &m : std::as_const(m_medidas)) {
 +                if (m.first == p) {
@@ -401,37 +401,37 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +
 +void Enfocador::terminar()
 +{
-+    int mejor = m_posicion;
-+    double alto = 0.0;
++    int best = m_posicion;
++    double height = 0.0;
 +    double bajo = 0.0;
 +    bool primero = true;
 +    for (const auto &m : std::as_const(m_medidas)) {
 +        if (primero) {
-+            alto = bajo = m.second;
-+            mejor = m.first;
++            height = bajo = m.second;
++            best = m.first;
 +            primero = false;
 +            continue;
 +        }
-+        if (m.second > alto) {
-+            alto = m.second;
-+            mejor = m.first;
++        if (m.second > height) {
++            height = m.second;
++            best = m.first;
 +        }
 +        bajo = qMin(bajo, m.second);
 +    }
 +
-+    // SI LA COLINA ES PLANA, NO SE TOCA LA LENTE.
++    // IF THE HILL IS FLAT, THE LENS IS NOT TOUCHED.
 +    //
-+    // Una escena sin bordes -o demasiado oscura, donde lo que se mide es ruido
-+    // del sensor, que NO se desenfoca porque se anade despues de la optica- da
-+    // un maximo cualquiera con toda la pinta de ser bueno. Ya paso: una
-+    // busqueda entera convergio a 972 sin un solo error, con la camara mirando
-+    // a la nada. Mejor dejar el enfoque donde estaba y decir que no se logro.
-+    const double relacion = bajo > 0.0 ? alto / bajo : 0.0;
++    // A scene with no edges -or too dark, where what is measured is sensor
++    // noise, which does NOT go out of focus because it is added after the optics- gives
++    // some arbitrary maximum that looks perfectly good. It already happened: a
++    // whole search converged to 972 without a single error, with the camera looking
++    // at nothing. Better to leave focus where it was and report that it failed.
++    const double relacion = bajo > 0.0 ? height / bajo : 0.0;
 +    const bool bien = m_medidas.size() >= 3 && relacion >= kRelacionMinima;
 +
 +    if (bien) {
-+        pedirPosicion(mejor);
-+        setPosicion(mejor);
++        pedirPosicion(best);
++        setPosicion(best);
 +    }
 +    setLogrado(bien);
 +    setEnfocando(false);
@@ -448,9 +448,9 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    const qreal v = m_punto.y();
 +    switch (m_giro) {
 +    case 90:
-+        // La imagen se muestra girada un cuarto en el sentido del reloj, o sea
-+        // que la esquina de abajo a la izquierda del sensor acaba arriba a la
-+        // izquierda de la pantalla. Deshacerlo es esto:
++        // The image is displayed rotated a quarter turn clockwise, that is
++        // the bottom left corner of the sensor ends up at the top
++        // left of the screen. Undoing it is this:
 +        return {v, 1.0 - u};
 +    case 180:
 +        return {1.0 - u, 1.0 - v};
@@ -473,8 +473,8 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +        return 0.0;
 +    }
 +
-+    // Se recorre por filas con qGray, que es suficiente y no obliga a convertir
-+    // la imagen entera -esto corre en cada fotograma de la vista previa-.
++    // It walks row by row with qGray, which is enough and does not force converting
++    // the whole image -this runs on every preview frame-.
 +    double suma = 0.0;
 +    double suma2 = 0.0;
 +    double nivel = 0.0;
@@ -536,34 +536,34 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 @@ -0,0 +1,166 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
-+// Autoenfoque por contraste para el POCO X3 NFC (surya).
++// Contrast autofocus for the POCO X3 NFC (surya).
 +//
-+// POR QUE AQUI Y NO EN LIBCAMERA
++// WHY HERE AND NOT IN LIBCAMERA
 +// ------------------------------
-+// Porque el manejador de tuberia simple de libcamera no publica ni AfMode ni
-+// LensPosition para este sensor, y porque el actuador de este movil tiene dos
-+// restricciones que ningun autoenfoque generico contempla:
++// Because libcamera's simple pipeline handler exposes neither AfMode nor
++// LensPosition for this sensor, and because this phone's actuator has two
++// constraints that no generic autofocus accounts for:
 +//
-+//   - solo acepta ordenes MIENTRAS EL SENSOR TRANSMITE, porque el bus CCI vive
-+//     con el sensor;
-+//   - y al cerrar su nodo, el driver devuelve la lente al origen y apaga el
++//   - it only accepts commands WHILE THE SENSOR IS STREAMING, because the CCI bus lives
++//     with the sensor;
++//   - and on closing its node, the driver returns the lens to origin and powers off the
 +//     chip.
 +//
-+// La segunda la resuelve el servicio `enfoque-surya`, que mantiene el nodo
-+// abierto y acepta posiciones por una tuberia. La primera deja de ser un
-+// problema justo aqui: la vista previa YA esta transmitiendo cuando el usuario
-+// toca la pantalla. Que es, mirandolo bien, como funciona cualquier
++// The second one is solved by the `enfoque-surya` service, which keeps the node
++// open and accepts positions over a pipe. The first one stops being a
++// problem right here: the preview is ALREADY streaming when the user
++// taps the screen. Which is, looking at it properly, how any
 +// autoenfoque de verdad.
 +//
-+// EL METODO
++// THE METHOD
 +// ---------
-+// Subir la colina de nitidez, en grueso y luego afinando, que es lo que se
-+// valido midiendo desde el PC: cinco posiciones repartidas por todo el
-+// recorrido y dos afinados de cinco alrededor de la mejor. Catorce medidas
-+// dieron 512, el mismo valor que un barrido exhaustivo de nueve posiciones por
++// Climb the sharpness hill, coarsely and then refining, which is what was
++// validated by measuring from the PC: five positions spread over the whole
++// range and two refinements of five around the best. Fourteen measurements
++// gave 512, the same value as an exhaustive sweep of nine positions per
 +// otro camino.
 +//
-+// Aqui sale mucho mas barato que alli: en la vista previa los fotogramas
++// Here it comes out much cheaper than there: in the preview the frames
 +// llegan cada ~50 ms en vez de cada 1,2 s.
 +
 +#pragma once
@@ -587,29 +587,29 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +    explicit Enfocador(QObject *parent = nullptr);
 +
 +    /*!
-+     * Empieza a enfocar en un punto de la imagen, en coordenadas de 0 a 1.
++     * Starts focusing at a point of the image, in coordinates from 0 to 1.
 +     * Si ya se estaba enfocando, se descarta lo anterior y se empieza de nuevo
-+     * en el punto nuevo: el usuario acaba de decir donde quiere mirar.
++     * at the new point: the user has just said where they want to look.
 +     */
 +    Q_INVOKABLE void enfocarEn(qreal x, qreal y);
 +
 +    /*!
-+     * Lleva la lente a una posicion concreta, sin buscar. Para el mando manual.
++     * Moves the lens to a specific position, without searching. For manual control.
 +     */
 +    Q_INVOKABLE void moverA(int posicion);
 +
-+    //! Cada fotograma de la vista previa. Barato si no se esta enfocando.
++    //! Every preview frame. Cheap when not focusing.
 +    void nuevoFotograma(const QImage &imagen);
 +
 +    /*!
-+     * Los grados que se le van a dar a la imagen para mostrarla.
++     * The degrees the image is going to be rotated by for display.
 +     *
-+     * Sin esto el "toca para enfocar" seria mentira: la vista previa se gira
-+     * por software antes de pintarla -el sensor va montado torcido- asi que el
-+     * punto que toca el usuario NO es el punto de la imagen que llega aqui. Con
-+     * el giro de 270 de la trasera, tocar arriba a la izquierda mediria abajo a
-+     * la izquierda, y el usuario veria la camara enfocar en otro sitio sin
-+     * entender por que.
++     * Without this "tap to focus" would be a lie: the preview is rotated
++     * in software before painting it -the sensor is mounted crooked- so the
++     * point the user taps is NOT the point of the image that arrives here. With
++     * the 270 rotation of the rear camera, tapping the top left would measure the
++     * bottom left, and the user would see the camera focus somewhere else without
++     * understanding why.
 +     */
 +    void setGiro(int grados);
 +
@@ -642,21 +642,21 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +    void logradoChanged();
 +
 +private:
-+    //! Escribe la posicion en la tuberia del servicio. Falso si no hay servicio.
++    //! Writes the position to the service pipe. False if there is no service.
 +    bool pedirPosicion(int posicion);
 +
 +    /*!
-+     * Nitidez del recorte alrededor del punto elegido.
++     * Sharpness of the crop around the chosen point.
 +     *
-+     * Varianza de la segunda diferencia HORIZONTAL, normalizada por el nivel
-+     * medio al cuadrado. Lo de normalizar no es cosmetico: subir la ganancia
-+     * sube la senal y su ruido a la vez, y sin normalizar un cambio de
-+     * exposicion durante la busqueda se leeria como un cambio de enfoque.
++     * Variance of the HORIZONTAL second difference, normalized by the mean
++     * level squared. Normalizing is not cosmetic: raising the gain
++     * raises the signal and its noise at the same time, and without normalizing a change of
++     * exposure during the search would read as a change of focus.
 +     *
-+     * Se mide solo en horizontal porque es la version que se valido -contra
-+     * desenfoque sintetico sobre una captura real: un pase divide por 15,9 y
-+     * dos por 54,3-. Aqui la imagen no viene diezmada, asi que anadir el eje
-+     * vertical daria mas senal; se deja para cuando se mida, no antes.
++     * It is measured only horizontally because that is the version that was validated -against
++     * synthetic blur on a real capture: one pass divides by 15.9 and
++     * two by 54.3-. Here the image does not come decimated, so adding the
++     * vertical axis would give more signal; it is left for when it is measured, not before.
 +     */
 +    double nitidez(const QImage &imagen) const;
 +
@@ -664,8 +664,8 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +    void siguientePosicion();
 +
 +    /*!
-+     * Pone las posiciones de la etapa en la direccion que empieza mas cerca de
-+     * donde esta la lente. Mismas medidas, mismo resultado, menos recorrido.
++     * Orders the stage positions in the direction that starts closer to
++     * where the lens is. Same measurements, same result, less travel.
 +     */
 +    void ordenarDesdeDondeEsta();
 +
@@ -680,22 +680,22 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +    QPointF m_punto{0.5, 0.5};
 +    int m_giro = 0;
 +
-+    //! El punto tocado, llevado a las coordenadas de la imagen sin girar.
++    //! The tapped point, mapped to the coordinates of the unrotated image.
 +    QPointF puntoEnElSensor() const;
 +
-+    //! Posiciones que faltan en la etapa actual, y lo medido hasta ahora.
++    //! Positions remaining in the current stage, and what has been measured so far.
 +    QList<int> m_pendientes;
 +    QList<QPair<int, double>> m_medidas;
 +    int m_etapa = 0;
 +
 +    /*!
-+     * Fotogramas que se tiran tras mover la lente.
++     * Frames dropped after moving the lens.
 +     *
-+     * Hacen falta por dos motivos que se suman: el actuador tarda en llegar, y
-+     * la tuberia de la camara va con retraso -el fotograma que entra ahora se
-+     * capturo hace varios-. Medir sin esperar mezcla la nitidez de la posicion
-+     * vieja con la nueva, y eso no da una curva mas ruidosa: da una curva
-+     * DESPLAZADA, que es peor porque parece buena.
++     * They are needed for two reasons that add up: the actuator takes time to get there, and
++     * the camera pipeline lags -the frame coming in now was
++     * captured several frames ago-. Measuring without waiting mixes the sharpness of the old
++     * position with the new one, and that does not give a noisier curve: it gives a
++     * SHIFTED curve, which is worse because it looks good.
 +     */
 +    int m_porTirar = 0;
 +    static constexpr int kFotogramasDeEspera = 4;
@@ -708,9 +708,9 @@ diff -ruN a/src/plasmacameramanager.cpp b/src/plasmacameramanager.cpp
  
      m_currentFrame = image;
 +
-+    // El autoenfoque mide sobre ESTE fotograma, antes de girarlo: la rotacion
-+    // se aplica al QVideoFrame de abajo, no a la imagen. Por eso se le pasa el
-+    // giro aparte, para que sepa traducir el punto que toco el usuario.
++    // The autofocus measures on THIS frame, before rotating it: the rotation
++    // is applied to the QVideoFrame below, not to the image. That is why the
++    // rotation is passed separately, so it can translate the point the user tapped.
 +    m_enfocador.setGiro(int(outputOrientationDegrees()));
 +    m_enfocador.nuevoFotograma(image);
 +
@@ -732,7 +732,7 @@ diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
      // preview and video recording
      Q_PROPERTY(PlasmaCamera *plasmaCamera READ plasmaCamera WRITE setPlasmaCamera NOTIFY plasmaCameraChanged)
      Q_PROPERTY(QVideoSink *videoSink READ videoSink WRITE setVideoSink NOTIFY videoSinkChanged)
-+    //! El autoenfoque. Vive aqui porque aqui es donde pasan los fotogramas.
++    //! The autofocus. It lives here because this is where the frames go through.
 +    Q_PROPERTY(Enfocador *enfocador READ enfocador CONSTANT)
      Q_PROPERTY(QMediaRecorder *recorder READ recorder WRITE setRecorder NOTIFY recorderChanged)
      Q_PROPERTY(bool audioRecordingEnabled READ audioRecordingEnabled WRITE setAudioRecordingEnabled NOTIFY audioRecordingEnabledChanged)

@@ -56,7 +56,7 @@ it right until the genuine one was pulled out of the factory partition (see
   - It leaves the shared memory path behind a parameter, documented as
     dangerous, so as not to lose the work:
 
-        /sys/module/q6core/parameters/registro_por_memoria    0 = appended [default]
+        /sys/module/q6core/parameters/register_through_memory    0 = appended [default]
                                                               1 = memory (REBOOTS THE PHONE)
 
   - It traces the size of the block and of the packet, so as to see at a glance
@@ -68,7 +68,7 @@ matched the Pixel 3a's field by field; that is not touched.
 
 ## How to test it, without spending a call
 
-    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/registrar_topologias
+    echo 1 > /sys/bus/aprbus/devices/aprsvc:service:4:3/register_topologies
     dmesg | tail
 
 The DSP accepts or rejects. If it accepts, then -and only then- does it make
@@ -83,43 +83,43 @@ a call.
  
 -static int q6core_register_topologies(struct device *dev, u32 size, const void *data)
 +/*
-+ * Metodo de entrega del bloque de topologias:
++ * Delivery method for the topology block:
 + *
-+ *   0 = PEGADO AL PAQUETE APR (in-band).  [por defecto]
-+ *   1 = por memoria compartida.           PELIGRO: tumba el movil.
++ *   0 = ATTACHED TO THE APR PACKET (in-band).  [default]
++ *   1 = via shared memory.                     DANGER: takes the phone down.
 + *
-+ *   /sys/module/q6core/parameters/registro_por_memoria
++ *   /sys/module/q6core/parameters/register_through_memory
 + *
-+ * POR QUE EL DEFECTO CAMBIA A IN-BAND
++ * WHY THE DEFAULT CHANGES TO IN-BAND
 + * -----------------------------------
-+ * El parche del Pixel 3a (sdm670-mainline/linux-patches,
-+ * ASoC-qdsp6-q6core-add-support-for-registering-topologies.patch), que es el
-+ * unico sitio donde esto funciona de verdad en mainline, **manda el bloque
-+ * pegado al paquete y no mapea memoria en ningun momento**. Su estructura
-+ * lleva payload_addr_lsw/msw y mem_map_handle, pero los deja a CERO a
-+ * proposito: reserva el paquete con kzalloc y solo rellena payload_size.
++ * The Pixel 3a patch (sdm670-mainline/linux-patches,
++ * ASoC-qdsp6-q6core-add-support-for-registering-topologies.patch), which is the
++ * only place where this really works in mainline, **sends the block
++ * attached to the packet and never maps memory at any point**. Its struct
++ * carries payload_addr_lsw/msw and mem_map_handle, but leaves them at ZERO on
++ * purpose: it allocates the packet with kzalloc and only fills in payload_size.
 + *
-+ * Aqui se hizo al reves. El primer intento fue in-band, el DSP contesto
-+ * ADSP_EBADPARAM, y se dedujo que hacia falta memoria compartida. Esa
-+ * deduccion llevo a un callejon sin salida: mapear la region **reinicia el
++ * Here it was done the other way round. The first attempt was in-band, the DSP answered
++ * ADSP_EBADPARAM, and it was inferred that shared memory was needed. That
++ * inference led to a dead end: mapping the region **reboots the
 + * movil entero**.
 + *
-+ * El EBADPARAM tenia otra explicacion mucho mas simple. Al DSP se le estaba
-+ * dando el fichero de calibracion del **Pixel 4a**: el que el kernel leia
-+ * (md5 485b0439...) es el Global_cal.acdb de sunfish, y el que el proyecto
-+ * empaquetaba "de surya" tambien es una copia byte a byte del mismo. El de
-+ * verdad de este movil (md5 72b7f3fd...) solo existia dentro de la particion
-+ * de fabrica, y se saco el 2026-08-11 (ver docs/REFERENCIA-STOCK.md).
++ * The EBADPARAM had a much simpler explanation. The DSP was being
++ * given the calibration file of the **Pixel 4a**: the one the kernel read
++ * (md5 485b0439...) is sunfish's Global_cal.acdb, and the one the project
++ * packaged "from surya" is also a byte for byte copy of the same one. The
++ * real one for this phone (md5 72b7f3fd...) only existed inside the factory
++ * partition, and was extracted on 2026-08-11 (see docs/REFERENCIA-STOCK.md).
 + *
-+ * O sea: se le pedia al DSP que registrase las topologias de otro telefono.
-+ * "Parametro incorrecto" es exactamente lo que toca contestar a eso.
++ * That is: the DSP was being asked to register another phone's topologies.
++ * "Bad parameter" is exactly the right answer to that.
 + */
-+static unsigned int registro_por_memoria;
-+module_param(registro_por_memoria, uint, 0644);
-+MODULE_PARM_DESC(registro_por_memoria,
-+		 "0 = pegado al paquete (como el Pixel 3a), 1 = memoria compartida (PELIGRO: reinicia el movil)");
++static unsigned int register_through_memory;
++module_param(register_through_memory, uint, 0644);
++MODULE_PARM_DESC(register_through_memory,
++		 "0 = inline in the packet (like the Pixel 3a), 1 = shared memory (DANGER: reboots the phone)");
 +
-+/* Como lo hace el parche del Pixel 3a: el bloque va dentro del paquete. */
++/* The way the Pixel 3a patch does it: the block goes inside the packet. */
 +static int q6core_register_topologies_inband(struct device *dev, u32 size,
 +					     const void *data)
 +{
@@ -146,8 +146,8 @@ a call.
 +
 +	/*
 +	 * kzalloc deja payload_addr_lsw, payload_addr_msw y mem_map_handle a
-+	 * cero, y ESO es lo que le dice al DSP que los datos vienen dentro del
-+	 * paquete. No es un olvido, es el mecanismo.
++	 * zero, and THAT is what tells the DSP that the data comes inside the
++	 * packet. It is not an oversight, it is the mechanism.
 +	 */
 +	cmd->payload_size = size;
 +	memcpy(dest, data, size);
@@ -176,7 +176,7 @@ a call.
 +static int q6core_register_topologies(struct device *dev, u32 size,
 +				      const void *data)
 +{
-+	if (registro_por_memoria)
++	if (register_through_memory)
 +		return q6core_register_topologies_shmem(dev, size, data);
 +
 +	return q6core_register_topologies_inband(dev, size, data);

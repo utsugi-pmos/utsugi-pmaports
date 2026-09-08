@@ -47,8 +47,8 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
 --- a/drivers/media/i2c/imx682.c
 +++ b/drivers/media/i2c/imx682.c
 @@ -74,15 +74,15 @@
-  * aborta con "Pixel clock is too high for CSIPHY". Ver el comentario de la
-  * tabla del modo.
+  * aborts with "Pixel clock is too high for CSIPHY". See the comment on the
+  * mode table.
   */
 -#define IMX682_LINK_FREQ		1020000000LL
 -#define IMX682_DATA_LANES		2
@@ -56,7 +56,7 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
 +#define IMX682_DATA_LANES		3
  #define IMX682_BITS_PER_PIXEL		10
  
- /* pixeles por segundo que salen por el enlace, que es lo que espera V4L2 */
+ /* pixels per second coming out of the link, which is what V4L2 expects */
  #define IMX682_PIXEL_RATE \
  	(IMX682_LINK_FREQ * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL)
  
@@ -66,18 +66,18 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
  struct imx682_reg {
  	u16 addr;
 @@ -94,8 +94,16 @@
-  * proveedor de modulo (imx682sunny). Vale tal cual porque aqui el MCLK se
-  * pone a 24 MHz, que es para lo que estan calculados sus multiplicadores. */
+  * module vendor (imx682sunny). It works as is because here the MCLK is
+  * set to 24 MHz, which is what its multipliers are calculated for. */
  static const struct imx682_reg imx682_global[] = {
 -	{ 0x0136, 0x18 },
 -	{ 0x0137, 0x00 },
 +	/*
-+	 * 0x0136/0x0137 es el reloj de entrada que el sensor cree tener,
-+	 * en coma fija 8.8. Estaba a 0x1800 = 24 MHz, que es lo que
-+	 * suponia el driver de MediaTek del que venia esta tabla. La
-+	 * secuencia de encendido de FABRICA de este movil le da
-+	 * 19.200.000 Hz, o sea 0x1333. Con el valor mal, todos los
-+	 * multiplicadores del PLL producen frecuencias equivocadas.
++	 * 0x0136/0x0137 is the input clock the sensor thinks it has,
++	 * in 8.8 fixed point. It was 0x1800 = 24 MHz, which is what
++	 * the MediaTek driver this table came from assumed. The
++	 * FACTORY power-on sequence of this phone gives it
++	 * 19,200,000 Hz, that is 0x1333. With the wrong value, all the
++	 * PLL multipliers produce wrong frequencies.
 +	 */
 +	{ 0x0136, 0x13 },
 +	{ 0x0137, 0x33 },
@@ -87,19 +87,19 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
 @@ -281,97 +289,97 @@
   * diagnosticar.
   *
-  * El precio son unos 4,2 fotogramas por segundo a 48 megapixeles. */
+  * The price is about 4.2 frames per second at 48 megapixels. */
 -static const struct imx682_reg imx682_8000x6000[] = {
 +/*
-+ * Modo 3 de los CINCO que trae el fichero de fabrica
-+ * (com.qti.sensormodule.j20c_*_imx682_wide.bin), sacado con
-+ * camara/sacar-la-trasera.py. 74 registros, copiados sin tocar nada.
++ * Mode 3 of the FIVE the factory file provides
++ * (com.qti.sensormodule.j20c_*_imx682_wide.bin), extracted with
++ * camara/sacar-la-trasera.py. 74 registers, copied without touching anything.
 + *
-+ * Se elige este y no el de 64 MP por lo aprendido con la frontal:
-+ * libcamera coge siempre el modo mas grande, y el revelado de Bayer
-+ * va por CPU. Este agrupa 4x4 (0x0900/0x0901 = 0x01/0x44), asi que
-+ * son 3 MP en vez de 64 y ademas dieciseis veces mas luz por pixel.
++ * This one is chosen and not the 64 MP one because of what was learned with the front camera:
++ * libcamera always takes the largest mode, and Bayer demosaicing
++ * runs on the CPU. This one bins 4x4 (0x0900/0x0901 = 0x01/0x44), so
++ * it is 3 MP instead of 64 and also sixteen times more light per pixel.
 + *
-+ * Los otros cuatro, para cuando haga falta:
++ * The other four, for when they are needed:
 + *     9248x6944  1x1  hts=20576 vts=7030  link 379,2 MHz
 + *     4624x3472  2x2  hts= 9432 vts=3528  link 476,8 MHz
 + *     3840x2160  2x2  hts= 5144 vts=2218  link 435,2 MHz

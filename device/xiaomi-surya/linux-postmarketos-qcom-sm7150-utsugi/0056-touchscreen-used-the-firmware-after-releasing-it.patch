@@ -76,8 +76,8 @@ surya/arranque/bucle-reinicios 30. The failure rate before the patch was between
  	 */
 -	ts->fw_entry.data = devm_kmemdup(ts->dev, fw_entry->data, fw_entry->size, GFP_KERNEL | GFP_DMA);
 +	/*
-+	 * Quedarse con el tamano ANTES de soltar el firmware: release_firmware()
-+	 * libera fw_entry y su data, y lo de abajo los seguia leyendo.
++	 * Keep the size BEFORE releasing the firmware: release_firmware()
++	 * frees fw_entry and its data, and the code below kept reading them.
 +	 */
 +	fw_size = fw_entry->size;
 +

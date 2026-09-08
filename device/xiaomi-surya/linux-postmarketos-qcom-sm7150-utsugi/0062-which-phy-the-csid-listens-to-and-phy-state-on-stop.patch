@@ -32,57 +32,57 @@ This does NOT fix anything: it is for looking.
 +	int i;
 +
 +	/*
-+	 * DIAGNOSTICO: leer los once registros de estado del PHY UNA sola vez,
-+	 * aqui, al parar.
++	 * DIAGNOSTIC: read the eleven PHY status registers just ONCE,
++	 * here, on stop.
 +	 *
-+	 * Leerlos desde el ISR obliga a desenmascarar las interrupciones, y con
-+	 * el enlace sin enganchar eso son 8700 disparos por segundo con 35
-+	 * accesos a registro cada uno: 300.000 lecturas y escrituras por
-+	 * segundo sobre el bloque que se esta midiendo. El instrumento
-+	 * estropeaba la medida.
++	 * Reading them from the ISR forces unmasking the interrupts, and with
++	 * the link not locked that is 8700 firings per second with 35
++	 * register accesses each: 300,000 reads and writes per
++	 * second on the block being measured. The instrument
++	 * was spoiling the measurement.
 +	 *
-+	 * Aqui no molesta a nadie: la transmision ya ha terminado y el estado
++	 * Here it bothers nobody: the transmission has already finished and the state
 +	 * sigue enclavado.
 +	 */
 +	for (i = 0; i < 11; i++)
-+		diag_phy_estado[i] =
++		diag_phy_state[i] =
 +			readl_relaxed(csiphy->base +
 +				CSIPHY_3PH_CMN_CSI_COMMON_STATUSn(regs->offset,
 +						regs->common_status_offset, i));
 +
 +	dev_info(csiphy->camss->dev,
-+		 "csiphy%d al parar: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-+		 csiphy->id, diag_phy_estado[0], diag_phy_estado[1],
-+		 diag_phy_estado[2], diag_phy_estado[3], diag_phy_estado[4],
-+		 diag_phy_estado[5], diag_phy_estado[6], diag_phy_estado[7],
-+		 diag_phy_estado[8], diag_phy_estado[9], diag_phy_estado[10]);
++		 "csiphy%d at stop: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
++		 csiphy->id, diag_phy_state[0], diag_phy_state[1],
++		 diag_phy_state[2], diag_phy_state[3], diag_phy_state[4],
++		 diag_phy_state[5], diag_phy_state[6], diag_phy_state[7],
++		 diag_phy_state[8], diag_phy_state[9], diag_phy_state[10]);
  
  	writel_relaxed(0, csiphy->base +
  			  CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 5));
 --- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 23:16:19.673584527 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-16 23:16:48.487735788 +0200
 @@ -49,6 +49,11 @@
-  * interrupciones por fotograma esto puede convertirse en una tormenta, y este
-  * movil es sensible a la temporizacion. Se enciende a mano cuando haga falta.
+  * interrupts per frame this can turn into a storm, and this
+  * phone is sensitive to timing. Enable it by hand when needed.
   */
 +static int diag_phy_sel = -1;
 +module_param(diag_phy_sel, int, 0644);
 +MODULE_PARM_DESC(diag_phy_sel,
-+	"De que CSIPHY escucha el CSID (PHY_NUM_SEL). -1 = el del enlace.");
++	"Which CSIPHY the CSID listens to (PHY_NUM_SEL). -1 = the one from the link.");
 +
- static unsigned int diag_rx_mascara;
- module_param(diag_rx_mascara, uint, 0644);
- MODULE_PARM_DESC(diag_rx_mascara,
+ static unsigned int diag_rx_mask;
+ module_param(diag_rx_mask, uint, 0644);
+ MODULE_PARM_DESC(diag_rx_mask,
 @@ -220,7 +225,14 @@
  
  	val = (lane_cnt - 1) << CSI2_RX_CFG0_NUM_ACTIVE_LANES;
  	val |= phy->lane_assign << CSI2_RX_CFG0_DL0_INPUT_SEL;
 -	val |= phy->csiphy_id << CSI2_RX_CFG0_PHY_NUM_SEL;
 +	/*
-+	 * DIAGNOSTICO: de que CSIPHY escucha este CSID. Es la ultima suposicion
-+	 * de encaminamiento que queda sin probar en el aparato: el driver de
-+	 * Qualcomm calcula (res_type & 0xFF) - 1, o sea tambien contando desde
-+	 * cero, pero eso esta leido, no medido. Con esto se barre.
++	 * DIAGNOSTIC: which CSIPHY this CSID listens to. It is the last routing
++	 * assumption left untested on the device: the Qualcomm
++	 * driver computes (res_type & 0xFF) - 1, that is also counting from
++	 * zero, but that is read, not measured. With this it can be swept.
 +	 */
 +	val |= (diag_phy_sel >= 0 ? (u32)diag_phy_sel : phy->csiphy_id)
 +		<< CSI2_RX_CFG0_PHY_NUM_SEL;

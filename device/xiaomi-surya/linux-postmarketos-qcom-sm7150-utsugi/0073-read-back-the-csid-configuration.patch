@@ -29,15 +29,15 @@ What is expected for the front camera, with 4 lanes on CSIPHY1:
  					 diag_bytes_rdi0);
 +
 +				/*
-+				 * Y RELEER LA CONFIGURACION.
++				 * AND READ THE CONFIGURATION BACK.
 +				 *
-+				 * Del CSIPHY se comprobo que las 110 escrituras
-+				 * aterrizan; del CSID no se habia comprobado
-+				 * ninguna. Si CSI2_RX_CFG0 no guarda lo que se
-+				 * le escribio -por ejemplo porque se escribe
-+				 * antes de que el bloque salga del reset- el
++				 * For the CSIPHY it was verified that the 110
++				 * writes land; for the CSID not a single one
++				 * had been checked. If CSI2_RX_CFG0 does not
++				 * keep what was written to it -for example
++				 * because it is written before the block comes
 +				 * receptor estaria escuchando a otro sitio y
-+				 * todo lo demas seria coherente con lo medido.
++				 * everything else would be consistent with what was measured.
 +				 */
 +				dev_info(csid->camss->dev,
 +					 "csid%d config: rx_cfg0=0x%08x rx_cfg1=0x%08x rdi_cfg0=0x%08x rdi_ctrl=0x%08x\n",

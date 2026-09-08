@@ -93,22 +93,22 @@ dmesg, which is why it carries that message.
 --- a/drivers/media/i2c/imx682.c
 +++ b/drivers/media/i2c/imx682.c
 @@ -75,13 +75,16 @@
-  * aborta con "Pixel clock is too high for CSIPHY". Ver el comentario de la
-  * tabla del modo.
+  * aborts with "Pixel clock is too high for CSIPHY". See the comment on the
+  * mode table.
   */
 -#define IMX682_LINK_FREQ		435200000LL
-+/* El area completa del sensor, 64 Mpx. Es la referencia del recorte. */
++/* The full sensor area, 64 Mpx. It is the reference for the crop. */
 +#define IMX682_NATIVE_WIDTH		9248U
 +#define IMX682_NATIVE_HEIGHT		6944U
 +
  #define IMX682_DATA_LANES		3
  #define IMX682_BITS_PER_PIXEL		10
  
- /* pixeles por segundo que salen por el enlace, que es lo que espera V4L2 */
+ /* pixels per second coming out of the link, which is what V4L2 expects */
 -#define IMX682_PIXEL_RATE \
 -	(IMX682_LINK_FREQ * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL)
-+/* La tasa de pixeles ya no es una constante: la calcula imx682_pixel_rate()
-+ * a partir de la frecuencia de enlace de CADA modo. */
++/* The pixel rate is no longer a constant: imx682_pixel_rate() computes it
++ * from the link frequency of EACH mode. */
  
  #define IMX682_XVCLK_HZ			19200000
  
@@ -117,17 +117,17 @@ dmesg, which is why it carries that message.
   *     1920x1080  4x4  hts= 2728 vts=1148  link 520,0 MHz
   */
 +/*
-+ * LOS CINCO MODOS DEL FICHERO DE FABRICA
++ * THE FIVE MODES FROM THE FACTORY FILE
 + * --------------------------------------
-+ * El blob del propio movil trae cinco streamConfiguration y catorce
-+ * regSetting. Las cinco tablas usan LAS MISMAS 74 direcciones y solo cambian
-+ * 53 valores, asi que van tal cual salen, sin tocar nada.
++ * The phone's own blob carries five streamConfiguration and fourteen
++ * regSetting. The five tables use THE SAME 74 addresses and only 53 values
++ * change, so they go in exactly as they come out, untouched.
 + *
-+ * Extraidas con camara/sacar-los-modos.py, que se valida solo: el
-+ * emparejamiento direccion-valor es bueno si en los cinco modos salen
-+ * 0x0112/3 = 0x0a0a (RAW10) y 0x0114 = 0x02 (tres trios), y sale. Ademas la
-+ * tabla de 2312x1304 que genera es IDENTICA byte a byte a la que ya estaba
-+ * aqui y captura, que es la mejor comprobacion que hay.
++ * Extracted with camara/sacar-los-modos.py, which validates itself: the
++ * address-value pairing is good if in the five modes it yields
++ * 0x0112/3 = 0x0a0a (RAW10) and 0x0114 = 0x02 (three trios), and it does. Besides, the
++ * 2312x1304 table it generates is IDENTICAL byte for byte to the one that was already
++ * here and captures, which is the best check there is.
 + */
 +static const struct imx682_reg imx682_9248x6944[] = {
 +	{ 0x0112, 0x0A },
@@ -452,15 +452,15 @@ dmesg, which is why it carries that message.
  	u32 vts_def;		/* frame_length_lines, registro 0x0340 */
  	u32 vts_min;
 +	/*
-+	 * Ventana leida del sensor, en pixeles FISICOS: registros 0x0346 y
-+	 * 0x034a. No coincide con width/height porque el sensor agrupa
-+	 * (0x0900/0x0901): 2312x1304 sale de una ventana de 9248x5216 agrupada
-+	 * de cuatro en cuatro. Hace falta para responder al rectangulo de
-+	 * recorte, que es de lo que libcamera saca el campo de vision.
++	 * Window read from the sensor, in PHYSICAL pixels: registers 0x0346 and
++	 * 0x034a. It does not match width/height because the sensor bins
++	 * (0x0900/0x0901): 2312x1304 comes from a 9248x5216 window binned
++	 * four by four. It is needed to answer the crop
++	 * rectangle, which is what libcamera derives the field of view from.
 +	 */
 +	u32 crop_top;
 +	u32 crop_height;
-+	/* indice en imx682_link_freqs: cada modo tiene su PLL de salida */
++	/* index into imx682_link_freqs: each mode has its own output PLL */
 +	u8 link_freq_idx;
  	const struct imx682_reg *regs;
  	unsigned int num_regs;
@@ -468,9 +468,9 @@ dmesg, which is why it carries that message.
  
  static const struct imx682_mode imx682_modes[] = {
 +	/*
-+	 * El PRIMERO es el que se usa por defecto, y a proposito es el pequeno:
-+	 * el revelado va por CPU y el coste sube con el numero de pixeles. En
-+	 * la frontal, 20 Mpx costaban 53 ms por fotograma contra 20 ms a 5 Mpx.
++	 * The FIRST one is the one used by default, and on purpose it is the small one:
++	 * processing runs on the CPU and the cost grows with the number of pixels. On
++	 * the front camera, 20 Mpx cost 53 ms per frame against 20 ms at 5 Mpx.
 +	 */
  	{
  		.width = 2312,
@@ -525,7 +525,7 @@ dmesg, which is why it carries that message.
 +		.vts_def = 7030,
 +		.vts_min = 7030,
 +		.crop_top = 0,
-+		.crop_height = 6944,	/* sin agrupar, los 64 Mpx */
++		.crop_height = 6944,	/* unbinned, the full 64 Mpx */
 +		.link_freq_idx = 0,	/* 379,2 MHz, PLL x237 */
 +		.regs = imx682_9248x6944,
 +		.num_regs = ARRAY_SIZE(imx682_9248x6944),
@@ -533,25 +533,25 @@ dmesg, which is why it carries that message.
  };
  
 @@ -462,10 +850,41 @@
- MODULE_PARM_DESC(senal_phy,
- 	"Enlace que se le declara al sensor en 0x0111. 2 = D-PHY, 3 = C-PHY, 0 = tabla.");
+ MODULE_PARM_DESC(phy_signal,
+ 	"Link declared to the sensor in 0x0111. 2 = D-PHY, 3 = C-PHY, 0 = table.");
  
 +/*
-+ * UNA FRECUENCIA DE ENLACE POR MODO.
++ * ONE LINK FREQUENCY PER MODE.
 + *
-+ * Cada modo de fabrica trae su propio multiplicador de PLL de salida
-+ * (0x030e/0x030f) y por tanto emite a distinta velocidad:
++ * Each factory mode carries its own output PLL multiplier
++ * (0x030e/0x030f) and therefore transmits at a different speed:
 + *
 + *     PLL x237 -> 379,2 MHz    9248x6944
 + *     PLL x272 -> 435,2 MHz    3840x2160 y 2312x1304
 + *     PLL x298 -> 476,8 MHz    4624x3472
 + *     PLL x325 -> 520,0 MHz    1920x1080
 + *
-+ * El calculo es 19,2 MHz / 3 x mult / 2 (op_sys_div) / 2. Ordenadas de menor
-+ * a mayor porque V4L2_CID_LINK_FREQ es un menu y el indice es el que lee
-+ * CAMSS para calcular el asentamiento del CSIPHY.
++ * The calculation is 19.2 MHz / 3 x mult / 2 (op_sys_div) / 2. Sorted from lowest
++ * to highest because V4L2_CID_LINK_FREQ is a menu and the index is what
++ * CAMSS reads to compute the CSIPHY settle count.
 + *
-+ * El device tree tiene que listarlas TODAS en link-frequencies.
++ * The device tree has to list them ALL in link-frequencies.
 + */
  static const s64 imx682_link_freqs[] = {
 -	IMX682_LINK_FREQ,
@@ -561,15 +561,15 @@ dmesg, which is why it carries that message.
 +	520000000LL,
  };
  
-+/* link x 2 x trios / bits por pixel, la misma cuenta que ya se usaba */
-+static s64 imx682_tasa_pixeles(s64 link)
++/* link x 2 x trios / bits per pixel, the same arithmetic already in use */
++static s64 imx682_mode_pixel_rate(s64 link)
 +{
 +	return link * 2 * IMX682_DATA_LANES / IMX682_BITS_PER_PIXEL;
 +}
 +
 +static s64 imx682_pixel_rate(const struct imx682_mode *m)
 +{
-+	return imx682_tasa_pixeles(imx682_link_freqs[m->link_freq_idx]);
++	return imx682_mode_pixel_rate(imx682_link_freqs[m->link_freq_idx]);
 +}
 +
  struct imx682 {
@@ -585,19 +585,19 @@ dmesg, which is why it carries that message.
  		s->link_freq->flags |= V4L2_CTRL_FLAG_READ_ONLY;
  
 +	/*
-+	 * El rango va del enlace MAS LENTO al MAS RAPIDO, no del primer modo al
-+	 * ultimo. El primer intento uso modes[0] y modes[4] y el driver no
-+	 * llegaba a registrarse: modes[4] es el de 64 Mpx, que es justo el que
-+	 * emite mas despacio (PLL x237), asi que el minimo salia MAYOR que el
++	 * The range goes from the SLOWEST link to the FASTEST, not from the first mode to the
++	 * last. The first attempt used modes[0] and modes[4] and the driver did not
++	 * get as far as registering: modes[4] is the 64 Mpx one, which is precisely the one that
++	 * transmits slowest (PLL x237), so the minimum came out HIGHER than the
 +	 * maximo y v4l2_ctrl_new_std devolvia -ERANGE.
 +	 *
-+	 *     imx682 12-001a: fallo al crear los controles: -34
++	 *     imx682 12-001a: failed to create the controls: -34
 +	 */
  	s->pixel_rate = v4l2_ctrl_new_std(h, NULL, V4L2_CID_PIXEL_RATE,
 -					  IMX682_PIXEL_RATE, IMX682_PIXEL_RATE,
 -					  1, IMX682_PIXEL_RATE);
-+					  imx682_tasa_pixeles(imx682_link_freqs[0]),
-+					  imx682_tasa_pixeles(imx682_link_freqs[ARRAY_SIZE(imx682_link_freqs) - 1]),
++					  imx682_mode_pixel_rate(imx682_link_freqs[0]),
++					  imx682_mode_pixel_rate(imx682_link_freqs[ARRAY_SIZE(imx682_link_freqs) - 1]),
 +					  1, imx682_pixel_rate(m));
  	if (s->pixel_rate)
  		s->pixel_rate->flags |= V4L2_CTRL_FLAG_READ_ONLY;
@@ -606,12 +606,12 @@ dmesg, which is why it carries that message.
  	return 0;
  }
  
-+/* El modo cuya area se parece mas a lo pedido. */
++/* The mode whose area is closest to what was requested. */
 +static const struct imx682_mode *imx682_mode_mas_cercano(u32 w, u32 h)
 +{
-+	const struct imx682_mode *mejor = &imx682_modes[0];
++	const struct imx682_mode *best = &imx682_modes[0];
 +	u64 pedida = (u64)w * h;
-+	u64 dist_mejor = abs_diff((u64)mejor->width * mejor->height, pedida);
++	u64 dist_mejor = abs_diff((u64)best->width * best->height, pedida);
 +	unsigned int i;
 +
 +	for (i = 1; i < ARRAY_SIZE(imx682_modes); i++) {
@@ -620,10 +620,10 @@ dmesg, which is why it carries that message.
 +
 +		if (d < dist_mejor) {
 +			dist_mejor = d;
-+			mejor = m;
++			best = m;
 +		}
 +	}
-+	return mejor;
++	return best;
 +}
 +
  static int imx682_set_fmt(struct v4l2_subdev *sd,
@@ -633,7 +633,7 @@ dmesg, which is why it carries that message.
  	struct imx682 *s = to_imx682(sd);
 +	const struct imx682_mode *m;
  
--	/* Un solo modo: se acepta lo que pidan y se devuelve el que hay. */
+-	/* A single mode: whatever is asked for is accepted and the one that exists is returned. */
 -	imx682_fill_fmt(s->mode, &fmt->format);
 +	m = imx682_mode_mas_cercano(fmt->format.width, fmt->format.height);
 +	imx682_fill_fmt(m, &fmt->format);
@@ -645,10 +645,10 @@ dmesg, which is why it carries that message.
 +	s->mode = m;
 +
 +	/*
-+	 * Los limites de los controles dependen del modo y hay que moverlos, no
-+	 * solo el valor: si el maximo de exposicion se queda con el del modo
-+	 * anterior, el control automatico de libcamera pide valores que el
-+	 * sensor no admite y la imagen sale quemada o negra.
++	 * The control limits depend on the mode and have to be moved, not
++	 * just the value: if the exposure maximum keeps the one from the previous
++	 * mode, libcamera's automatic control asks for values the
++	 * sensor does not accept and the image comes out blown out or black.
 +	 */
 +	__v4l2_ctrl_s_ctrl(s->link_freq, m->link_freq_idx);
 +	__v4l2_ctrl_s_ctrl_int64(s->pixel_rate, imx682_pixel_rate(m));
@@ -665,12 +665,12 @@ dmesg, which is why it carries that message.
  }
  
 +/*
-+ * EL RECTANGULO DE RECORTE.
++ * THE CROP RECTANGLE.
 + *
-+ * Sin esto libcamera avisa "Unable to get rectangle 0 on pad 0/0" y se inventa
-+ * que el area leida es igual al tamano de salida. Con los modos agrupados eso
-+ * es falso -2312x1304 sale de una ventana de 9248x5216- y el campo de vision
-+ * que calcula queda mal, que es de donde sale el zoom digital.
++ * Without this libcamera warns "Unable to get rectangle 0 on pad 0/0" and makes up
++ * that the read area equals the output size. With the binned modes that
++ * is false -2312x1304 comes from a 9248x5216 window- and the field of view
++ * it computes is wrong, which is where digital zoom comes from.
 + */
 +static int imx682_get_selection(struct v4l2_subdev *sd,
 +				struct v4l2_subdev_state *state,
@@ -717,7 +717,7 @@ dmesg, which is why it carries that message.
  				bus-type = <MEDIA_BUS_TYPE_CSI2_CPHY>;
 -				link-frequencies = /bits/ 64 <435200000>;
 +				/*
-+				 * Una por modo, porque cada modo de fabrica trae su
++				 * One per mode, because each factory mode carries its
 +				 * propio multiplicador de PLL de salida:
 +				 *   x237 -> 379,2 MHz   9248x6944
 +				 *   x272 -> 435,2 MHz   3840x2160 y 2312x1304

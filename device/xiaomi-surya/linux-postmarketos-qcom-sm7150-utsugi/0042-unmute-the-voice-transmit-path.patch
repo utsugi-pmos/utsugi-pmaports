@@ -50,11 +50,11 @@ after this, it also confirms that the command is accepted.
  EXPORT_SYMBOL_GPL(q6cvp_send_media_format);
  
 +/*
-+ * Downstream, tras arrancar la voz, manda un mute EXPLICITO por cada
-+ * direccion. El q6voice portado no mandaba ninguno, y si el DSP arranca la
-+ * transmision muteada eso da exactamente el cuadro que teniamos: la sesion se
-+ * crea sin un solo error, se oye al otro extremo, el microfono llega al puerto
-+ * del DSP... y al otro lado no llega nada.
++ * Downstream, after starting voice, sends an EXPLICIT mute for each
++ * direction. The ported q6voice sent none, and if the DSP starts the
++ * transmission muted that gives exactly the picture we had: the session is
++ * created without a single error, the far end is heard, the microphone reaches the DSP
++ * port... and nothing arrives at the other side.
 + */
 +int q6cvp_set_mute(struct q6voice_session *cvp, bool tx, bool mute)
 +{
@@ -93,16 +93,16 @@ diff -ruN a/sound/soc/qcom/qdsp6/q6voice.c b/sound/soc/qcom/qdsp6/q6voice.c
  	}
  
 +	/*
-+	 * Desmutear EXPLICITAMENTE las dos direcciones. No se da por supuesto
-+	 * que el DSP arranque desmuteado: downstream tampoco lo da.
++	 * Unmute BOTH directions EXPLICITLY. It is not assumed
++	 * that the DSP starts unmuted: downstream does not assume it either.
 +	 */
 +	ret = q6cvp_set_mute(cvp, false, false);
 +	if (ret)
-+		dev_warn(dev, "no se pudo desmutear la recepcion: %d\n", ret);
++		dev_warn(dev, "could not unmute the receive direction: %d\n", ret);
 +
 +	ret = q6cvp_set_mute(cvp, true, false);
 +	if (ret)
-+		dev_warn(dev, "no se pudo desmutear la transmision: %d\n", ret);
++		dev_warn(dev, "could not unmute the transmit direction: %d\n", ret);
 +
  	ret = q6mvm_attach(mvm, cvp, true);
  	if (ret) {

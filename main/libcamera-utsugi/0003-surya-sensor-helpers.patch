@@ -61,14 +61,14 @@ the pedestal.
 +	CameraSensorHelperImx682()
 +	{
 +		/*
-+		 * Sony de diez bits, la misma familia que el imx708: el nivel de
-+		 * negro es el pedestal de 64, y medido en el sensor del surya con
-+		 * la escena a oscuras el suelo cae en 62..68 de diez bits.
++		 * Ten-bit Sony, the same family as the imx708: the black
++		 * level is the 64 pedestal, and measured on the surya sensor with
++		 * the scene in the dark the floor lands at 62..68 in ten bits.
 +		 */
 +		blackLevel_ = 4096;
 +		/*
-+		 * ganancia = 1024 / (1024 - codigo), la curva clasica de Sony.
-+		 * El driver declara el rango 0..978, y el 0 como valor por
++		 * gain = 1024 / (1024 - code), the classic Sony curve.
++		 * The driver declares the range 0..978, and 0 as the default
 +		 * defecto: 1024/1024 = 1x abajo y 1024/46 = 22,3x arriba.
 +		 */
 +		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
@@ -89,16 +89,16 @@ the pedestal.
 +	CameraSensorHelperS5k3t2()
 +	{
 +		/*
-+		 * Pedestal de 64 en diez bits, MEDIDO en este sensor: con la
-+		 * exposicion en su minimo el suelo cae en 62..65, y la captura de
-+		 * exposicion larga sube a 253 de mediana, o sea que el mando hace
-+		 * algo y la medida vale.
++		 * Pedestal of 64 in ten bits, MEASURED on this sensor: with the
++		 * exposure at its minimum the floor lands at 62..65, and the long
++		 * exposure capture rises to a median of 253, that is the control does
++		 * something and the measurement is valid.
 +		 */
 +		blackLevel_ = 4096;
 +		/*
-+		 * Samsung con ganancia LINEAL: ganancia = codigo / 32. El propio
-+		 * driver lo dice sin ambiguedad, porque declara el minimo Y el
-+		 * valor por defecto en 32, que es donde un sensor esta a 1x, y el
++		 * Samsung with LINEAR gain: gain = code / 32. The driver
++		 * itself says so unambiguously, because it declares the minimum AND the
++		 * default value at 32, which is where a sensor is at 1x, and the
 +		 * maximo en 512, o sea 16x.
 +		 */
 +		gain_ = AnalogueGainLinear{ 1, 0, 0, 32 };

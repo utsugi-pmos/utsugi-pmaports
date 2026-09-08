@@ -11,8 +11,8 @@ itself plausible.
 --- a/drivers/power/supply/qcom_qg.c	2026-09-05 11:54:04.027155678 +0200
 +++ b/drivers/power/supply/qcom_qg.c	2026-09-05 11:54:38.652862831 +0200
 @@ -108,11 +108,22 @@
- 	 * vale desde el primer momento. Es mas ruidosa que el promedio, y por
- 	 * eso solo se usa cuando el promedio no dice nada creible.
+ 	 * is valid from the very first moment. It is noisier than the average, and that
+ 	 * is why it is only used when the average says nothing credible.
  	 */
 -	if (voltage_now < voltage_min) {
 +	/*

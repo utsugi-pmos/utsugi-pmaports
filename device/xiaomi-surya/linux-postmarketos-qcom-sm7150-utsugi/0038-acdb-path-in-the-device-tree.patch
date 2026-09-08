@@ -45,13 +45,13 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
  };
 +
 +/*
-+ * Base de calibracion de audio. El DSP no acepta una topologia de voz que no
-+ * se le haya registrado antes, y las topologias salen de aqui. Sin esto la
-+ * sesion de voz se crea sin error y la transmision sale muda.
++ * Audio calibration database. The DSP does not accept a voice topology that has not
++ * been registered with it beforehand, and the topologies come from here. Without this the
++ * voice session is created without error and the transmit path comes out mute.
 + *
-+ * De momento se usa la del Pixel 4a (sunfish), que lleva el mismo SoC: es la
-+ * unica ACDB que trae el paquete de firmware. Lo suyo seria extraer la de
-+ * surya de la particion vendor de Xiaomi.
++ * For now the Pixel 4a (sunfish) one is used, which carries the same SoC: it is the
++ * only ACDB the firmware package ships. The right thing would be to extract the
++ * surya one from Xiaomi's vendor partition.
 + */
 +&q6core {
 +	qcom,acdb-name = "qcom/sm7150/xiaomi/surya/Global_cal.acdb";

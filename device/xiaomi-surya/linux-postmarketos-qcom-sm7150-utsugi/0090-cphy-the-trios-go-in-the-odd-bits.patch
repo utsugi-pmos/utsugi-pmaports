@@ -37,13 +37,13 @@ same pass two other leads were ruled out by reading:
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c
 @@ -1514,9 +1514,23 @@
- 	 * fases. Lo correcto para tres trios es 0x07.
+ 	 * phases. The correct value for three trios is 0x07.
  	 */
  	if (cfg->cphy) {
 +		/*
-+		 * Los trios NO ocupan las mismas posiciones que los carriles
-+		 * de D-PHY: van INTERCALADOS entre ellas. Qualcomm lo calcula
-+		 * asi, con temp = (i << 1) + 1:
++		 * The trios do NOT occupy the same positions as the D-PHY
++		 * lanes: they are INTERLEAVED between them. Qualcomm computes it
++		 * like this, with temp = (i << 1) + 1:
 +		 *
 +		 *     while (mask != 0) {
 +		 *             temp = (i << 1) + 1;
@@ -51,8 +51,8 @@ same pass two other leads were ruled out by reading:
 +		 *             mask >>= 1; i++;
 +		 *     }
 +		 *
-+		 * o sea bits IMPARES 2i+1, mientras que D-PHY usa los PARES
-+		 * 2i mas el 7 del reloj. Para tres trios sale 0x2A, no 0x07.
++		 * that is ODD bits 2i+1, while D-PHY uses the EVEN
++		 * 2i ones plus bit 7 for the clock. For three trios that gives 0x2A, not 0x07.
 +		 */
  		val = 0;
  		for (i = 0; i < c->num_data; i++)
