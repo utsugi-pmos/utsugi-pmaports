@@ -11,14 +11,27 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 | POCO X3 NFC | `xiaomi-surya` (generic port `qcom-sm7150`) | cameras, in-call voice, volume, sensors, GPS, real power-off |
 | POCO X3 Pro | `xiaomi-vayu` | **experimental**, the modem does not work |
 
+## Status
+
+The repository is live and the packages below are published and signed. What is
+**not** there yet are the `utsugi-surya-base` / `utsugi-surya-full`
+metapackages and the tweak packages they pull in, so for now packages are
+installed one by one:
+
+```sh
+sudo apk add linux-postmarketos-qcom-sm7150-utsugi hexagonrpcd-utsugi \
+             iio-sensor-proxy-utsugi alsa-ucm-conf-qcom-sm7150-utsugi \
+             libcamera-utsugi plasma-camera-utsugi plasma-dialer-utsugi
+```
+
 ## Install it on a phone
 
 ```sh
-KEY=<the key file name, see the repository index page>
+KEY=utsugi-pmaports-6aa024e2.rsa.pub
 sudo wget -qO /etc/apk/keys/$KEY https://utsugi-pmos.github.io/utsugi-pmaports/keys/$KEY
 echo https://utsugi-pmos.github.io/utsugi-pmaports/main | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add utsugi-surya-full
+sudo apk add utsugi-surya-full     # not published yet, see Status above
 ```
 
 Two levels, pick one:
