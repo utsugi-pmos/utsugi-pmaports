@@ -17,7 +17,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # package is rebuilt. Loud, rather than silently broken.
 pkgname=keepalive
 pkgver=1.0
-pkgrel=1
+pkgrel=2
 _pmver=6.7.5
 pkgdesc="Keep chosen apps alive: swiping their card away minimises instead of closing"
 url="https://github.com/utsugi-pmos/keepalive"
@@ -48,16 +48,19 @@ makedepends="
 	"
 source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
 	plasma-mobile-$_pmver.tar.xz::https://download.kde.org/stable/plasma/$_pmver/plasma-mobile-$_pmver.tar.xz
-	0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+	keep-marked-apps-alive.diff
 	80-keepalive.preset
 	40-keepalive.conf
 	"
 
 prepare() {
-	# NOT default_prepare: it would try to apply the patch to OUR tree, and the
-	# file it touches lives in plasma-mobile's.
+	default_prepare
+
+	# Carried as .diff rather than .patch on purpose: default_prepare applies
+	# every *.patch in source= to OUR tree, and the file this one touches lives
+	# in plasma-mobile's.
 	cd "$srcdir/plasma-mobile-$_pmver"
-	patch -p1 -i "$srcdir"/0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+	patch -p1 -i "$srcdir"/keep-marked-apps-alive.diff
 }
 
 build() {
@@ -96,7 +99,7 @@ systemd() {
 sha512sums="
 cdc05fc40eb5dd976b920b26fc6e910fcb52427f21ce8bb802e792b9a85730bc7677c8bdd0453c69d440f535186f8a8d9b4d0cee9835d4ee78025caecc6fab23  keepalive-1.0.tar.gz
 2fb32939204c0c5f0cda7dbedaf1937e9e052211fe004fc0eadebee6139755c8b8d479253325975676bc00c3225d9325470f86c675ddbaa7a0f80a7b32d93c84  plasma-mobile-6.7.5.tar.xz
-f4b871e98c5afa4d8aa87e419d4e4de13a90cd778a2b44bcbf7d33d5d36095754190956f1e03424790fe7a8dcb48348854345f42969250eac9ea57cc3ae6f89e  0001-keep-marked-apps-alive-when-their-card-is-swiped-away.patch
+f4b871e98c5afa4d8aa87e419d4e4de13a90cd778a2b44bcbf7d33d5d36095754190956f1e03424790fe7a8dcb48348854345f42969250eac9ea57cc3ae6f89e  keep-marked-apps-alive.diff
 06035ad96e1777c9a892e6542a933f7ad8d283e3cf2f16b5a1f900dc7af6e7156c0f17e42c146f636ea593668efa0e254431f7044ae23b9022fc7c8c93e87fb9  80-keepalive.preset
 42740ac84b7459681a87c7c34f35f7d5f2a2c43dbbc2c8de94992b36cae7f2f83d887276af56d8703322a0e375eb0b344fcace3b87d889ea608626c21ee70702  40-keepalive.conf
 "

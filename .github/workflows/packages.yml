@@ -34,13 +34,18 @@ jobs:
           abuild-privkey: ${{ secrets.ABUILD_PRIVKEY }}
       - name: build
         run: |
+          # --force here, and it is not laziness: the mirror this runner reads
+          # already carries whatever was published from a laptop, so pmbootstrap
+          # would call every package "up to date" and build nothing, and the
+          # stale-artifact guard would then fail the job. CI rebuilds what the
+          # commit touched, full stop.
           if [ '${{ github.event_name }}' = workflow_dispatch ]; then
             case '${{ inputs.packages }}' in
-              all) scripts/build --all ;;
-              *)   scripts/build ${{ inputs.packages }} ;;
+              all) scripts/build --force --all ;;
+              *)   scripts/build --force ${{ inputs.packages }} ;;
             esac
           else
-            scripts/build --changed '${{ github.event.before }}'
+            scripts/build --force --changed '${{ github.event.before }}'
           fi
       - uses: actions/upload-artifact@v4
         with:
