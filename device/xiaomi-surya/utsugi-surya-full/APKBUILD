@@ -11,7 +11,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # a tag there and a pkgver bump here.
 pkgname=utsugi-surya-full
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Xiaomi POCO X3 NFC: the hardware layer plus the Plasma Mobile fixes"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
