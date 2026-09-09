@@ -3,159 +3,277 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>utsugi-pmaports</title>
 <style>
-:root {
-	color-scheme: light dark;
-	--bg: #fbfaf7; --fg: #1a1b1e; --dim: #5c5f66; --line: #e3e0d9;
-	--card: #fff; --accent: #7a5cff; --code-bg: #f2f0ea;
-}
-@media (prefers-color-scheme: dark) {
-	:root { --bg:#131417; --fg:#e6e5e3; --dim:#9a9da3; --line:#2a2c31;
-	        --card:#191a1e; --accent:#a48cff; --code-bg:#1f2126; }
-}
-* { box-sizing: border-box; }
-body { margin:0; background:var(--bg); color:var(--fg);
-	font:16px/1.65 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
-.wrap { max-width: 46rem; margin:0 auto; padding: 2.5rem 1.25rem 5rem; }
-h1 { font-size:2rem; margin:0 0 .3rem; letter-spacing:-.02em; }
-h2 { font-size:1.15rem; margin:2.6rem 0 .8rem; letter-spacing:-.01em; }
-h3 { font-size:.95rem; margin:1.4rem 0 .4rem; }
-p, li { color:var(--fg); }
-.lede { font-size:1.1rem; color:var(--dim); margin:0 0 1.6rem; }
-a { color:var(--accent); }
-code, pre { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.86rem; }
-pre { background:var(--code-bg); border:1px solid var(--line); border-radius:8px;
-	padding:.85rem 1rem; overflow-x:auto; }
-code:not(pre code) { background:var(--code-bg); padding:.1rem .35rem; border-radius:4px; }
-table { border-collapse:collapse; width:100%; margin:.6rem 0 1rem; font-size:.93rem; display:block; overflow-x:auto; }
-th, td { text-align:left; padding:.5rem .7rem; border-bottom:1px solid var(--line); vertical-align:top; }
-th { color:var(--dim); font-weight:600; font-size:.82rem; text-transform:uppercase; letter-spacing:.04em; }
-.cards { display:grid; gap:.7rem; grid-template-columns:repeat(auto-fit,minmax(13rem,1fr)); margin:.8rem 0 1.2rem; }
-.card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:.85rem 1rem; }
-.card b { display:block; font-size:.95rem; margin-bottom:.15rem; }
-.card span { color:var(--dim); font-size:.87rem; }
-.warn { border-left:3px solid #d9822b; background:var(--card); border-radius:0 8px 8px 0;
-	padding:.8rem 1rem; margin:1rem 0; font-size:.94rem; }
-.foot { margin-top:3.5rem; padding-top:1.2rem; border-top:1px solid var(--line);
-	color:var(--dim); font-size:.87rem; }
-.tag { display:inline-block; font-size:.72rem; text-transform:uppercase; letter-spacing:.05em;
-	color:var(--dim); border:1px solid var(--line); border-radius:999px; padding:.1rem .5rem; margin-left:.4rem; }
+:root { --ink:#101010; --paper:#f4f4ef; --box:#e6e6df; --mark:#ffe94f;
+	--bad:#ff5c5c; --ok:#1f8a4c; --link:#0a3fd1; }
+* { box-sizing:border-box; }
+html { scroll-behavior:smooth; }
+body { margin:0; background:var(--paper); color:var(--ink);
+	font:16px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+a { color:var(--link); }
+code { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:.87em; }
+
+.bar { position:sticky; top:0; z-index:9; background:var(--ink); color:var(--paper);
+	border-bottom:3px solid var(--ink); }
+.bar div { max-width:58rem; margin:0 auto; padding:.55rem 1rem; display:flex;
+	flex-wrap:wrap; gap:.2rem 1.1rem; align-items:baseline; }
+.bar b { font:800 .85rem/1 ui-monospace,monospace; letter-spacing:.06em;
+	text-transform:uppercase; margin-right:auto; }
+.bar a { color:var(--paper); text-decoration:none; font:700 .74rem/1 ui-monospace,monospace;
+	text-transform:uppercase; letter-spacing:.07em; opacity:.72; }
+.bar a:hover { opacity:1; text-decoration:underline; }
+
+.wrap { max-width:58rem; margin:0 auto; padding:0 1rem 5rem; }
+h1 { font:800 clamp(2rem,7vw,3.4rem)/.98 "Arial Black","Helvetica Neue",system-ui,sans-serif;
+	text-transform:uppercase; letter-spacing:-.03em; margin:2.4rem 0 .6rem; }
+h1 small { display:block; font:700 .9rem/1.3 ui-monospace,monospace; letter-spacing:.08em;
+	text-transform:uppercase; margin-top:.7rem; }
+.lede { font-size:1.05rem; max-width:38rem; border-left:6px solid var(--ink);
+	padding-left:.9rem; margin:0 0 1.6rem; }
+h2 { font:800 1.55rem/1.05 "Arial Black","Helvetica Neue",system-ui,sans-serif;
+	text-transform:uppercase; letter-spacing:-.02em; margin:3.4rem 0 .9rem;
+	padding-top:1.2rem; border-top:3px solid var(--ink); }
+h3 { font:700 .78rem/1 ui-monospace,monospace; text-transform:uppercase;
+	letter-spacing:.1em; background:var(--ink); color:var(--paper);
+	display:inline-block; padding:.32rem .6rem; margin:1.8rem 0 .7rem; }
+p { max-width:40rem; }
+
+table { border-collapse:collapse; width:100%; font-size:.9rem; border:2px solid var(--ink);
+	margin:.4rem 0 1.1rem; display:block; overflow-x:auto; white-space:nowrap; }
+@media (min-width:40rem) { table { display:table; white-space:normal; } }
+td, th { padding:.5rem .7rem; border:1px solid var(--ink); vertical-align:top; }
+th { background:var(--ink); color:var(--paper); text-align:left;
+	font:700 .72rem/1 ui-monospace,monospace; text-transform:uppercase; letter-spacing:.07em; }
+td:first-child { background:var(--box); font-family:ui-monospace,monospace; font-weight:700;
+	white-space:nowrap; }
+.no td:first-child { background:var(--ink); color:var(--paper); }
+
+pre { background:var(--ink); color:var(--paper); padding:.85rem 1rem; font-size:.83rem;
+	overflow-x:auto; margin:.6rem 0 1rem; }
+pre b { color:var(--mark); font-weight:400; }
+
+.warn { border:2px solid var(--ink); background:var(--mark); padding:.85rem 1rem;
+	margin:1.2rem 0; font-size:.93rem; }
+.warn b { text-transform:uppercase; font-family:ui-monospace,monospace; font-size:.8rem;
+	letter-spacing:.06em; display:block; margin-bottom:.25rem; }
+
+.grid { display:grid; gap:0; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr));
+	border:2px solid var(--ink); margin:.4rem 0 1.2rem; }
+.grid > div { border:1px solid var(--ink); padding:.85rem 1rem; }
+.grid b { display:block; font:800 .95rem/1.2 system-ui,sans-serif; margin-bottom:.2rem; }
+.grid span { font-size:.87rem; }
+.grid a { font-family:ui-monospace,monospace; font-size:.8rem; }
+
+.foot { border-top:3px solid var(--ink); margin-top:3.5rem; padding-top:1rem;
+	font:.8rem/1.6 ui-monospace,monospace; }
 </style>
+
+<div class="bar"><div>
+	<b>utsugi-pmaports</b>
+	<a href="#install">Install</a>
+	<a href="#devices">Devices</a>
+	<a href="#features">Features</a>
+	<a href="#apps">Apps</a>
+	<a href="#contribute">Contribute</a>
+</div></div>
+
 <div class="wrap">
 
-<h1>utsugi-pmaports</h1>
-<p class="lede">postmarketOS for two Xiaomi phones, packaged so that a clean install
-becomes a working phone with one <code>apk add</code> — and stays current with
-<code>apk upgrade</code>.</p>
+<h1>postmarketOS,<br>two Xiaomis
+<small>xiaomi-surya · xiaomi-vayu</small></h1>
 
-<div class="cards">
-<div class="card"><b>POCO X3 NFC</b><span><code>xiaomi-surya</code> — cameras, in-call
-voice, sensors, GPS, real power-off</span></div>
-<div class="card"><b>POCO X3 Pro</b><span><code>xiaomi-vayu</code> — experimental;
-the modem does not work</span></div>
-</div>
+<p class="lede">A signed apk repository and a flashable image, so a clean
+postmarketOS install becomes a working phone with one <code>apk add</code> — and
+stays current with <code>apk upgrade</code>.</p>
 
-<h2>Install it</h2>
-<p>postmarketOS is Alpine-based, so this is <b>apk</b>, not apt. On a phone that
-already runs postmarketOS edge:</p>
+<h3>The short version</h3>
 <pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
 echo @URL@/main | sudo tee -a /etc/apk/repositories
 sudo apk update &amp;&amp; sudo apk add utsugi-surya-full
-sudo reboot</pre>
+<b># then reboot, deliberately — see the warning under Install</b></pre>
 
-<div class="warn"><b>The kernel comes with it.</b> On the surya a kernel that does
-not boot is not a failed install, it is a reboot loop: the watchdog fires 20&nbsp;s
-after PID&nbsp;1 and there is no screen left to fix it from. Reboot as a separate,
-deliberate step, and read <a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/flash/surya.md">flash/surya.md</a> first.</div>
+<p>Prefer not to install anything? There is a ready image on the
+<a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases page</a>.</p>
 
-<h3>Three levels</h3>
+<h2 id="devices">Devices &amp; what does not work</h2>
+
+<p>Two phones, two SoCs, nothing shared between them: not a firmware, not a
+config, not a patch.</p>
+
+<div class="grid">
+	<div><b>POCO X3 NFC</b><span>SM7150 · <code>xiaomi-surya</code><br>
+	Usable as a daily phone. Modem, cameras, voice, sensors and GPS all work.</span></div>
+	<div><b>POCO X3 Pro</b><span>SM8150 · <code>xiaomi-vayu</code><br>
+	<b style="display:inline">Experimental.</b> The modem does not work, so it is
+	not a phone. Published for whoever wants to continue the investigation.</span></div>
+</div>
+
+<h3>Surya — not supported</h3>
+<table>
+<tr><th>Hardware</th><th>State</th></tr>
+<tr class="no"><td>Fingerprint</td><td><b>No path.</b> All four routes tried: MMIO to the
+controller hangs, MMIO to the pin panics, <code>spi-gpio</code> does not boot, and the
+TrustZone does not cover the TLMM.</td></tr>
+<tr class="no"><td>Stereo audio</td><td><b>Not possible without kernel work.</b> The I2S bus
+carries only the left channel, so both speakers are fed the same mix. Splitting them by
+channel leaves the bottom one mute.</td></tr>
+</table>
+
+<h3>Surya — known issues</h3>
+<table>
+<tr><th>Issue</th><th>Detail</th></tr>
+<tr><td>Echo in calls</td><td>Voice is heard on both sides, with echo. The canceller is
+wired and tunable at runtime; it is not yet dialled in.</td></tr>
+<tr><td>Microphone</td><td>There is signal in a recording, but that it is the microphone
+and not noise is unconfirmed.</td></tr>
+<tr><td>Shutdown freeze</td><td>The phone powers off correctly, but <b>why</b> the teardown
+freezes is still unexplained. The fix hands the power-off to the kernel before reaching
+that point rather than curing it.</td></tr>
+<tr><td>GPS engine lock</td><td>pmaports leaves the location engine locked on every
+Qualcomm device. Unlocked here; the bug is upstream.</td></tr>
+</table>
+
+<h3>Vayu — known issues</h3>
+<table>
+<tr><th>Issue</th><th>Detail</th></tr>
+<tr class="no"><td>Modem</td><td><b>Dies 2 to 4 s after the radio is switched on.</b>
+Pinned down to a single firmware assertion and <b>not fixed</b>. Without a modem it is
+not a usable phone.</td></tr>
+<tr><td>IPA firmware</td><td>Proprietary, so it is not shipped. A tool copies it off your
+own stock partition: <code>vayu-ipa-firmware-extract</code>.</td></tr>
+</table>
+
+<h2 id="features">What you get</h2>
+
+<h3>Kernel — 78 patches</h3>
+<table>
+<tr><td>Cameras</td><td>All three, including C-PHY support in CAMSS and three sensor
+drivers written for this phone. Rear autofocus runs as a user-space engine against a
+measured curve.</td></tr>
+<tr><td>Voice in call</td><td>Q6VOICE brought up: topologies registered from the stock
+ACDB, the vocproc modules turned on, the transmit path unmuted.</td></tr>
+<tr><td>Volume</td><td>The amplifier driver wrote the coefficient least-significant byte
+first; the chip latches on the low byte, so it stored garbage and the phone booted
+mute.</td></tr>
+<tr><td>Panel</td><td>60 Hz as well as 120, which is what makes a power-saving mode
+worth having.</td></tr>
+<tr><td>Power</td><td>A power-off that powers off, a charge screen when you plug in a
+phone that is off, and a watchdog that removes the need for a person when it hangs.</td></tr>
+</table>
+
+<h3>System</h3>
+<p>What used to be an installer writing into <code>/usr/local</code>, <code>/etc</code>
+and <code>$HOME</code> over ssh is now packages: helpers in <code>/usr/libexec</code>,
+units enabled by systemd presets, overrides as drop-ins instead of overwritten files, and
+Plasma defaults in <code>/etc/xdg</code> — the layer under <code>$HOME</code>, so anything
+you change still wins.</p>
+
+<h2 id="apps">Applications</h2>
+<p>Six, written for this phone because Plasma Mobile does not ship them. Each lives in its
+own repository and is built here from a tagged tarball.</p>
+
+<div class="grid">
+	<div><b>poconav</b><span>Car navigation with neural-network voice, made to be read
+	from a dashboard.</span><br><a href="https://github.com/utsugi-pmos/poconav">poconav →</a></div>
+	<div><b>screenglaze</b><span>Screenshots with volume-down + power, like Android, and a
+	sheet to share, save or crop.</span><br><a href="https://github.com/utsugi-pmos/screenglaze">screenglaze →</a></div>
+	<div><b>keepalive</b><span>Apps you mark minimise instead of closing when you swipe
+	their card away, so the next open is instant.</span><br><a href="https://github.com/utsugi-pmos/keepalive">keepalive →</a></div>
+	<div><b>app-usage</b><span>Battery use per application — the screen Plasma Mobile does
+	not have.</span><br><a href="https://github.com/utsugi-pmos/app-usage">app-usage →</a></div>
+	<div><b>smart-unlock</b><span>Skip the PIN on a trusted wifi, for a while after
+	unlocking, or in chosen time slots.</span><br><a href="https://github.com/utsugi-pmos/smart-unlock">smart-unlock →</a></div>
+	<div><b>lost-phone</b><span>Find your phone without Google: SMS, your own network, your
+	own relay, or ntfy.</span><br><a href="https://github.com/utsugi-pmos/lost-phone">lost-phone →</a></div>
+</div>
+
+<h2 id="install">Installation</h2>
+
+<p>postmarketOS is Alpine-based, so this is <b>apk</b>, not apt.</p>
+
+<h3>1 · On an existing install</h3>
+<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
+echo @URL@/main | sudo tee -a /etc/apk/repositories
+sudo apk update
+sudo apk add utsugi-surya-full</pre>
+
 <table>
 <tr><th>Package</th><th>What it brings</th></tr>
-<tr><td><code>utsugi-surya-base</code></td><td>the hardware: patched kernel, audio,
-sensors, GPS, cameras, power-off, charge mode</td></tr>
-<tr><td><code>utsugi-surya-full</code></td><td>base, plus the six applications and
-the Plasma Mobile fixes</td></tr>
-<tr><td><code>utsugi-surya-extras</code></td><td>optional applications: browser,
-mail, maps, messaging, photos</td></tr>
+<tr><td>utsugi-surya-base</td><td>The hardware: patched kernel, audio, sensors, GPS,
+cameras, power-off, charge mode.</td></tr>
+<tr><td>utsugi-surya-full</td><td>Base, plus the six applications and the Plasma Mobile
+fixes.</td></tr>
+<tr><td>utsugi-surya-extras</td><td>Optional applications: browser, mail, maps, messaging,
+photos. A choice, not a fix, which is why it is separate.</td></tr>
+<tr><td>utsugi-vayu-base</td><td>The experimental POCO X3 Pro set.</td></tr>
 </table>
-<p><code>extras</code> is separate on purpose: which browser you want is a choice,
-not a fix.</p>
 
-<h2>Or flash an image</h2>
-<p>A ready image with everything already inside is on the
-<a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases page</a>.
-It carries the repository line and the signing key, so <code>apk upgrade</code>
-tracks updates from the first boot.</p>
+<div class="warn"><b>Reboot on purpose, not by habit</b>
+The kernel comes with <code>base</code>. On the surya a kernel that does not boot is not a
+failed install, it is a reboot loop: the watchdog fires 20 s after PID 1 and there is no
+screen left to fix it from. And the <code>boot</code> partition holds U-Boot, not the
+kernel — writing a kernel there leaves the phone unable to boot at all. Read
+<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/flash/surya.md">flash/surya.md</a>
+before the first one.</div>
 
-<h3>Encrypted? Then you build it</h3>
-<p>There is no encrypted image to download, and that is deliberate. A LUKS master
-key is created when the disk is formatted — for an image, on the machine that
-builds it. Changing the passphrase later replaces the slot protecting that key,
-<b>not the key</b>. An encrypted image handed out would give whoever built it the
-master key of every phone flashed from it.</p>
+<h3>2 · Flash a ready image</h3>
+<p>On the <a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases
+page</a>, with everything already inside. It carries the repository line and the signing
+key, so <code>apk upgrade</code> tracks updates from the first boot.</p>
+<pre>sha256sum -c SHA256SUMS
+xz -d utsugi-surya-&lt;tag&gt;.img.xz
+fastboot flash userdata utsugi-surya-&lt;tag&gt;.img   <b># userdata. never boot.</b></pre>
+
+<h3>3 · Encrypted — you build it</h3>
+<p>There is no encrypted image to download, and that is on purpose. A LUKS master key is
+created when the disk is formatted, which for an image means on the machine that builds
+it. Changing the passphrase later replaces the slot protecting that key, <b>not the
+key</b>. An encrypted image handed out would give whoever built it the master key of every
+phone flashed from it.</p>
 <pre>scripts/build-your-own-image --encrypted</pre>
-<p>pmbootstrap asks <b>you</b> for the passphrase, and the key is generated on your
-machine. Tested end to end on the surya: the initramfs opens a LUKS that lives
-inside a loop file on <code>userdata</code>, and <code>unl0kr</code> draws its
-keyboard on this panel.</p>
+<p>pmbootstrap asks <b>you</b> for the passphrase and the key is generated on your machine.
+Tested end to end on the surya: the initramfs opens a LUKS that lives inside a loop file on
+<code>userdata</code>, and <code>unl0kr</code> draws its keyboard on this panel.</p>
 
-<h2>The applications</h2>
-<p>Six, each in its own repository, built here from a tagged tarball.</p>
+<h2 id="contribute">Contribute</h2>
+
+<p>Everything is here. The packaging is MIT; each patch and application keeps the licence
+of what it patches.</p>
+
+<h3>Repositories</h3>
+<div class="grid">
+	<div><b>utsugi-pmaports</b><span>The packages, the kernel patches, the build and publish
+	scripts.</span><br><a href="https://github.com/utsugi-pmos/utsugi-pmaports">utsugi-pmaports →</a></div>
+	<div><b>poconav</b><span>Car navigation.</span><br><a href="https://github.com/utsugi-pmos/poconav">poconav →</a></div>
+	<div><b>screenglaze</b><span>Screenshots.</span><br><a href="https://github.com/utsugi-pmos/screenglaze">screenglaze →</a></div>
+	<div><b>keepalive</b><span>Apps that stay alive.</span><br><a href="https://github.com/utsugi-pmos/keepalive">keepalive →</a></div>
+	<div><b>app-usage</b><span>Battery per application.</span><br><a href="https://github.com/utsugi-pmos/app-usage">app-usage →</a></div>
+	<div><b>smart-unlock</b><span>Skip the PIN when it is safe.</span><br><a href="https://github.com/utsugi-pmos/smart-unlock">smart-unlock →</a></div>
+	<div><b>lost-phone</b><span>Find the phone without Google.</span><br><a href="https://github.com/utsugi-pmos/lost-phone">lost-phone →</a></div>
+</div>
+
+<h3>Building it</h3>
+<pre>scripts/setup-workdir   <b># separate pmbootstrap work dir, pinned pmaports, signing key</b>
+scripts/build --all     <b># the kernel takes minutes</b>
+scripts/lint            <b># fork bookkeeping and version bumps</b>
+scripts/check-upstream  <b># says when a fork has fallen behind</b>
+scripts/publish --push  <b># sign and publish</b></pre>
+
+<h3>Where help is most useful</h3>
 <table>
-<tr><th>App</th><th>What it does</th></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/poconav">poconav</a></td><td>car
-navigation with neural-network voice, made for the dashboard</td></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/screenglaze">screenglaze</a></td><td>screenshots
-with volume-down + power, and a sheet to share, save or crop</td></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/keepalive">keepalive</a></td><td>apps
-you mark minimise instead of closing when you swipe their card away</td></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/app-usage">app-usage</a></td><td>battery
-use per application — the screen Plasma Mobile does not ship</td></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/smart-unlock">smart-unlock</a></td><td>skip
-the PIN on a trusted wifi, after unlocking, or in chosen time slots</td></tr>
-<tr><td><a href="https://github.com/utsugi-pmos/lost-phone">lost-phone</a></td><td>find
-your phone without Google: SMS, your own network, your own relay or ntfy</td></tr>
+<tr><td>Fingerprint</td><td>Four routes are documented as dead ends. A fifth would be
+welcome.</td></tr>
+<tr><td>Call echo</td><td>The canceller is wired and tunable at runtime. It needs someone
+with patience and a second phone.</td></tr>
+<tr><td>Vayu modem</td><td>The fault is pinned to one firmware assertion. Everything
+measured is written down.</td></tr>
+<tr><td>Upstreaming</td><td>Several fixes are not device-specific — the GPS engine lock
+affects every Qualcomm device on postmarketOS.</td></tr>
 </table>
-
-<h2>What is actually changed</h2>
-
-<h3>The kernel<span class="tag">78 patches</span></h3>
-<p>Cameras (all three, including C-PHY support in CAMSS and three sensor drivers),
-in-call voice, the volume coefficient the amplifier driver wrote backwards, the
-watchdog, 60&nbsp;Hz on the panel, and a power-off that powers off. Each patch
-carries its own write-up above the diff: what broke, what was measured, why the
-change is what it is.</p>
-
-<h3>Forked packages</h3>
-<p>Where a package needed patches, it is forked under its own name and claims
-upstream's with a versioned <code>provides</code>:</p>
-<pre>_orig=hexagonrpcd
-pkgname=$_orig-utsugi
-provides="$_orig=$pkgver-r$pkgrel"
-replaces="$_orig"</pre>
-<p>apk then refuses to have both installed, everything depending on
-<code>hexagonrpcd</code> is satisfied by ours, and an upstream release cannot
-silently take its place. <code>scripts/check-upstream</code> is the alarm for when
-a fork falls behind.</p>
-
-<h3>System tweaks</h3>
-<p>What used to be an installer writing into <code>/usr/local</code>,
-<code>/etc</code> and <code>$HOME</code> over ssh is now packages: helpers in
-<code>/usr/libexec</code>, units enabled by systemd presets, overrides as drop-ins
-rather than overwritten files, and Plasma defaults in <code>/etc/xdg</code> — the
-layer under <code>$HOME</code>, so anything you change still wins.</p>
-
-<h2>Building it yourself</h2>
-<pre>scripts/setup-workdir   # separate pmbootstrap work dir, pinned pmaports, signing key
-scripts/build --all     # the kernel takes minutes
-scripts/lint            # fork bookkeeping and version bumps
-scripts/publish --push  # sign and publish</pre>
 
 <div class="foot">
-Repository index: <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a> ·
-signing key: <a href="@URL@/keys/@KEY@">@KEY@</a> ·
-<a href="https://github.com/utsugi-pmos/utsugi-pmaports">source on GitHub</a><br>
-Packaging is MIT. Each patch and application keeps the licence of what it patches:
-the kernel work is GPL-2.0, libcamera's LGPL-2.1, the KDE applications GPL.
+index: <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a><br>
+key: <a href="@URL@/keys/@KEY@">@KEY@</a><br>
+packaging MIT · kernel patches GPL-2.0 · libcamera LGPL-2.1 · KDE apps GPL
 </div>
 
 </div>
