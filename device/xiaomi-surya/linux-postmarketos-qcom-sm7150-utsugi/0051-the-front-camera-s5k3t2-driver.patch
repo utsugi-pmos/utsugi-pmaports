@@ -15,7 +15,7 @@ calibration file, by two independent paths that agree:
 
 The front camera, on the other hand, says laneAssign = 0x3210 and
 0x0114 = 0x0300: four D-PHY lanes. And so do the others. The detail is in
-surya/docs/CAMARA-04-la-trasera-es-cphy.md.
+surya/docs/CAMERA-04-rear-is-cphy.md.
 
 (Along the way it corrects a note from the previous handover which read that
 register as 0x0111 and concluded D-PHY. The register is 0x0114 and it says the
@@ -106,7 +106,7 @@ module parameters, and are tested with rmmod/insmod:
 +		 * The rear one was on port@0 and has been removed: that sensor
 +		 * is wired in C-PHY and CAMSS only supports D-PHY, so it
 +		 * cannot work. Measured in the factory file; the why
-+		 * is in docs/CAMARA-04-la-trasera-es-cphy.md.
++		 * is in docs/CAMERA-04-rear-is-cphy.md.
 +		 *
 +		 * And it is not enough to disable the sensor node while leaving its
 +		 * port here: the CAMSS async notifier would be left
@@ -293,7 +293,7 @@ module parameters, and are tested with rmmod/insmod:
 + *   0x0114     = 0x02              three lanes, in the five mode tables
 + *
 + * CAMSS only supports D-PHY. The front one, in contrast, says laneAssign = 0x3210 and
-+ * 0x0114 = 0x0300: four D-PHY lanes. See docs/CAMARA-04-la-trasera-es-cphy.md.
++ * 0x0114 = 0x0300: four D-PHY lanes. See docs/CAMERA-04-rear-is-cphy.md.
 + *
 + * WHERE THE TABLES COME FROM
 + * -------------------------

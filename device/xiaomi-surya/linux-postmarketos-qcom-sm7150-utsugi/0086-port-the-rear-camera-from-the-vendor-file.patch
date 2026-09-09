@@ -39,7 +39,7 @@ comment.
 
 HOW IT WAS EXTRACTED
 --------------------
-With camara/sacar-la-trasera.py. The format was not obvious: regSetting does NOT
+With camera/extract-rear.py. The format was not obvious: regSetting does NOT
 carry (address, value) pairs but groups of ten u64 of which only the third is
 useful -the address-, and the values live apart in 8-byte registerData
 descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
@@ -92,7 +92,7 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
 +/*
 + * Mode 3 of the FIVE the factory file provides
 + * (com.qti.sensormodule.j20c_*_imx682_wide.bin), extracted with
-+ * camara/sacar-la-trasera.py. 74 registers, copied without touching anything.
++ * camera/extract-rear.py. 74 registers, copied without touching anything.
 + *
 + * This one is chosen and not the 64 MP one because of what was learned with the front camera:
 + * libcamera always takes the largest mode, and Bayer demosaicing
