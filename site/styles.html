@@ -1,0 +1,166 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>utsugi-pmaports — style options</title>
+<style>
+	body { margin:0; background:#0d0e11; color:#e6e5e3;
+		font:15px/1.6 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif; }
+	.pick { max-width:64rem; margin:0 auto; padding:2rem 1rem 4rem; }
+	.pick > h1 { font-size:1.5rem; margin:0 0 .3rem; }
+	.pick > p { color:#9a9da3; margin:0 0 2.5rem; max-width:40rem; }
+	.opt { margin:0 0 3rem; border-radius:12px; overflow:hidden;
+		border:1px solid #2a2c31; }
+	.opt > header { background:#16181c; padding:.7rem 1rem; display:flex;
+		gap:.7rem; align-items:baseline; border-bottom:1px solid #2a2c31; }
+	.opt > header b { font-size:.95rem; }
+	.opt > header span { color:#9a9da3; font-size:.85rem; }
+	.opt > header code { margin-left:auto; color:#a48cff; font-size:.8rem;
+		font-family:ui-monospace,monospace; }
+	.demo { padding:2rem 1.6rem; }
+
+	/* ---------- 1. Manual: quiet, printed, serif headings ---------- */
+	.s1 { background:#fbfaf7; color:#1a1b1e; }
+	.s1 h2 { font:600 1.7rem/1.2 Georgia,"Iowan Old Style",serif; margin:0 0 .4rem;
+		letter-spacing:-.01em; }
+	.s1 .lede { color:#5c5f66; font-size:1.05rem; margin:0 0 1.4rem; max-width:34rem; }
+	.s1 h3 { font:600 .78rem/1 system-ui,sans-serif; text-transform:uppercase;
+		letter-spacing:.12em; color:#8a6d3b; margin:1.6rem 0 .6rem; }
+	.s1 table { border-collapse:collapse; width:100%; font-size:.9rem; }
+	.s1 td { padding:.45rem 0; border-bottom:1px solid #e8e4da; }
+	.s1 td:first-child { font-family:ui-monospace,monospace; width:13rem; color:#3b3d42; }
+	.s1 pre { background:none; border:0; border-left:2px solid #d6d1c4; margin:1rem 0;
+		padding:.2rem 0 .2rem 1rem; font-size:.83rem; color:#3b3d42; overflow-x:auto; }
+	.s1 .warn { border:0; border-top:1px solid #e8e4da; border-bottom:1px solid #e8e4da;
+		padding:.8rem 0; margin:1.4rem 0; font-size:.9rem; color:#5c5f66; }
+	.s1 .warn b { color:#1a1b1e; }
+
+	/* ---------- 2. Console: monospace, phosphor, rules ---------- */
+	.s2 { background:#0b0f0c; color:#c8e6c9; font-family:ui-monospace,SFMono-Regular,monospace; }
+	.s2 h2 { font-size:1.4rem; margin:0 0 .2rem; color:#7fffab; font-weight:600; }
+	.s2 h2::before { content:"~/ "; color:#3f6b4f; }
+	.s2 .lede { color:#78997f; margin:0 0 1.2rem; font-size:.9rem; max-width:36rem; }
+	.s2 h3 { font-size:.82rem; color:#ffcf70; margin:1.5rem 0 .5rem; font-weight:600; }
+	.s2 h3::before { content:"── "; color:#2f4d3a; }
+	.s2 table { border-collapse:collapse; width:100%; font-size:.82rem; }
+	.s2 td { padding:.35rem .6rem; border-bottom:1px dashed #1e2f24; }
+	.s2 td:first-child { color:#7fffab; }
+	.s2 pre { background:#060a07; border:1px solid #1e2f24; padding:.7rem .9rem;
+		font-size:.8rem; color:#c8e6c9; overflow-x:auto; }
+	.s2 .warn { border:1px solid #6b4b1f; background:#140f06; color:#ffcf70;
+		padding:.7rem .9rem; font-size:.82rem; margin:1.2rem 0; }
+	.s2 .warn b { color:#ffe4a8; }
+
+	/* ---------- 3. Spec sheet: dark, boxed, data-forward ---------- */
+	.s3 { background:#131417; color:#e6e5e3; }
+	.s3 h2 { font-size:1.6rem; margin:0 0 .3rem; letter-spacing:-.02em; font-weight:650; }
+	.s3 .lede { color:#9a9da3; margin:0 0 1.4rem; max-width:36rem; }
+	.s3 h3 { font-size:.72rem; text-transform:uppercase; letter-spacing:.1em;
+		color:#7c7fe8; margin:1.6rem 0 .7rem; }
+	.s3 table { border-collapse:separate; border-spacing:0 .35rem; width:100%; font-size:.88rem; }
+	.s3 td { background:#1b1d22; padding:.6rem .8rem; }
+	.s3 td:first-child { border-radius:7px 0 0 7px; font-family:ui-monospace,monospace;
+		color:#a9b0ff; width:13rem; }
+	.s3 td:last-child { border-radius:0 7px 7px 0; color:#c3c5ca; }
+	.s3 pre { background:#0e0f12; border:1px solid #262930; border-radius:8px;
+		padding:.8rem 1rem; font-size:.82rem; overflow-x:auto; }
+	.s3 .warn { background:linear-gradient(90deg,#241a0d,#1b1d22); border-left:3px solid #e0922f;
+		border-radius:0 8px 8px 0; padding:.8rem 1rem; font-size:.9rem; margin:1.2rem 0; }
+
+	/* ---------- 4. Blueprint: high contrast, heavy grid ---------- */
+	.s4 { background:#f4f4ef; color:#101010; }
+	.s4 h2 { font:800 1.9rem/1 "Arial Black",system-ui,sans-serif; margin:0 0 .5rem;
+		text-transform:uppercase; letter-spacing:-.02em; }
+	.s4 .lede { font-size:.95rem; margin:0 0 1.4rem; max-width:34rem;
+		border-left:6px solid #101010; padding-left:.8rem; }
+	.s4 h3 { font:700 .8rem/1 ui-monospace,monospace; text-transform:uppercase;
+		letter-spacing:.1em; background:#101010; color:#f4f4ef; display:inline-block;
+		padding:.3rem .6rem; margin:1.6rem 0 .7rem; }
+	.s4 table { border-collapse:collapse; width:100%; font-size:.87rem;
+		border:2px solid #101010; }
+	.s4 td { padding:.5rem .7rem; border:1px solid #101010; }
+	.s4 td:first-child { font-family:ui-monospace,monospace; font-weight:700; width:13rem;
+		background:#e6e6df; }
+	.s4 pre { background:#101010; color:#f4f4ef; padding:.8rem 1rem; font-size:.82rem;
+		overflow-x:auto; border:0; }
+	.s4 .warn { border:2px solid #101010; background:#ffe94f; padding:.8rem 1rem;
+		font-size:.9rem; margin:1.2rem 0; }
+</style>
+
+<div class="pick">
+<h1>Four directions for the page</h1>
+<p>The same content in each, so the comparison is about the style and not about
+what it happens to say. Tell me a number and I apply it to the real page.</p>
+
+<div class="opt">
+	<header><b>1 · Manual</b><span>quiet, printed, serif headings</span><code>option 1</code></header>
+	<div class="demo s1">
+		<h2>utsugi-pmaports</h2>
+		<p class="lede">postmarketOS for two Xiaomi phones, packaged so that a clean
+		install becomes a working phone with one <code>apk add</code>.</p>
+		<h3>Three levels</h3>
+		<table>
+			<tr><td>utsugi-surya-base</td><td>kernel, audio, sensors, GPS, cameras, power</td></tr>
+			<tr><td>utsugi-surya-full</td><td>base, plus the six applications</td></tr>
+			<tr><td>utsugi-surya-extras</td><td>browser, mail, maps, messaging</td></tr>
+		</table>
+		<pre>sudo apk add utsugi-surya-full</pre>
+		<div class="warn"><b>The kernel comes with it.</b> A kernel that does not boot
+		on the surya is a reboot loop: the watchdog fires 20 s after PID 1.</div>
+	</div>
+</div>
+
+<div class="opt">
+	<header><b>2 · Console</b><span>monospace, phosphor, rules</span><code>option 2</code></header>
+	<div class="demo s2">
+		<h2>utsugi-pmaports</h2>
+		<p class="lede">postmarketOS for two Xiaomi phones, packaged so that a clean
+		install becomes a working phone with one <code>apk add</code>.</p>
+		<h3>Three levels</h3>
+		<table>
+			<tr><td>utsugi-surya-base</td><td>kernel, audio, sensors, GPS, cameras, power</td></tr>
+			<tr><td>utsugi-surya-full</td><td>base, plus the six applications</td></tr>
+			<tr><td>utsugi-surya-extras</td><td>browser, mail, maps, messaging</td></tr>
+		</table>
+		<pre>sudo apk add utsugi-surya-full</pre>
+		<div class="warn"><b>The kernel comes with it.</b> A kernel that does not boot
+		on the surya is a reboot loop: the watchdog fires 20 s after PID 1.</div>
+	</div>
+</div>
+
+<div class="opt">
+	<header><b>3 · Spec sheet</b><span>dark, boxed rows, data forward</span><code>option 3</code></header>
+	<div class="demo s3">
+		<h2>utsugi-pmaports</h2>
+		<p class="lede">postmarketOS for two Xiaomi phones, packaged so that a clean
+		install becomes a working phone with one <code>apk add</code>.</p>
+		<h3>Three levels</h3>
+		<table>
+			<tr><td>utsugi-surya-base</td><td>kernel, audio, sensors, GPS, cameras, power</td></tr>
+			<tr><td>utsugi-surya-full</td><td>base, plus the six applications</td></tr>
+			<tr><td>utsugi-surya-extras</td><td>browser, mail, maps, messaging</td></tr>
+		</table>
+		<pre>sudo apk add utsugi-surya-full</pre>
+		<div class="warn"><b>The kernel comes with it.</b> A kernel that does not boot
+		on the surya is a reboot loop: the watchdog fires 20 s after PID 1.</div>
+	</div>
+</div>
+
+<div class="opt">
+	<header><b>4 · Blueprint</b><span>high contrast, heavy grid</span><code>option 4</code></header>
+	<div class="demo s4">
+		<h2>utsugi-pmaports</h2>
+		<p class="lede">postmarketOS for two Xiaomi phones, packaged so that a clean
+		install becomes a working phone with one <code>apk add</code>.</p>
+		<h3>Three levels</h3>
+		<table>
+			<tr><td>utsugi-surya-base</td><td>kernel, audio, sensors, GPS, cameras, power</td></tr>
+			<tr><td>utsugi-surya-full</td><td>base, plus the six applications</td></tr>
+			<tr><td>utsugi-surya-extras</td><td>browser, mail, maps, messaging</td></tr>
+		</table>
+		<pre>sudo apk add utsugi-surya-full</pre>
+		<div class="warn"><b>The kernel comes with it.</b> A kernel that does not boot
+		on the surya is a reboot loop: the watchdog fires 20 s after PID 1.</div>
+	</div>
+</div>
+
+</div>
