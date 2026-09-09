@@ -96,6 +96,10 @@ git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$
 # anyone sees, and a page worth reading does not belong inside a shell script.
 sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
 	"$REPO/site/index.html.in" > "$SITE/index.html"
+# Anything else under site/ is copied as is (the style gallery, for one).
+for extra in "$REPO"/site/*.html; do
+	[ -e "$extra" ] && cp "$extra" "$SITE/"
+done
 green "  site ready: $SITE ($(du -sh "$SITE" | cut -f1))"
 
 if [ "$PUSH" = 1 ]; then
