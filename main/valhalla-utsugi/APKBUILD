@@ -38,7 +38,7 @@ maintainer="Bart Ribbers <bribbers@disroot.org>"
 _orig=valhalla
 pkgname=$_orig-utsugi
 pkgver=3.8.3
-pkgrel=1
+pkgrel=2
 # FORK of valhalla. Same files as upstream, so it claims upstream's name with a
 # versioned provides and a replaces: apk then refuses to have both installed and
 # every package that depends on "valhalla" is satisfied by this one.
