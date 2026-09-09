@@ -46,7 +46,7 @@ A NUMBER THAT IS NOT MEASURED
 factorGranAngular = 0.6. It is an ESTIMATE: it is obtained by photographing the
 same scene with both rear cameras and comparing how much it shrinks, and on
 trying it both came out black because the phone was face up. See
-camara/medir-el-factor-del-gran-angular. Until it is measured, the "0.6x" that
+camera/measure-wide-factor. Until it is measured, the "0.6x" that
 the bar shows is not to be trusted; the camera CROSSOVER does work with any
 value.
 
@@ -126,7 +126,7 @@ the ultra-wide has its own path.
 +
 +    // How much wider the wide angle sees. PROVISIONAL AND UNMEASURED: it is the
 +    // field of view ratio between the two rear cameras and libcamera does not
-+    // expose it. See camara/medir-el-factor-del-gran-angular.
++    // expose it. See camera/measure-wide-factor.
 +    readonly property real factorGranAngular: 0.6
 +    readonly property real zoomMaximo: 8.0
 +

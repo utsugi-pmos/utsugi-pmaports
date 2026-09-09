@@ -15,7 +15,7 @@ exactly as they come out of the file, without touching a comma.
 
 HOW I KNOW THE EXTRACTOR DOES NOT LIE
 
-camara/sacar-los-modos.py validates itself by two paths:
+camera/extract-modes.py validates itself by two paths:
 
   - In the five modes 0x0112/3 = 0x0a0a (RAW10) and 0x0114 = 0x02 (three trios)
     have to come out. If the address-value pairing were shifted, garbage would
@@ -123,7 +123,7 @@ dmesg, which is why it carries that message.
 + * regSetting. The five tables use THE SAME 74 addresses and only 53 values
 + * change, so they go in exactly as they come out, untouched.
 + *
-+ * Extracted with camara/sacar-los-modos.py, which validates itself: the
++ * Extracted with camera/extract-modes.py, which validates itself: the
 + * address-value pairing is good if in the five modes it yields
 + * 0x0112/3 = 0x0a0a (RAW10) and 0x0114 = 0x02 (three trios), and it does. Besides, the
 + * 2312x1304 table it generates is IDENTICAL byte for byte to the one that was already
