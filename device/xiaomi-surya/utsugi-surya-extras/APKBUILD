@@ -1,0 +1,38 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# The applications that make the phone a phone you would carry, once the hardware
+# already works. Everything here is a CHOICE, which is why it is a package of its
+# own and not part of utsugi-surya-full: nobody should have to argue with a
+# metapackage about which browser they want.
+#
+# All of it comes from Alpine or postmarketOS, on purpose: it keeps itself up to
+# date with apk upgrade and there is nothing of ours to maintain.
+#
+# NOT here, and they cannot be: Flatpaks need a network and the Flathub remote,
+# and web application launchers are written into the user's own directory. Those
+# stay in surya-setup, which runs on a booted phone with a session.
+pkgname=utsugi-surya-extras
+pkgver=1
+pkgrel=0
+pkgdesc="Optional applications: browser, mail, maps, messaging, photos"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="
+	firefox
+	mobile-config-firefox
+	keysmith
+	merkuro
+	pure-maps
+	osmscout-server
+	geoclue
+	tokodon
+	neochat
+	alligator
+	kasts
+	koko
+	"
+
+package() {
+	mkdir -p "$pkgdir"
+}

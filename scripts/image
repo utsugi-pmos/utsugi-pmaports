@@ -10,12 +10,13 @@ set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 . "$REPO/scripts/lib.sh"
 
-DEVICE=""; TAG="v$(date +%Y.%m.%d)"; RELEASE=0
+DEVICE=""; TAG="v$(date +%Y.%m.%d)"; RELEASE=0; FDE=0
 while [ $# -gt 0 ]; do
 	case "$1" in
 		--device) DEVICE="$2"; shift 2 ;;
 		--tag) TAG="$2"; shift 2 ;;
 		--release) RELEASE=1; shift ;;
+		--fde) FDE=1; shift ;;
 		*) die "unknown option: $1" ;;
 	esac
 done
@@ -27,6 +28,8 @@ esac
 grep -q "^pmaports_custom" "$PMB_CFG" || die "nothing published yet: run scripts/publish --push first"
 
 setup_sudo
+FDE_FLAG=""
+[ "$FDE" = 1 ] && FDE_FLAG="--fde"
 OUT="$WORK/release/$TAG-$DEVICE"
 mkdir -p "$OUT"
 
@@ -40,7 +43,22 @@ pmb zap
 # which is also what feeds the published repository. The local packages ARE the
 # published ones -- publish runs from the same directory -- so this builds the
 # same image without throwing the store away.
-pmb install --password 147147 --add "$META"
+if [ "$FDE" = 1 ]; then
+	# --fde is not a switch: it changes the partitioning, writes /etc/fstab
+	# pointing at /dev/mapper/root instead of a UUID, creates /etc/crypttab and
+	# regenerates the initramfs with unl0kr, the on-screen keyboard, inside. All
+	# four happen before the system exists, which is why encryption cannot be
+	# turned on later by installing a package.
+	#
+	# cryptsetup luksFormat runs HERE, on this machine, and that is the whole
+	# point: the master key is generated now, by you. It is also why an encrypted
+	# image cannot be handed out -- whoever built it would hold the master key of
+	# every phone flashed from it, and changing the passphrase afterwards does not
+	# change the master key.
+	pmb install --password 147147 $FDE_FLAG --add "$META"
+else
+	pmb install --password 147147 --add "$META"
+fi
 pmb export "$OUT"
 
 IMG="$OUT/utsugi-$DEVICE-$TAG.img"
@@ -51,6 +69,10 @@ xz -T0 -6 -f "$IMG"
 pmb chroot -r -- apk list -I 2>/dev/null | sort > "$OUT/PACKAGES.txt" || true
 cp "$REPO/flash/$DEVICE.md" "$OUT/flash.md"
 green "  $OUT ($(du -sh "$IMG.xz" | cut -f1))"
+
+if [ "$RELEASE" = 1 ] && [ "$FDE" = 1 ]; then
+	die "refusing to publish an encrypted image: it carries the master key generated here, so every phone flashed from it would share it. Encrypted images are built by their owner, not downloaded."
+fi
 
 if [ "$RELEASE" = 1 ]; then
 	command -v gh >/dev/null || die "gh is not installed"
