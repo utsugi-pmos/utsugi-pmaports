@@ -13,9 +13,21 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 
 ## Status
 
-The repository is live and signed, metapackages included. The
-six own applications each live in their own repository under the same
-organisation and are built from a tagged tarball.
+Working and published: a signed apk repository, and a flashable image for the
+POCO X3 NFC.
+
+- **Image**: [releases](https://github.com/utsugi-pmos/utsugi-pmaports/releases)
+  — 981 MB compressed, 1369 packages, kernel r252 and the six applications
+  already inside. Read [flash/surya.md](flash/surya.md) first: on this phone the
+  boot partition holds U-Boot, and writing a kernel there bricks the boot.
+- **Repository**: 71 packages, signed.
+
+Two of those packages are not ours and are temporary: `libphonenumber` and
+`webrtc-audio-processing-2`. Alpine edge bumped abseil-cpp, its soname went from
+2605 to 2608, and 254 published packages still ask for the old one; two of them
+sit in this device's path and nothing installs without them. They are Alpine's
+own recipes at Alpine's own pkgrel, and `scripts/check-upstream` says when to
+delete them.
 
 ## Install it on a phone
 
