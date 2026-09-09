@@ -80,7 +80,11 @@ changed_aports() {
 overlay() {
 	[ -d "$APORTS" ] || die "no pmaports checkout at $APORTS (run scripts/setup-workdir)"
 	mkdir -p "$APORTS/utsugi"
-	rsync -a --delete --exclude '.git' "$REPO/main" "$REPO/device" "$APORTS/utsugi/"
+	# --checksum, and it is not paranoia: rsync decides by size and mtime, and a
+	# pkgrel going from 1 to 2 changes neither the size nor, within the same
+	# second, the timestamp. Bumps were silently not reaching the checkout, so a
+	# rebuild kept producing the previous version.
+	rsync -a --delete --checksum --exclude '.git' "$REPO/main" "$REPO/device" "$APORTS/utsugi/"
 }
 
 # Read variables out of an APKBUILD without running its build. abuild helpers are

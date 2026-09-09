@@ -19,13 +19,19 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
 depends="kconfig plasma-dialer-utsugi"
+# /etc/xdg/plasmanotifyrc belongs to plasma-workspace. Two packages shipping the
+# same file is an error unless one is allowed to win, and ours has to: it is the
+# whole point of shipping a default. The priority is well above Alpine's so a
+# rebuild of theirs does not start winning by accident.
+replaces="plasma-workspace"
+replaces_priority=100
 subpackages="$pkgname-systemd"
 source="location-switch
 	power-saving-switch
