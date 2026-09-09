@@ -1,0 +1,35 @@
+From: cidwel <cidwel@gmail.com>
+Subject: [PATCH] arm64: dts: qcom: sm8150-xiaomi-vayu: reserve the hole between xbl and aop
+
+Downstream reserves 0x85d00000..0x85f40000 as one contiguous block
+(xbl_dump_mem plus xbl_aop_mem). Mainline covers xbl_mem, which ends at
+0x85e40000, and aop_mem, which starts at 0x85f00000: that leaves 768 KB
+unreserved in between, which the kernel hands out as normal memory.
+
+The AOP manages the RPMh resources, among them the clocks and the RF power,
+so corrupting its memory can show up very far away.
+
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-vayu-common.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-vayu-common.dtsi
+@@ -98,6 +98,21 @@
+ 	};
+ 
+ 	reserved-memory {
++		/*
++		 * Downstream reserves 0x85d00000..0x85f40000 in one go for XBL
++		 * and AOP. Mainline only covers xbl_mem (up to 0x85e40000) and
++		 * aop_mem (from 0x85f00000), leaving 768 KB loose in between
++		 * that Linux ends up using as ordinary memory.
++		 *
++		 * The AOP manages the RPMh resources, RF clocks and power
++		 * included, so trampling its memory can break things very far
++		 * from where it shows.
++		 */
++		xbl_aop_hole: memory@85e40000 {
++			reg = <0x0 0x85e40000 0x0 0xc0000>;
++			no-map;
++		};
++
+ 		tz_mem: memory@86200000 {
+ 			reg = <0x0 0x86200000 0x0 0x5500000>;
+ 			no-map;

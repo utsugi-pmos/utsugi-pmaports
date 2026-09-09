@@ -1,0 +1,23 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# Boot settings for the POCO X3 Pro, plus the tool that fetches the modem
+# firmware off the phone's own stock partition.
+pkgname=utsugi-vayu-boot
+pkgver=1
+pkgrel=0
+pkgdesc="Kernel command line and IPA firmware extractor for the Xiaomi POCO X3 Pro"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+source="60-utsugi-vayu.conf
+	vayu-ipa-firmware-extract
+	"
+
+package() {
+	install -Dm644 "$srcdir"/60-utsugi-vayu.conf -t "$pkgdir"/usr/lib/kernel-cmdline.d/
+	install -Dm755 "$srcdir"/vayu-ipa-firmware-extract -t "$pkgdir"/usr/bin/
+}
+sha512sums="
+926796b3275e6e5714c4cb0710b09deac4cbaaf7bcc54b0b35d18b4273ee6665b9c29b2d0a39d7927af7b8888543f2b477e089a5c7ac941a2fe94c8819dd7a2c  60-utsugi-vayu.conf
+159311d1d7bffac536ae7b2f5cbe1cfaeab6106151453b1af0911255e68e5c9dd5c392cd9335dca1d4aed6241e79dbb0a226107af5caf0e9637a5ae24c981900  vayu-ipa-firmware-extract
+"

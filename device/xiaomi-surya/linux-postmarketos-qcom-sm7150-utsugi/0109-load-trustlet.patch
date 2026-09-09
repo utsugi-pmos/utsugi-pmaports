@@ -1807,24 +1807,24 @@ conclusions from a second test.
 +{
 +	struct dentry *dir = debugfs_create_dir("probe_ta", NULL);
 +
-+	debugfs_create_file("estado", 0400, dir, NULL, &probe_ta_fops);
-+	debugfs_create_file("buscar", 0200, dir, NULL, &probe_search_fops);
-+	debugfs_create_file("emparejar", 0200, dir, NULL,
++	debugfs_create_file("state", 0400, dir, NULL, &probe_ta_fops);
++	debugfs_create_file("search", 0200, dir, NULL, &probe_search_fops);
++	debugfs_create_file("pair", 0200, dir, NULL,
 +			    &probe_pair_fops);
-+	debugfs_create_file("relojes", 0200, dir, NULL, &probe_clocks_fops);
-+	debugfs_create_file("preparar", 0200, dir, NULL,
++	debugfs_create_file("clocks", 0200, dir, NULL, &probe_clocks_fops);
++	debugfs_create_file("prepare", 0200, dir, NULL,
 +			    &probe_prepare_fops);
 +	debugfs_create_file("goodix", 0200, dir, NULL, &probe_goodix_fops);
 +	debugfs_create_file("goodixraw", 0200, dir, NULL,
 +			    &probe_goodixraw_fops);
 +	debugfs_create_file("goodixmod", 0200, dir, NULL,
 +			    &probe_goodixmod_fops);
-+	debugfs_create_file("leermem", 0200, dir, NULL,
++	debugfs_create_file("readmem", 0200, dir, NULL,
 +			    &probe_readmem_fops);
 +	debugfs_create_file("scmio", 0200, dir, NULL, &probe_scmio_fops);
-+	debugfs_create_file("cargar", 0200, dir, NULL, &probe_load_fops);
-+	debugfs_create_file("hablar", 0200, dir, NULL, &probe_talk_fops);
-+	debugfs_create_file("crudo", 0200, dir, NULL, &probe_raw_fops);
++	debugfs_create_file("load", 0200, dir, NULL, &probe_load_fops);
++	debugfs_create_file("talk", 0200, dir, NULL, &probe_talk_fops);
++	debugfs_create_file("raw", 0200, dir, NULL, &probe_raw_fops);
 +	debugfs_create_file("fpc", 0200, dir, NULL, &probe_fpc_fops);
 +	return 0;
 +}

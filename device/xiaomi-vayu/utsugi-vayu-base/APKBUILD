@@ -1,0 +1,30 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# EXPERIMENTAL, and the word is doing real work here.
+#
+# The modem of this device comes up and dies two to four seconds after the radio
+# is switched on. The fault is pinned to a single firmware assertion and is NOT
+# fixed. What this installs is the instrument set for continuing that
+# investigation: the patched kernel and the diag tooling. It does not make the
+# phone usable as a phone.
+#
+# The IPA firmware is proprietary and is not here. utsugi-vayu-boot brings a tool
+# that copies it off your own stock partition.
+pkgname=utsugi-vayu-base
+pkgver=1
+pkgrel=0
+pkgdesc="Xiaomi POCO X3 Pro: patched kernel and modem diagnostics (experimental, the modem does not work)"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="
+	utsugi-keys
+	device-xiaomi-vayu
+	linux-postmarketos-qcom-sm8150-utsugi
+	qcom-diag-utsugi
+	utsugi-vayu-boot
+	"
+
+package() {
+	mkdir -p "$pkgdir"
+}

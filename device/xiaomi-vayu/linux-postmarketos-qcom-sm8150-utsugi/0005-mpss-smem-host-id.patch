@@ -1,0 +1,22 @@
+From: cidwel <cidwel@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_pas: set smem_host_id for sm8150 mpss
+
+--- a/drivers/remoteproc/qcom_q6v5_pas.c	2026-08-03 01:18:13.371499063 +0200
++++ b/drivers/remoteproc/qcom_q6v5_pas.c	2026-08-03 01:18:13.381736070 +0200
+@@ -1265,6 +1265,16 @@
+ 	.ssr_name = "mpss",
+ 	.sysmon_name = "modem",
+ 	.ssctl_id = 0x12,
++
++	/*
++	 * LOCAL (vayu): without smem_host_id, nothing ever calls
++	 * qcom_smem_bust_hwspin_lock_by_host(), so if the modem dies while
++	 * holding the SMEM hwspinlock nobody releases it: the AP spins
++	 * forever (soft lockup, CPU 100% system, rcu_preempt starved) and
++	 * the whole of user space freezes.
++	 * sm8450/sm8550/sm8650 do declare it (1 = QCOM_SMEM_HOST_MODEM).
++	 */
++	.smem_host_id = 1,
+ };
+ 
+ static const struct qcom_pas_data sc8180x_mpss_resource = {

@@ -43,9 +43,9 @@ set -u
 # Which transition is this? Read from the pending jobs, because systemd tells
 # an ExecStop nothing about where the system is going.
 case "$(systemctl list-jobs --no-legend 2>/dev/null)" in
-	*poweroff.target*) modo=poweroff ;;
-	*reboot.target*)   modo=reboot ;;
-	*halt.target*)     modo=halt ;;
+	*poweroff.target*) mode=poweroff ;;
+	*reboot.target*)   mode=reboot ;;
+	*halt.target*)     mode=halt ;;
 	# Not a shutdown: an isolate, or this unit being restarted on its own.
 	# Measured 2026-09-07: an isolate does NOT freeze this phone (19 samples,
 	# none frozen), so there is nothing to dodge here.
@@ -56,9 +56,33 @@ esac
 # this, because journald is already being stopped when this runs -- looking for
 # it there and finding nothing was mistaken for "the script did not run", and
 # cost an afternoon. This file is the only place that says whether it acted.
-echo "$(date '+%F %T') $modo -f" >> /var/log/poweroff-for-real.log 2>/dev/null
+echo "$(date '+%F %T') $mode -f" >> /var/log/poweroff-for-real.log 2>/dev/null
 
 for b in /sys/class/backlight/*/brightness; do echo 0 > "$b" 2>/dev/null; done
 sync
 sync
-exec /bin/busybox "$modo" -f
+
+# "reboot bootloader" has to keep meaning that. busybox reboot takes no reason,
+# so going out through it turns every reboot into a plain one and the request to
+# stop in the bootloader is silently dropped -- which is why reaching fastboot on
+# this phone used to need the syscall by hand.
+#
+# systemd leaves the reason in /run/systemd/reboot-param. If there is one, the
+# reboot goes through the kernel with it; RESTART2 is the only call that carries
+# a string, and neither glibc nor musl expose it through reboot(), hence python.
+if [ "$mode" = reboot ] && [ -s /run/systemd/reboot-param ]; then
+	reason="$(cat /run/systemd/reboot-param)"
+	python3 - "$reason" <<'FIN' && exit 0
+import ctypes, sys
+libc = ctypes.CDLL(None, use_errno=True)
+libc.syscall.restype = ctypes.c_long
+# aarch64: __NR_reboot = 142, LINUX_REBOOT_CMD_RESTART2 = 0xA1B2C3D4
+libc.syscall(ctypes.c_long(142), ctypes.c_ulong(0xfee1dead),
+             ctypes.c_ulong(672274793), ctypes.c_ulong(0xA1B2C3D4),
+             ctypes.c_char_p(sys.argv[1].encode()))
+FIN
+	# If that returned, the reason could not be honoured; fall through rather
+	# than leave the phone half shut down.
+fi
+
+exec /bin/busybox "$mode" -f

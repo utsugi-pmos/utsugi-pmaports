@@ -1,0 +1,32 @@
+From: cidwel <cidwel@gmail.com>
+Subject: [PATCH] remoteproc: qcom_q6v5_pas: do not drop the proxy votes
+
+On sm8150 the modem boots, but the QLink link to the transceiver fails to
+wake up from hibernation: the modem's own log shows "Entered Qlink
+Hibernation mode" and then the assertion rflm_qlnk_ls_retry_cnt < 2 fires
+(Link Start failed twice). The RF scheduler also reports that every event
+overruns its window by a constant 7.0 %, which suggests the modem is
+running slower than its firmware assumes.
+
+Mainline drops the proxy votes (CX, MSS and the XO clock) as soon as the
+peripheral signals handover; downstream keeps them at TURBO. This
+experiment keeps them, to see whether the link stops failing.
+
+--- a/drivers/remoteproc/qcom_q6v5_pas.c
++++ b/drivers/remoteproc/qcom_q6v5_pas.c
+@@ -387,13 +387,8 @@
+ {
+ 	struct qcom_pas *pas = container_of(q6v5, struct qcom_pas, q6v5);
+ 
+-	if (pas->px_supply)
+-		regulator_disable(pas->px_supply);
+-	if (pas->cx_supply)
+-		regulator_disable(pas->cx_supply);
+-	clk_disable_unprepare(pas->aggre2_clk);
+-	clk_disable_unprepare(pas->xo);
+-	qcom_pas_pds_disable(pas, pas->proxy_pds, pas->proxy_pd_count);
++	/* TEST sm8150: keep the proxy votes instead of dropping them. */
++	(void)pas;
+ }
+ 
+ static int qcom_pas_stop(struct rproc *rproc)

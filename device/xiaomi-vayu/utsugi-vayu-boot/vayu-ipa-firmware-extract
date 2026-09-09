@@ -1,0 +1,29 @@
+#!/bin/sh
+# Copy the modem's IPA firmware out of this phone's own stock vendor partition.
+#
+# It is NOT shipped with this package and never will be: it is proprietary
+# Qualcomm/Xiaomi firmware. It is on your device already, and this only moves it
+# to where the kernel looks for it.
+#
+# Without it the IPA does not come up, and without the IPA there is no data path
+# at all -- so the modem cannot work even if everything else did.
+set -eu
+DEST=/lib/firmware/qcom/sm8150/xiaomi/vayu
+SRC=${1:-/vendor/firmware_mnt}
+
+[ "$(id -u)" = 0 ] || { echo "run this as root" >&2; exit 1; }
+[ -d "$SRC" ] || { echo "no $SRC: mount the stock vendor partition first, or pass its path" >&2; exit 1; }
+
+mkdir -p "$DEST"
+n=0
+for f in "$SRC"/ipa_fws.mdt "$SRC"/ipa_fws.b0*; do
+	[ -e "$f" ] || continue
+	install -m644 "$f" "$DEST/"
+	n=$((n + 1))
+done
+[ "$n" -gt 0 ] || { echo "found no ipa_fws.* under $SRC" >&2; exit 1; }
+
+# The firmware loader looks for the lowercase directory; the stock tree uses a
+# capital X, and a missing symlink here looks exactly like missing firmware.
+ln -sfn xiaomi /lib/firmware/qcom/sm8150/Xiaomi 2>/dev/null || true
+echo "installed $n files into $DEST"

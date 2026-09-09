@@ -26,15 +26,15 @@ FB = "/dev/fb0"
 SYS_FB = "/sys/class/graphics/fb0"
 QG = "/sys/class/power_supply/qcom_qg"
 
-FONDO = (0, 0, 0)
+BACKGROUND = (0, 0, 0)
 BORDE = (150, 150, 150)
-CARGANDO = (76, 175, 80)     # green
-LLENA = (255, 255, 255)
-BAJA = (229, 115, 115)       # soft red below 15 %
+CHARGING = (76, 175, 80)     # green
+FULL = (255, 255, 255)
+LOW = (229, 115, 115)       # soft red below 15 %
 RAYO = (20, 20, 20)          # the bolt is cut out over the fill
 
 
-def consola(modo):
+def console_mode(mode):
     """Silences (or restores) the framebuffer console.
 
     Without this fbcon writes the kernel messages ON TOP of the drawing, and this
@@ -47,14 +47,14 @@ def consola(modo):
     except OSError:
         return
     try:
-        fcntl.ioctl(fd, KDSETMODE, modo)
+        fcntl.ioctl(fd, KDSETMODE, mode)
     except OSError:
         pass
     finally:
         os.close(fd)
 
 
-def leer(ruta, por_defecto=""):
+def read_value(ruta, por_defecto=""):
     try:
         with open(ruta) as f:
             return f.read().strip()
@@ -63,12 +63,12 @@ def leer(ruta, por_defecto=""):
 
 
 def geometria():
-    ancho, alto = (int(v) for v in leer(f"{SYS_FB}/virtual_size", "1080,2400").split(","))
-    paso = int(leer(f"{SYS_FB}/stride", str(ancho * 4)))
-    bpp = int(leer(f"{SYS_FB}/bits_per_pixel", "32"))
+    width, height = (int(v) for v in read_value(f"{SYS_FB}/virtual_size", "1080,2400").split(","))
+    paso = int(read_value(f"{SYS_FB}/stride", str(width * 4)))
+    bpp = int(read_value(f"{SYS_FB}/bits_per_pixel", "32"))
     if bpp != 32:
         raise SystemExit(f"only 32-bit drawing is supported, and this screen uses {bpp}")
-    return ancho, alto, paso
+    return width, height, paso
 
 
 class Lienzo:
@@ -79,35 +79,35 @@ class Lienzo:
     night of charging.
     """
 
-    def __init__(self, x, y, ancho, alto):
-        self.x, self.y, self.ancho, self.alto = x, y, ancho, alto
-        self.datos = bytearray(ancho * alto * 4)
+    def __init__(self, x, y, width, height):
+        self.x, self.y, self.width, self.height = x, y, width, height
+        self.datos = bytearray(width * height * 4)
 
-    def rect(self, x, y, ancho, alto, color):
+    def rect(self, x, y, width, height, color):
         r, g, b = color
         # The framebuffer is 32-bit XRGB in little-endian: B, G, R, X.
         pixel = bytes((b, g, r, 255))
         x0, y0 = max(0, x), max(0, y)
-        x1, y1 = min(self.ancho, x + ancho), min(self.alto, y + alto)
+        x1, y1 = min(self.width, x + width), min(self.height, y + height)
         if x1 <= x0 or y1 <= y0:
             return
         fila = pixel * (x1 - x0)
         for fy in range(y0, y1):
-            i = (fy * self.ancho + x0) * 4
+            i = (fy * self.width + x0) * 4
             self.datos[i:i + len(fila)] = fila
 
-    def marco(self, x, y, ancho, alto, grosor, color):
-        self.rect(x, y, ancho, grosor, color)
-        self.rect(x, y + alto - grosor, ancho, grosor, color)
-        self.rect(x, y, grosor, alto, color)
-        self.rect(x + ancho - grosor, y, grosor, alto, color)
+    def frame(self, x, y, width, height, grosor, color):
+        self.rect(x, y, width, grosor, color)
+        self.rect(x, y + height - grosor, width, grosor, color)
+        self.rect(x, y, grosor, height, color)
+        self.rect(x + width - grosor, y, grosor, height, color)
 
     def poligono(self, puntos, color):
         """Scanline fill. Used by the bolt, which is not a rectangle."""
         if not puntos:
             return
         ys = [p[1] for p in puntos]
-        for fy in range(max(0, min(ys)), min(self.alto, max(ys) + 1)):
+        for fy in range(max(0, min(ys)), min(self.height, max(ys) + 1)):
             cortes = []
             for i in range(len(puntos)):
                 x1, y1 = puntos[i]
@@ -121,10 +121,10 @@ class Lienzo:
                 self.rect(int(cortes[i]), fy, int(cortes[i + 1]) - int(cortes[i]) + 1, 1, color)
 
     def volcar(self, fb, paso):
-        ancho = self.ancho * 4
-        for fila in range(self.alto):
+        width = self.width * 4
+        for fila in range(self.height):
             fb.seek((self.y + fila) * paso + self.x * 4)
-            fb.write(self.datos[fila * ancho:(fila + 1) * ancho])
+            fb.write(self.datos[fila * width:(fila + 1) * width])
 
 
 # Seven-segment digits: no fonts to install, and at this size they can be read
@@ -135,62 +135,62 @@ SEGMENTOS = {
 }
 
 
-def cifra(lienzo, x, y, ancho, alto, grosor, c, color):
+def cifra(lienzo, x, y, width, height, grosor, c, color):
     on = SEGMENTOS.get(c, "")
-    medio = y + (alto - grosor) // 2
-    if "a" in on: lienzo.rect(x, y, ancho, grosor, color)
-    if "g" in on: lienzo.rect(x, medio, ancho, grosor, color)
-    if "d" in on: lienzo.rect(x, y + alto - grosor, ancho, grosor, color)
-    if "f" in on: lienzo.rect(x, y, grosor, alto // 2, color)
-    if "b" in on: lienzo.rect(x + ancho - grosor, y, grosor, alto // 2, color)
-    if "e" in on: lienzo.rect(x, medio, grosor, alto - alto // 2, color)
-    if "c" in on: lienzo.rect(x + ancho - grosor, medio, grosor, alto - alto // 2, color)
+    medio = y + (height - grosor) // 2
+    if "a" in on: lienzo.rect(x, y, width, grosor, color)
+    if "g" in on: lienzo.rect(x, medio, width, grosor, color)
+    if "d" in on: lienzo.rect(x, y + height - grosor, width, grosor, color)
+    if "f" in on: lienzo.rect(x, y, grosor, height // 2, color)
+    if "b" in on: lienzo.rect(x + width - grosor, y, grosor, height // 2, color)
+    if "e" in on: lienzo.rect(x, medio, grosor, height - height // 2, color)
+    if "c" in on: lienzo.rect(x + width - grosor, medio, grosor, height - height // 2, color)
 
 
-def porciento(lienzo, x, y, alto, grosor, color):
-    d = alto // 3
-    lienzo.marco(x, y, d, d, grosor, color)
-    lienzo.marco(x + alto - d, y + alto - d, d, d, grosor, color)
-    lienzo.poligono([(x + alto - grosor, y), (x + alto, y),
-                     (x + grosor, y + alto), (x, y + alto)], color)
+def porciento(lienzo, x, y, height, grosor, color):
+    d = height // 3
+    lienzo.frame(x, y, d, d, grosor, color)
+    lienzo.frame(x + height - d, y + height - d, d, d, grosor, color)
+    lienzo.poligono([(x + height - grosor, y), (x + height, y),
+                     (x + grosor, y + height), (x, y + height)], color)
 
 
-def numero(lienzo, texto, cx, y, alto, color):
-    grosor = max(6, alto // 9)
-    ancho = int(alto * 0.55)
+def numero(lienzo, text, cx, y, height, color):
+    grosor = max(6, height // 9)
+    width = int(height * 0.55)
     hueco = grosor * 2
-    total = len(texto) * ancho + (len(texto) - 1) * hueco
+    total = len(text) * width + (len(text) - 1) * hueco
     x = cx - total // 2
-    for c in texto:
+    for c in text:
         if c == "%":
-            porciento(lienzo, x, y + alto // 3, alto * 2 // 3, grosor, color)
+            porciento(lienzo, x, y + height // 3, height * 2 // 3, grosor, color)
         else:
-            cifra(lienzo, x, y, ancho, alto, grosor, c, color)
-        x += ancho + hueco
+            cifra(lienzo, x, y, width, height, grosor, c, color)
+        x += width + hueco
 
 
-def limpiar(fb, alto, paso):
+def limpiar(fb, height, paso):
     negro = bytes(paso)
     fb.seek(0)
-    for _ in range(alto):
+    for _ in range(height):
         fb.write(negro)
 
 
 def main():
-    ancho, alto, paso = geometria()
+    width, height, paso = geometria()
 
     try:
-        cap = int(leer(f"{QG}/capacity", "0"))
+        cap = int(read_value(f"{QG}/capacity", "0"))
     except ValueError:
         cap = 0
     cap = max(0, min(100, cap))
-    estado = leer(f"{QG}/status")
+    status = read_value(f"{QG}/status")
 
-    color = CARGANDO if estado == "Charging" else (BAJA if cap < 15 else LLENA)
+    color = CHARGING if status == "Charging" else (LOW if cap < 15 else FULL)
 
     # The drawing box, centered. Outside it the screen stays black.
     caja_w, caja_h = 480, 1120
-    x0, y0 = (ancho - caja_w) // 2, (alto - caja_h) // 2
+    x0, y0 = (width - caja_w) // 2, (height - caja_h) // 2
     L = Lienzo(x0, y0, caja_w, caja_h)
 
     # Battery: the cap on top and the body below.
@@ -198,7 +198,7 @@ def main():
     cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h = 50, pico_h, 380, 760
     grosor = 8
     L.rect((caja_w - pico_w) // 2, 0, pico_w, pico_h, BORDE)
-    L.marco(cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h, grosor, BORDE)
+    L.frame(cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h, grosor, BORDE)
 
     # Fill, from bottom to top. A margin is left so it does not touch the
     # frame: flush against it, it reads as a single block and stops looking like a battery.
@@ -213,7 +213,7 @@ def main():
 
     # The bolt, only while charging: it is what tells "plugged in" apart from
     # "powered on with battery". It is drawn in the background color, cut out.
-    if estado == "Charging":
+    if status == "Charging":
         cx = caja_w // 2
         cy = cuerpo_y + cuerpo_h // 2
         L.poligono([(cx + 55, cy - 150), (cx - 15, cy + 20), (cx + 20, cy + 20),
@@ -222,17 +222,17 @@ def main():
 
     numero(L, f"{cap}%", caja_w // 2, cuerpo_y + cuerpo_h + 60, 150, BORDE)
 
-    if "--consola" in sys.argv:
-        consola(KD_TEXT)
+    if "--console_mode" in sys.argv:
+        console_mode(KD_TEXT)
         return
-    consola(KD_GRAPHICS)
+    console_mode(KD_GRAPHICS)
 
     with open(FB, "r+b", buffering=0) as fb:
         if "--solo-limpiar" in sys.argv:
-            limpiar(fb, alto, paso)
+            limpiar(fb, height, paso)
             return
         if "--limpiar" in sys.argv:
-            limpiar(fb, alto, paso)
+            limpiar(fb, height, paso)
         L.volcar(fb, paso)
 
 

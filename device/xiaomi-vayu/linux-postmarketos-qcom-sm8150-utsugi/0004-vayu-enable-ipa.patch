@@ -1,0 +1,29 @@
+From: cidwel <cidwel@gmail.com>
+Subject: [PATCH] arm64: dts: qcom: sm8150-xiaomi-vayu: enable IPA
+
+Without IPA there is no network port for the modem and ModemManager
+rejects the device with "Failed to find a net port in the QMI modem", even
+though QMI probing over QRTR works.
+
+We use qcom,gsi-loader = "self" with the ipa_fws.mdt extracted from the
+stock/LineageOS vendor partition. The "modem" mode was tried first and is
+not good enough: the driver gets as far as "received modem running event"
+but the modem never sends the ipa-setup-ready signal and the setup never
+completes.
+
+--- a/arch/arm64/boot/dts/qcom/sm8150-xiaomi-vayu-common.dtsi	2026-08-02 20:27:32.534942164 +0200
++++ b/arch/arm64/boot/dts/qcom/sm8150-xiaomi-vayu-common.dtsi	2026-08-02 20:27:32.545776414 +0200
+@@ -500,6 +500,13 @@
+ 	};
+ };
+ 
++&ipa {
++	qcom,gsi-loader = "self";
++	memory-region = <&ipa_fw_mem>;
++	firmware-name = "qcom/sm8150/Xiaomi/vayu/ipa_fws.mdt";
++	status = "okay";
++};
++
+ &spi17 {
+ 	status = "okay";
+ 	pinctrl-0 = <&qup_spi17_default>;
