@@ -34,11 +34,13 @@ title "Building the image for $DEVICE ($META, $TAG)"
 pmb config device "$PMOS_DEVICE"
 pmb config ui plasma-mobile
 pmb config service_manager systemd
-pmb zap -y
-# --no-local-pkgs is the point: only packages that are actually published may end
-# up in a release image. The signing key still reaches the phone, because the
-# metapackage depends on utsugi-keys, which carries it.
-pmb install --password 147147 --no-local-pkgs --add "$META"
+pmb zap
+# Not --no-local-pkgs: pmbootstrap refuses it while any locally built package
+# exists, and the only way to satisfy it is to delete the whole package store,
+# which is also what feeds the published repository. The local packages ARE the
+# published ones -- publish runs from the same directory -- so this builds the
+# same image without throwing the store away.
+pmb install --password 147147 --add "$META"
 pmb export "$OUT"
 
 IMG="$OUT/utsugi-$DEVICE-$TAG.img"
