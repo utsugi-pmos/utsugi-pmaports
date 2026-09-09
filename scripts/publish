@@ -92,15 +92,10 @@ green "  signed by $KEY"
 cp "$REPO"/keys/*.rsa.pub "$SITE/keys/"
 touch "$SITE/.nojekyll"                      # without it GitHub runs Jekyll over the tree
 git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$SITE/VERSION"
-cat > "$SITE/index.html" <<HTML
-<!doctype html><meta charset=utf-8><title>utsugi-pmaports</title>
-<h1>utsugi-pmaports</h1>
-<p>postmarketOS packages for the Xiaomi POCO X3 NFC (surya) and POCO X3 Pro (vayu).</p>
-<pre>sudo wget -qO /etc/apk/keys/$KEY.pub $REPO_URL/keys/$KEY.pub
-echo $REPO_URL/$CHANNEL_DIR | sudo tee -a /etc/apk/repositories
-sudo apk update &amp;&amp; sudo apk add utsugi-surya-full</pre>
-<p><a href="https://github.com/utsugi-pmos/utsugi-pmaports">Source and documentation</a></p>
-HTML
+# The landing page is a template in site/, not a heredoc: it is the first thing
+# anyone sees, and a page worth reading does not belong inside a shell script.
+sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
+	"$REPO/site/index.html.in" > "$SITE/index.html"
 green "  site ready: $SITE ($(du -sh "$SITE" | cut -f1))"
 
 if [ "$PUSH" = 1 ]; then
