@@ -10,9 +10,8 @@ on:
         default: surya
       tag:
         description: 'release tag, e.g. v2026.09.08'
-  # Weekly builds wait for the signing secret too.
-  # schedule:
-  #   - cron: '0 3 * * 1'
+  schedule:
+    - cron: '0 3 * * 1'
 
 permissions:
   contents: write

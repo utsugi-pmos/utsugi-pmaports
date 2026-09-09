@@ -1,0 +1,106 @@
+# Co-Maintainer: Viola Guerrera <guerrera.nicola@gmail.com>
+maintainer="Pan Ortiz <panjeoc@proton.me>"
+# LOCAL: apunta a sm8150/7.0-wip para incluir los DTB de xiaomi-vayu,
+# que no existen en ningun tag publicado (ver v6.17.0-sm8150).
+_flavor="postmarketos-qcom-sm8150"
+_orig=linux-$_flavor
+pkgname=$_orig-utsugi
+pkgver=7.0.0_git20260626
+pkgrel=18
+
+# FORK of linux-postmarketos-qcom-sm8150, EXPERIMENTAL. The modem on this device
+# comes up and dies two to four seconds after the radio is switched on; these
+# patches are the investigation, not a fix.
+#
+# _flavor is deliberately unchanged so /boot, /lib/modules and
+# /usr/share/kernel/<flavor> keep upstream's paths and mkinitfs still finds the
+# kernel. Only the package name differs.
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"
+pkgdesc="Mainline Kernel fork for SM8150 devices (7.0-wip, con vayu)"
+arch="aarch64"
+_carch="arm64"
+url="https://gitlab.postmarketos.org/soc/qualcomm-sm8150/linux"
+license="GPL-2.0-only"
+options="!strip !check !tracedeps
+	pmb:cross-native
+	pmb:kconfigcheck-nftables
+	"
+makedepends="
+	bison
+	clang
+	findutils
+	flex
+	lld
+	llvm
+	openssl-dev
+	perl
+	postmarketos-installkernel
+	python3
+	"
+
+_commit="8e126dbc4044ef2cec3ebe5754ddb05faa554af6"
+
+source="
+	linux-$_commit.tar.gz::$url/-/archive/$_commit/linux-$_commit.tar.gz
+	config-$_flavor.$arch
+	0004-vayu-enable-ipa.patch
+	0005-mpss-smem-host-id.patch
+	0006-rmtfs-guard-pages.patch
+	0007-xbl-aop-hole.patch
+	0008-mpss-keep-proxy-votes.patch
+"
+builddir="$srcdir/linux-$_commit"
+
+prepare() {
+	default_prepare
+	cp "$srcdir/config-$_flavor.$arch" .config
+	# El config viene de 6.17; resolver simbolos nuevos de 7.0 sin preguntar
+	make ARCH="$_carch" LLVM=1 olddefconfig
+}
+
+build() {
+	unset LDFLAGS
+	make ARCH="$_carch" LLVM=1 \
+		KBUILD_BUILD_VERSION="$((pkgrel + 1 ))-$_flavor"
+}
+
+package() {
+	if [ -e "$builddir/arch/$_carch/boot/vmlinuz.efi" ]; then
+		install -Dm644 "$builddir/arch/$_carch/boot/vmlinuz.efi" \
+			"$pkgdir/boot/linux.efi"
+		install -Dm644 "$builddir/arch/$_carch/boot/vmlinuz" \
+			"$pkgdir/boot/vmlinuz"
+	else
+		echo "WARNING: CONFIG_ZBOOT not enabled!"
+		install -Dm644 "$builddir/arch/$_carch/boot/Image.gz" \
+			"$pkgdir/boot/vmlinuz"
+	fi
+
+	make modules_install dtbs_install \
+		ARCH="$_carch" \
+		LLVM=1 \
+		INSTALL_PATH="$pkgdir"/boot/ \
+		INSTALL_MOD_PATH="$pkgdir" \
+		INSTALL_MOD_STRIP=1 \
+		INSTALL_DTBS_PATH="$pkgdir"/boot/dtbs-tmp
+
+	mkdir -p "$pkgdir"/boot/dtbs/qcom
+	cp -r "$pkgdir"/boot/dtbs-tmp/qcom/sm8150* "$pkgdir"/boot/dtbs/qcom
+	rm -rf "$pkgdir"/boot/dtbs-tmp
+
+	rm -f "$pkgdir"/lib/modules/*/build "$pkgdir"/lib/modules/*/source
+
+	install -D "$builddir"/include/config/kernel.release \
+		"$pkgdir"/usr/share/kernel/$_flavor/kernel.release
+}
+
+sha512sums="
+6b3d4bdedfcae62d2bf603b0d9e038742804b06181a21e5f830183031d346a856dff05e9d6fbb226b40b5a47fba4a8622b8c31357db5675c7de172443d91efde  linux-8e126dbc4044ef2cec3ebe5754ddb05faa554af6.tar.gz
+62a03e26bedc4713cf9650d66739270817e220951c20877ae9e34431c278195fbc1392e85736d2704dd8164e1561c408b30d5a4650250d416762066a1032f273  config-postmarketos-qcom-sm8150.aarch64
+298ca756e91072826285136f013546db834b85d3a25ff0e511ea01688b1ae649e8a9bca08249a25e8059bca6e31683469095dd0bc3a079b9f3cf64c21d117806  0004-vayu-enable-ipa.patch
+3cc8e09f1ce4f50cb9a0320cd8cab6263240d18ebce877226d7c5463a3e1488f830db4e370ecd8816930fd114ca1f12fa5dba62da015031576e86423e1feaf67  0005-mpss-smem-host-id.patch
+e110f99a4f56553f21ab5e85c2921077287f20f3c993e2fd6c770eaf5200ac7ba774ad9dd366881c2fdb876985d766370098861b2e7b5d86f395a3b3139225fa  0006-rmtfs-guard-pages.patch
+68d8eae61707a3ac4977731430b9aaf29dce9fc1b59cb0ab9e7ff1258a774e4768db2a5302e499ebdb9b2e9bdade94b936c52ebd31d2adcb3b2ffd541994f27c  0007-xbl-aop-hole.patch
+4fb23a7125b8e3f8edbf8140979ebb97e573953395b133d7cdf51b70c27e101dc84c09b36c76ecdc896114e4215d41eece972c18e7189f76853dfd0db11f389f  0008-mpss-keep-proxy-votes.patch
+"
