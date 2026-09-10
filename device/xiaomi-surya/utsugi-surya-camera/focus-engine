@@ -33,10 +33,10 @@ HOW YOU TALK TO IT
 ------------------
 Through a named pipe. You write a number and the lens goes there:
 
-    echo 512 > /run/enfoque-surya
+    echo 512 > /run/focus-engine
 
 The state -requested position, what the chip answered and whether the motor is
-alive- is left in /run/enfoque-surya.estado, so that whoever focuses can check
+alive- is left in /run/focus-engine.state, so that whoever focuses can check
 that the order actually went in instead of just trusting it.
 
 That check matters: the echo of `v4l2-ctl -C` returns the value stored in the
@@ -51,24 +51,24 @@ import subprocess
 import sys
 import time
 
-TUBERIA = pathlib.Path("/run/enfoque-surya")
-ESTADO = pathlib.Path("/run/enfoque-surya.estado")
+PIPE = pathlib.Path("/run/focus-engine")
+STATE = pathlib.Path("/run/focus-engine.state")
 MOTOR = "dw9807"
 CHIP = "12-000c"
-BUS_I2C = "12"
-DIRECCION = "0x0c"
-REG_POSICION = "0x03"
+I2C_BUS = "12"
+ADDRESS = "0x0c"
+REG_POSITION = "0x03"
 
 
-def corre(orden, tiempo=10):
+def run_cmd(command, timeout=10):
     try:
-        return subprocess.run(orden, shell=True, capture_output=True, text=True,
-                              timeout=tiempo)
+        return subprocess.run(command, shell=True, capture_output=True, text=True,
+                              timeout=timeout)
     except subprocess.TimeoutExpired:
-        return subprocess.CompletedProcess(orden, 1, "", "timed out")
+        return subprocess.CompletedProcess(command, 1, "", "timed out")
 
 
-def buscar_nodo():
+def find_node():
     """The motor's subdev, by NAME. The number changes between boots."""
     for d in sorted(pathlib.Path("/dev").glob("v4l-subdev*")):
         n = pathlib.Path("/sys/class/video4linux") / d.name / "name"
@@ -80,7 +80,7 @@ def buscar_nodo():
     return None
 
 
-def energia():
+def power_state():
     try:
         return (pathlib.Path("/sys/bus/i2c/devices") / CHIP /
                 "power/runtime_status").read_text().strip()
@@ -88,8 +88,8 @@ def energia():
         return "?"
 
 
-def quien_mas_lo_tiene_abierto(nodo):
-    """Processes -other than this one- with `nodo` open. Returns ["1394 wireplumber"...]."""
+def quien_mas_lo_tiene_abierto(node):
+    """Processes -other than this one- with `node` open. Returns ["1394 wireplumber"...]."""
     mio = os.getpid()
     otros = []
     for p in pathlib.Path("/proc").iterdir():
@@ -98,7 +98,7 @@ def quien_mas_lo_tiene_abierto(nodo):
         try:
             for enlace in (p / "fd").iterdir():
                 try:
-                    if os.readlink(enlace) == nodo:
+                    if os.readlink(enlace) == node:
                         quien = (p / "comm").read_text().strip()
                         otros.append(f"{p.name} {quien}")
                         break
@@ -109,7 +109,7 @@ def quien_mas_lo_tiene_abierto(nodo):
     return otros
 
 
-def reenganchar():
+def rebind():
     """Cleans the `error` state. Only works with the sensor transmitting.
 
     It REFUSES if some other process has the node open, and that is not
@@ -126,24 +126,24 @@ def reenganchar():
     It happened on 2026-08-21 with `wireplumber` holding the node: two CFI oopses.
     The whole file is in docs/CAMERA-07-motor-reattach-leaves-nodes-dangling.md
     """
-    nodo = buscar_nodo()
-    if nodo:
-        otros = quien_mas_lo_tiene_abierto(nodo)
+    node = find_node()
+    if node:
+        otros = quien_mas_lo_tiene_abierto(node)
         if otros:
-            print(f"NOT re-binding {nodo}: it is held open by {', '.join(otros)}; "
+            print(f"NOT re-binding {node}: it is held open by {', '.join(otros)}; "
                   "unbinding now would crash the kernel when they close it",
                   file=sys.stderr, flush=True)
             return False
 
     d = f"/sys/bus/i2c/drivers/{MOTOR}"
-    corre(f"echo {CHIP} > {d}/unbind")
+    run_cmd(f"echo {CHIP} > {d}/unbind")
     time.sleep(1)
-    corre(f"echo {CHIP} > {d}/bind")
+    run_cmd(f"echo {CHIP} > {d}/bind")
     time.sleep(2)
     return True
 
 
-def sujetar():
+def hold():
     """Opens the node and returns the descriptor, or None if it cannot yet.
 
     It is NEVER closed while the service lives: that descriptor is precisely what
@@ -155,34 +155,34 @@ def sujetar():
     # may come out different. Looking it up first would open the old node, which no
     # longer exists: it failed with `could-not-open-the-node` while the motor was
     # perfectly available under another number.
-    if energia() == "error":
-        reenganchar()
-    nodo = buscar_nodo()
-    if not nodo:
+    if power_state() == "error":
+        rebind()
+    node = find_node()
+    if not node:
         return None, None
     try:
-        return os.open(nodo, os.O_RDWR), nodo
+        return os.open(node, os.O_RDWR), node
     except OSError as e:
         # The normal case at startup: the bus is not alive yet because nobody is
         # transmitting.
-        return None, f"{nodo} ({e.strerror})"
+        return None, f"{node} ({e.strerror})"
 
 
-def escribir(nodo, pos):
+def write_position(node, pos):
     """Sets the position and returns what the CHIP says, not the kernel echo."""
-    r = corre(f"v4l2-ctl -d {nodo} -c focus_absolute={pos}")
+    r = run_cmd(f"v4l2-ctl -d {node} -c focus_absolute={pos}")
     if r.returncode:
         return None, (r.stderr or r.stdout).strip().splitlines()[-1:] or ["failed"]
     time.sleep(0.05)
-    lee = corre(f"i2ctransfer -y -f {BUS_I2C} w1@{DIRECCION} {REG_POSICION} r2")
-    return lee.stdout.strip(), None
+    reading = run_cmd(f"i2ctransfer -y -f {I2C_BUS} w1@{ADDRESS} {REG_POSITION} r2")
+    return reading.stdout.strip(), None
 
 
-def anotar(**datos):
-    ESTADO.write_text(" ".join(f"{k}={v}" for k, v in datos.items()) + "\n")
+def note(**fields):
+    STATE.write_text(" ".join(f"{k}={v}" for k, v in fields.items()) + "\n")
 
 
-def vigilar(estado):
+def watch(state):
     """Grabs the node as soon as it can, without waiting to be asked.
 
     Opening it requires that someone is transmitting, so it cannot be done at
@@ -195,64 +195,64 @@ def vigilar(estado):
     the lens is protected from that very instant instead of from the first order.
     """
     while True:
-        if estado["fd"] is None:
-            with estado["cerrojo"]:
-                if estado["fd"] is None:
-                    fd, nodo = sujetar()
+        if state["fd"] is None:
+            with state["lock"]:
+                if state["fd"] is None:
+                    fd, node = hold()
                     if fd is not None:
-                        estado["fd"], estado["nodo"] = fd, nodo
-                        anotar(estado="listo", nodo=nodo, energia=energia())
+                        state["fd"], state["node"] = fd, node
+                        note(state="ready", node=node, power_state=power_state())
         time.sleep(2)
 
 
 def main():
-    if TUBERIA.exists() and not TUBERIA.is_fifo():
-        TUBERIA.unlink()
-    if not TUBERIA.exists():
-        os.mkfifo(TUBERIA, 0o666)
-    os.chmod(TUBERIA, 0o666)
+    if PIPE.exists() and not PIPE.is_fifo():
+        PIPE.unlink()
+    if not PIPE.exists():
+        os.mkfifo(PIPE, 0o666)
+    os.chmod(PIPE, 0o666)
 
-    estado = {"fd": None, "nodo": None, "cerrojo": threading.Lock()}
-    anotar(estado="esperando", motivo="hace-falta-que-la-camara-transmita")
+    state = {"fd": None, "node": None, "lock": threading.Lock()}
+    note(state="waiting", reason="needs-the-camera-transmitting")
     print("waiting for someone to transmit so the motor can be opened",
           file=sys.stderr, flush=True)
-    threading.Thread(target=vigilar, args=(estado,), daemon=True).start()
+    threading.Thread(target=watch, args=(state,), daemon=True).start()
 
     while True:
         # The pipe is reopened on each turn: when the last writer closes, reading
         # returns empty and it has to be reopened. Opening for reading BLOCKS until
         # someone writes, so this consumes nothing.
-        with open(TUBERIA, "r") as t:
-            for linea in t:
-                linea = linea.strip()
-                if not linea:
+        with open(PIPE, "r") as t:
+            for line in t:
+                line = line.strip()
+                if not line:
                     continue
-                if not linea.lstrip("-").isdigit():
-                    anotar(estado="orden-no-valida", recibido=linea)
+                if not line.lstrip("-").isdigit():
+                    note(state="command-no-valida", received=line)
                     continue
-                pos = max(0, min(1023, int(linea)))
+                pos = max(0, min(1023, int(line)))
 
                 # It tries to grab it HERE and not only at startup: the first order
                 # usually arrives just when the camera has started to transmit,
                 # which is the first time it can be opened.
-                if estado["fd"] is None:
-                    with estado["cerrojo"]:
-                        if estado["fd"] is None:
-                            estado["fd"], estado["nodo"] = sujetar()
-                if estado["fd"] is None:
-                    anotar(estado="sin-motor", pedido=pos, energia=energia(),
-                           motivo=f"no-se-pudo-abrir[{estado['nodo']}]")
+                if state["fd"] is None:
+                    with state["lock"]:
+                        if state["fd"] is None:
+                            state["fd"], state["node"] = hold()
+                if state["fd"] is None:
+                    note(state="no-motor", wanted=pos, power_state=power_state(),
+                           reason=f"could-not-open[{state['node']}]")
                     continue
 
-                dac, fallo = escribir(estado["nodo"], pos)
-                if fallo:
+                dac, failure = write_position(state["node"], pos)
+                if failure:
                     # Almost always: the camera stopped transmitting and the bus
                     # died.
-                    anotar(estado="no-entro", pedido=pos, energia=energia(),
-                           motivo=" ".join(fallo))
+                    note(state="did-not-take", wanted=pos, power_state=power_state(),
+                           reason=" ".join(failure))
                 else:
-                    anotar(estado="puesto", pedido=pos, dac=dac,
-                           energia=energia())
+                    note(state="set", wanted=pos, dac=dac,
+                           power_state=power_state())
 
 
 if __name__ == "__main__":
