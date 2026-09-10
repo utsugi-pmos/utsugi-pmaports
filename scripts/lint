@@ -7,7 +7,10 @@
 # 2. a touched package has a higher version than before (pmbootstrap silently
 #    skips a build whose version already exists, so a forgotten bump looks like
 #    a successful publish that changed nothing)
-# 3. apkbuild-lint, when atools is available
+# 3. every aport is reachable from a metapackage -- three times in one day a
+#    package was published that nothing asked for, and each time it worked by
+#    accident until it did not
+# 4. apkbuild-lint, when atools is available
 set -eu
 REPO="$(cd "$(dirname "$0")/.." && pwd)"
 . "$REPO/scripts/lib.sh"
@@ -49,6 +52,64 @@ if [ -n "$BASE" ]; then
 		else green "  $pkg: $old -> $new"; fi
 	done
 fi
+
+title "Reachable from a metapackage"
+# A PACKAGE NOBODY ASKS FOR IS A PACKAGE THAT WORKS BY ACCIDENT.
+#
+# Three found on 2026-09-10, each published and each depended on by nothing:
+# plasma-camera-utsugi (apk was choosing it over Alpine's by version arithmetic,
+# so the zoom bar and tap-to-focus were one upstream release away from vanishing),
+# maplibre-native-qt6 (poconav switches to that plugin as soon as there are
+# downloaded tiles, so the map would have gone blank the day someone downloaded
+# their own region), and utsugi-surya-full, which by then nothing needed.
+#
+# The walk starts at the packages a person installs by name and follows depends=,
+# resolving each name through what this tree actually offers: an aport is reached
+# through its own name, through any of its SUBPACKAGES -- poconav asks for
+# py3-valhalla-utsugi, not for valhalla-utsugi -- or through a name it PROVIDES,
+# which is how the rest of the system asks for a fork.
+ROOTS="utsugi-surya-base utsugi-surya-extras utsugi-vayu-base"
+OFFERS="$(mktemp)"
+trap 'rm -f "$OFFERS"' EXIT
+for pkg in $(all_aports); do
+	printf '%s\t%s\n' "$pkg" "$pkg" >> "$OFFERS"
+	for sub in $(apkbuild_get "$pkg" subpackages 2>/dev/null | tr ' ' '\n' | sed 's/:.*//'); do
+		[ -n "$sub" ] && printf '%s\t%s\n' "$sub" "$pkg" >> "$OFFERS"
+	done
+	for prov in $(apkbuild_get "$pkg" provides 2>/dev/null); do
+		prov="${prov%%=*}"
+		[ -n "$prov" ] && printf '%s\t%s\n' "$prov" "$pkg" >> "$OFFERS"
+	done
+done
+
+owner() { awk -F'\t' -v n="$1" '$1 == n {print $2; exit}' "$OFFERS"; }
+
+reached=" "
+frontier="$ROOTS"
+while [ -n "$frontier" ]; do
+	next=""
+	for name in $frontier; do
+		pkg="$(owner "$name")"
+		# Not ours: an Alpine or postmarketOS package, and the walk stops there.
+		[ -n "$pkg" ] || continue
+		case "$reached" in *" $pkg "*) continue ;; esac
+		reached="$reached$pkg "
+		for dep in $(apkbuild_get "$pkg" depends 2>/dev/null); do
+			# Version constraints and negations are not package names.
+			dep="${dep%%[<>=~]*}"
+			case "$dep" in ''|'!'*) continue ;; esac
+			next="$next $dep"
+		done
+	done
+	frontier="$next"
+done
+
+for pkg in $(all_aports); do
+	case "$reached" in
+		*" $pkg "*) green "  $pkg" ;;
+		*) red "  $pkg: no metapackage reaches it -- add it to a depends= or drop it"; rc=1 ;;
+	esac
+done
 
 if command -v apkbuild-lint >/dev/null 2>&1; then
 	title "apkbuild-lint"
