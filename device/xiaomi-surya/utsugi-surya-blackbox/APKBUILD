@@ -7,14 +7,22 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # enough room not to rotate it away.
 pkgname=utsugi-surya-blackbox
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Keep evidence across the reboots this phone does not survive"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
-arch="noarch"
+# Not noarch any more: freeze-watchdog is a C program on purpose. A shell
+# script cannot be the thing that survives a frozen filesystem -- it would
+# need to exec sleep, and an exec is a read.
+arch="all"
 license="MIT"
 options="!check"
+# Every source is a local file, so there is no unpacked tree to build in.
+builddir="$srcdir"
 subpackages="$pkgname-systemd"
 source="blackbox
+	freeze-watchdog.c
+	freeze-watchdog.service
+	utsugi-surya-freeze-watchdog.default
 	blackbox-heartbeat
 	blackbox-archive
 	journal-sync
@@ -27,6 +35,12 @@ source="blackbox
 	80-utsugi-surya-blackbox.preset
 	"
 
+build() {
+	# One file, no build system: it is 180 lines whose whole job is to keep
+	# working when nothing else does.
+	${CC:-cc} $CFLAGS $LDFLAGS -o "$srcdir"/freeze-watchdog "$srcdir"/freeze-watchdog.c
+}
+
 package() {
 	# blackbox is the command you type to read the box; the rest only run from
 	# their units.
@@ -35,11 +49,16 @@ package() {
 	for helper in blackbox-heartbeat blackbox-archive journal-sync; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
+	install -Dm755 "$srcdir"/freeze-watchdog -t "$pkgdir"/usr/libexec/utsugi-surya/
+	# /etc/default, and shipped as a real config file: it is the only knob, and
+	# an upgrade must not overwrite a threshold someone tuned.
+	install -Dm644 "$srcdir"/utsugi-surya-freeze-watchdog.default \
+		"$pkgdir"/etc/default/utsugi-surya-freeze-watchdog
 
 	local unit
 	for unit in blackbox-settings.service blackbox-archive.service \
 	            blackbox-heartbeat.service blackbox-heartbeat.timer \
-	            journal-sync.service; do
+	            journal-sync.service freeze-watchdog.service; do
 		install -Dm644 "$srcdir/$unit" -t "$pkgdir"/usr/lib/systemd/system/
 	done
 	install -Dm644 "$srcdir"/50-utsugi-blackbox.conf \
@@ -53,6 +72,9 @@ systemd() {
 }
 sha512sums="
 bf29814c7c27c78d74cdfcccdf09a15c9d475b81182d68e234cc050764782c263b42b69772e735b80636c92fd619b59ea997a6cc87ff16cd9eafc16071ad6a7c  blackbox
+3f4e324ca1bae4c2e773f4b49088edd1f341cffde3ec33de950fd0a12392b5bdaa59458cc8e109bb14e179defd83dbbceadddfed95e277f9637e65ffaa05e8f2  freeze-watchdog.c
+fb527bb940b5208e32ef7274a0f27042d2a90c697677dcfa721476862ece82a6c7d178f6273cebd3d78a2d531bd84cbb65dfef6efcb3e8b9c4244dfee7ad655f  freeze-watchdog.service
+cfeb9accad2f6538e6a1669d0945fa2e28fcdb5273e7a4f9d5a565df547aee2ff910ec8e7d5a936c1138e43d627ac516f1d24432010d80d7f1ea1674ae7f75ff  utsugi-surya-freeze-watchdog.default
 f5f5bd0798d31f727805fda09490aad81516ebb55840233e5b005fc4427c499fa51c95c16158d11ad8cef6dcddb37c53651c519e1c1b742f0ca3bdf61456f354  blackbox-heartbeat
 e5834faf2a8a0d5a23ecd0b2017bfcc70f66937055a449917a6234923290a2aa0e4cf03ef17803df608ce6c2622473c918386dc153afa44a1bf3b528680cda71  blackbox-archive
 601d4cc34ba6eae5bffc82eeeb39d657a2f3af527d9e65c832a3bd9c9403112e3dc460b74b286b4610454e23a0a5fd886be31a2936d22c03e65b0e44079b94e9  journal-sync
@@ -62,5 +84,5 @@ cacf47223a718cca93e8174243daa770548e6c88b0fe1da9ee5f126cd78ce829b4115b117b07ad9c
 3a940b00e70117b8d8f73fb4c07263f39fa44dffa4b3711e9b0e675a087c4e23e5544a588ced2e439fe698b959b9aa155e46f534b88b97749b40adff03321a5d  blackbox-heartbeat.timer
 aa829deeab37b468aac90f8061e4a8f8389cd57e5eefeea9ca594ab8dfd8e0c2bda8fe68716e98d2d3937113ccf76fb90f828a1019ba41951f604847d682610a  journal-sync.service
 07a90f91efe797a1a3611028e17aac781d7a4c83e05b50d9b70ad8018586667b3fb9d4a770f3cac7ec29760bb9b7995fdcddfe1d0c56827d42b85d1169ffcfc6  50-utsugi-blackbox.conf
-df05ed8e3780e884595b212abd1d1cba503f862ec0a76e4e4f4b02e2d9d3645912f93fc38b4b7ce36089449aae495275d5478f67874ed1af660fdae74b7bb92d  80-utsugi-surya-blackbox.preset
+78c59c97ab61d2f2abb1f67ce9dc04e3c12d195e1156b247d53d8d75e5403649311f65666267ec9634941737065d7b8e4c7d7492c7aba095064452300a4e4082  80-utsugi-surya-blackbox.preset
 "

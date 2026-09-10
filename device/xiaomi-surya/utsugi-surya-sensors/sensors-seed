@@ -49,6 +49,24 @@ fi
 
 # A real check: that 'fastrpc' can create a file there. Looking at the owner is
 # not enough, a parent directory without traverse permission fails the same way.
-su fastrpc -s /bin/sh -c "touch '$ROOT/sensors/.write-test'" 2>/dev/null || {
-	echo "'fastrpc' cannot write in $ROOT/sensors" >&2; exit 1; }
-rm -f "$ROOT/sensors/.write-test"
+#
+# WITH setpriv, NOT su, AND THE DIFFERENCE COST A PHONE. util-linux's 'su' goes
+# through PAM, and this unit runs four seconds into the boot, before logind is
+# up: PAM refused the session, 'su' logged "FAILED SU (to fastrpc) root on none",
+# and the unit died at its own last line -- after having seeded everything
+# correctly. A red unit saying the sensors were broken when they were not.
+# 'setpriv' only drops privileges: no PAM, no session, nothing to be up yet.
+#
+# And if the test cannot be RUN, that is not the same as the test failing. It
+# says so and carries on, because seeding is what matters and it is already done.
+if command -v setpriv >/dev/null 2>&1; then
+	if setpriv --reuid=fastrpc --regid=fastrpc --clear-groups \
+			touch "$ROOT/sensors/.write-test" 2>/dev/null; then
+		rm -f "$ROOT/sensors/.write-test"
+	else
+		echo "'fastrpc' cannot write in $ROOT/sensors" >&2
+		exit 1
+	fi
+else
+	echo "setpriv is missing: seeded, but the write test was not run" >&2
+fi

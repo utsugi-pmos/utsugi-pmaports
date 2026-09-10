@@ -1,0 +1,12 @@
+# The freeze watchdog: what counts as frozen, and what to do about it.
+#
+# FREEZE_THRESHOLD_PERCENT   full I/O stall, from /proc/pressure/io (avg60)
+# FREEZE_GRACE_SECONDS       how long it has to stay there before acting
+# FREEZE_REBOOT              1 reboots with SysRq b; 0 only dumps the tasks
+#
+# The defaults are shy on purpose: 90% full stall sustained for ten minutes is
+# not a slow install, it is a phone that is not coming back. Ten minutes is also
+# long enough that you can watch it happen if you are in front of it.
+#FREEZE_THRESHOLD_PERCENT=90
+#FREEZE_GRACE_SECONDS=600
+#FREEZE_REBOOT=1

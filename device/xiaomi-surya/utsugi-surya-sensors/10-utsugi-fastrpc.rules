@@ -1,0 +1,18 @@
+# Start the ADSP fastrpc servers when the node appears -- at boot, and again
+# after an ADSP crash.
+#
+# A static ConditionPathExists in the unit is not enough and that is not a
+# theory: /dev/fastrpc-adsp is created when the ADSP probes, in parallel with
+# multi-user.target, so on 2026-09-10 sensorspd was checked four seconds into the
+# boot, found no node, and was skipped for good, while its sibling rootpd won the
+# same race and started. With nobody serving the sensor registry the sensor domain
+# died hours later, took the ADSP with it, and its recovery deadlocked with the
+# encrypted root's I/O behind it.
+#
+# postmarketOS ships the same pattern for the modem's shared memory in
+# rmtfs.rules, for the same reason, and its comment says so.
+#
+# SUBSYSTEM is misc, not fastrpc: the driver registers a misc device
+# (/devices/virtual/misc/fastrpc-adsp), which is why 10-fastrpc.rules matches it
+# that way too.
+ACTION=="add", SUBSYSTEM=="misc", KERNEL=="fastrpc-adsp", TAG+="systemd", ENV{SYSTEMD_WANTS}+="hexagonrpcd-adsp-sensorspd.service hexagonrpcd-adsp-rootpd.service"

@@ -4,3 +4,6 @@ enable blackbox-heartbeat.timer
 # journal-sync is deliberately NOT enabled: it writes the journal to disk
 # on every message, which costs flash writes. Turn it on only while chasing a
 # hang that eats the last seconds of the log.
+# The freeze watchdog is enabled: a phone that freezes for seven hours with
+# nobody watching is what it exists to prevent.
+enable freeze-watchdog.service
