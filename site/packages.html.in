@@ -66,8 +66,9 @@
 			<tr><th class="mono">Package</th><th>What it does</th></tr>
 			<tr><td class="mono">utsugi-surya-boot</td><td>The kernel command line as a
 			drop-in: <code>cma=512M</code> for the cameras, uncompressed pstore so a
-			ramoops dump survives bit errors, and <code>reboot=warm</code> so RAM survives
-			a reboot and the black box with it.</td></tr>
+			ramoops dump survives bit errors, and <code>reboot=warm</code>, which asks the
+			kernel to keep RAM across a reboot &mdash; a request the firmware does not
+			honour here, see the black box below.</td></tr>
 			<tr><td class="mono">utsugi-surya-audio</td><td>Both speakers on at boot &mdash;
 			out of the box only the bottom one played &mdash; the volume restored instead of
 			booting mute, the UCM brought up before PulseAudio, and the configuration
@@ -92,11 +93,12 @@
 			returns the lens to origin and powers the chip off the moment the node is
 			closed, so someone must hold that descriptor open.</td></tr>
 			<tr><td class="mono">utsugi-surya-blackbox</td><td>So a freeze leaves a trace:
-			the ramoops console kept alive across suspend, the console level raised above
-			what <code>quiet</code> allows, a heartbeat in <code>/dev/pmsg0</code>, the
-			previous boot's journal archived &mdash; and <b>freeze-watchdog</b>, which
-			reboots the phone when its filesystem stops answering and leaves the kernel
-			stacks in <code>/sys/fs/pstore</code>.</td></tr>
+			the console level raised above what <code>quiet</code> allows, the previous
+			boot's journal archived &mdash; and <b>freeze-watchdog</b>, which
+			reboots the phone when its filesystem stops answering, dumping the blocked
+			tasks to the kernel log on the way out. Carrying that dump across the reboot
+			does not work here: the ramoops region is configured and comes back empty,
+			measured both ways on 2026-09-10.</td></tr>
 		</table>
 		</div>
 
