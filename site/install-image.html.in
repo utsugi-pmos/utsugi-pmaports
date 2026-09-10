@@ -24,41 +24,83 @@
 		six own applications, browser, mail, maps, photos. About 1&nbsp;GB
 		compressed.</p>
 		<p><a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/@IMG@.xz">Download @IMG@.xz &mdash; 1.2 GB</a></p>
+		<div class="note"><i></i><div>
+			<b>Four steps come before the flashing, and the first one takes a week.</b>
+			Unlock the bootloader at Xiaomi, find out which screen your phone has,
+			put U-Boot on it, and get <code>fastboot</code> on your PC. They are all
+			below, in order.
+		</div></div>
 	</div>
 </section>
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>What you need</h2></div>
+		<div class="h"><span>01</span><h2>Unlock the bootloader at Xiaomi</h2></div>
+		<p>The phone refuses to boot anything but MIUI until Xiaomi lets it. It
+		needs a Mi account, <b>seven days of waiting</b>, and it erases the phone.
+		Start it today; the rest of this page takes twenty minutes once it is
+		done.</p>
+		<p>It does not need Windows: <code>miunlock</code>
+		(<a href="https://github.com/offici5l/MiUnlockTool">MiUnlockTool</a>) does it
+		from Linux.</p>
+		<p><a class="btn" href="unlock.html">The unlock, step by step &rarr;</a></p>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Find out which screen you have</h2></div>
+		<p>The POCO X3 NFC shipped with two panels, <b>Tianma</b> and <b>Huaxing</b>,
+		and U-Boot comes as one build per panel. The wrong one boots fine and draws
+		nothing &mdash; a black screen, not a brick.</p>
+		<p>From MIUI, with USB debugging on (the developer options you turned on
+		while unlocking) and <code>adb</code> installed:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>adb shell cat /proc/cmdline | tr ' ' '\n' | grep -i dsi</pre>
+		</div>
+		<p>Xiaomi's kernel names the panel in there: the line carries
+		<code>tianma</code> or <code>huaxing</code>. If nothing useful comes out,
+		flash one and look at the screen &mdash; black means the other one, and you
+		can reflash as often as you like.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>Get fastboot on your PC</h2></div>
 		<div class="scroll">
 		<table>
-			<tr><th>A computer</th><td>Linux, with a terminal. Everything below runs
-			there, not on the phone. macOS and Windows have <code>fastboot</code> too,
-			but these steps have only been walked on Linux.</td></tr>
-			<tr><th>fastboot</th><td>Debian/Ubuntu:
-			<code>apt install android-sdk-platform-tools</code>. Arch:
-			<code>pacman -S android-tools</code>. Alpine:
-			<code>apk add android-tools</code>. Fedora:
-			<code>dnf install android-tools</code>.</td></tr>
-			<tr><th>A USB cable</th><td>Data, not charge-only. Straight into the
-			computer if you can &mdash; hubs cause half the "device not found".</td></tr>
-			<tr><th>Bootloader unlocked</th><td>Xiaomi's own procedure: a Mi account,
-			<b>seven days of waiting</b>, and a Windows-only tool.
-			<a href="unlock.html">Step by step here</a>. Without this, nothing below
-			works.</td></tr>
-			<tr><th>U-Boot on <code>boot</code></th><td>Matched to your panel. If this
-			phone has never run postmarketOS, do <a href="install-pmos.html">route 3</a>
-			first &mdash; only its U-Boot step.</td></tr>
-			<tr><th>Your data</th><td>Gone. This writes the whole system
-			partition.</td></tr>
+			<tr><th>Debian/Ubuntu</th><td><code>apt install android-sdk-platform-tools</code></td></tr>
+			<tr><th>Arch</th><td><code>pacman -S android-tools</code></td></tr>
+			<tr><th>Fedora</th><td><code>dnf install android-tools</code></td></tr>
+			<tr><th>Alpine</th><td><code>apk add android-tools</code></td></tr>
+			<tr><th>Windows / macOS</th><td>platform-tools from developer.android.com;
+			on Windows also the Google USB driver. The
+			<a href="index.html">front page</a> has the commands for both.</td></tr>
 		</table>
 		</div>
+		<p>And a <b>data</b> cable, straight into the computer if you can: hubs cause
+		half the "device not found".</p>
+
+		<div class="h" style="margin-top:34px"><span>04</span><h2>U-Boot on <code>boot</code></h2></div>
+		<p>This port does not boot a kernel from the <code>boot</code> partition
+		&mdash; it boots U-Boot from there, and U-Boot loads the system from
+		<code>userdata</code>. So <code>boot</code> is written once, with U-Boot, and
+		never again.</p>
+		<p>Take the image for your panel from
+		<a href="https://github.com/sm7150-mainline/u-boot/releases">sm7150-mainline/u-boot</a>,
+		put the phone in fastboot &mdash; off, then volume-down + power &mdash; and:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>sudo fastboot devices        <b># must print your phone</b>
+sudo fastboot erase dtbo     <i># MIUI's overlay would fight U-Boot</i>
+sudo fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
+sudo fastboot reboot</pre>
+		</div>
+		<p>Power on: you should get a text console complaining it has nothing to
+		boot. That complaint is the good outcome &mdash; there is no system on
+		<code>userdata</code> yet. A screen that stays black means the other panel.</p>
+		<p>Already running postmarketOS on this phone? Then U-Boot is there and this
+		step is done.</p>
 	</div>
 </section>
 
 <section class="panel">
 	<div class="wrap">
-		<div class="h"><span>02</span><h2>Put the phone in fastboot</h2></div>
+		<div class="h"><span>05</span><h2>Put the phone in fastboot</h2></div>
 		<p>Turn it off. Then hold <b>volume-down + power</b> until the screen says
 		<i>fastboot</i>, and plug the cable in. If the phone already runs this system,
 		<code>sudo reboot-to-bootloader</code> on the phone does the same thing.</p>
@@ -75,7 +117,9 @@
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>03</span><h2>Flash it</h2></div>
+		<div class="h"><span>06</span><h2>Flash it</h2></div>
+		<p><b>Your data is gone from here on:</b> this writes the whole system
+		partition.</p>
 		<div class="sh">
 			<div class="bar"><i></i><span>ON YOUR PC</span></div>
 			<pre>xz -d @IMG@.xz            <i># a half-downloaded file fails right here</i>
@@ -94,7 +138,7 @@ sudo fastboot reboot</pre>
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>04</span><h2>Then</h2></div>
+		<div class="h"><span>07</span><h2>Then</h2></div>
 		<div class="scroll">
 		<table>
 			<tr><th>Wifi</th><td>Settings, as usual. Nothing is preconfigured.</td></tr>

@@ -21,8 +21,9 @@
 		<div class="eyebrow">Step zero &middot; everything needs it</div>
 		<h1>Unlock the bootloader</h1>
 		<p class="lede">Xiaomi has to give you the key before the phone will boot
-		anything but MIUI. It takes <b>seven days of waiting</b>, so start here even
-		if you are only reading. Everything on the phone is erased at the end.</p>
+		anything but MIUI. It takes seven days of waiting, so start here even if you
+		are only reading. Everything on the phone is erased at the end. No Windows
+		needed.</p>
 	</div>
 </section>
 
@@ -42,19 +43,39 @@
 			do shortens it.</li>
 		</ol>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>A week later, on a PC</h2></div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>A week later, from Linux</h2></div>
+		<p><b>MiUnlockTool</b> does from Linux what Xiaomi's Windows program does:
+		it logs into your Mi account, asks their server for the unlock token and
+		hands it to the phone. It is a pip package, <code>miunlock</code>
+		(<a href="https://github.com/offici5l/MiUnlockTool">offici5l/MiUnlockTool</a>).</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>pipx install miunlock        <i># or: pip install --user miunlock</i>
+
+<i># phone OFF, hold volume-down + power until it says "fastboot",</i>
+<i># then plug the USB cable in</i>
+sudo fastboot devices        <b># must print your phone</b>
+
+miunlock</pre>
+		</div>
 		<ol>
-			<li>Get <b>Mi Unlock</b> from <a href="https://en.miui.com/unlock/">en.miui.com/unlock</a>
-			and sign in with the same account.</li>
-			<li>Turn the phone off. Hold <b>volume-down + power</b> until it says
-			<i>fastboot</i>, then plug the USB cable in.</li>
-			<li>Press Unlock. It wipes the phone and reboots into MIUI.</li>
+			<li>It asks you to sign in with the <b>same Mi account</b> you bound the
+			phone to.</li>
+			<li>It picks your account's region and shows it. Enter to accept.</li>
+			<li>It warns that unlocking <b>erases the phone</b>. That is Xiaomi's
+			behaviour, not the tool's.</li>
+			<li>It gets the token and runs <code>fastboot stage</code> +
+			<code>fastboot oem unlock</code> for you. The phone wipes and reboots
+			into MIUI.</li>
 		</ol>
+		<p>If it refuses, the message comes from Xiaomi's server and says why &mdash;
+		usually the week is not up, or the account is not the one bound to the
+		phone.</p>
 		<div class="note"><i></i><div>
-			<b>Mi Unlock only runs on Windows.</b>
-			This is the one step you cannot do from Linux or a Mac: use a Windows
-			machine, or a Windows VM with the USB device passed through. Everything
-			after this works anywhere.
+			<b>Windows is not needed.</b>
+			Xiaomi's own <a href="https://en.miui.com/unlock/">Mi Unlock</a> is a
+			Windows program and works too, but the unlock is only a request to their
+			server. This phone was unlocked from Linux with the tool above.
 		</div></div>
 
 		<div class="h" style="margin-top:34px"><span>03</span><h2>Check it worked</h2></div>

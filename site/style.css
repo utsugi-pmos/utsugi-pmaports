@@ -107,7 +107,10 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
 	display:flex;gap:12px;align-items:flex-start;margin:0 0 20px}
 .note i{width:8px;height:8px;background:var(--warn);display:block;margin-top:6px;flex:none}
 .note div{font-size:13.5px;line-height:1.6;color:var(--mut)}
-.note b{display:block;margin-bottom:4px}
+/* Only the note's first bold is its heading. Any other <b> inside is
+   emphasis in mid-sentence, and a block would break the line there. */
+.note div > b:first-child{display:block;margin-bottom:4px}
+.note b{color:var(--ink)}
 
 /* --- buttons and page-to-page links -------------------------------------- */
 .btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:34px}
@@ -134,9 +137,9 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
    an invisible install command -- and uppercased its <b>. */
 .hero .right > div:not(.sh){background:var(--panel2);padding:14px 16px;font-size:13px;
 	line-height:1.55;color:var(--mut)}
-.hero .right > div:not(.sh) b{font-family:"IBM Plex Mono",monospace;font-size:11px;
-	color:var(--mut);font-weight:400;letter-spacing:.09em;text-transform:uppercase;
-	display:block;margin-bottom:5px}
+.hero .right > div:not(.sh) > b:first-child{font-family:"IBM Plex Mono",monospace;
+	font-size:11px;color:var(--mut);font-weight:400;letter-spacing:.09em;
+	text-transform:uppercase;display:block;margin-bottom:5px}
 @media (max-width:820px){
 	.hero{grid-template-columns:1fr}
 	.hero .left{padding:40px 0 32px;border-right:0;border-bottom:1px solid var(--line2)}

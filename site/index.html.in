@@ -32,6 +32,11 @@
 		<div class="right">
 			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/@IMG@.xz"
 			   style="text-align:center">Download the image &mdash; 1.2 GB</a>
+			<div><b>Two things first</b>Xiaomi has to
+			<a href="unlock.html">unlock the bootloader</a>: a Mi account, seven days
+			of waiting, no Windows needed. Then U-Boot goes on <code>boot</code>, the
+			build for your panel.
+			<a href="install-image.html">Both, in order, with the commands</a>.</div>
 			<div class="os">
 				<input type="radio" name="os" id="os-linux" checked>
 				<input type="radio" name="os" id="os-win">
@@ -76,11 +81,6 @@ fastboot flash userdata @IMG@
 fastboot reboot
 <b># not tested by me: reports welcome</b></pre></div></div>
 			</div>
-			<div><b>First time on this phone?</b>Two things come before this:
-			<a href="unlock.html">Xiaomi has to unlock the bootloader</a> (a Mi
-			account and seven days of waiting), and U-Boot goes on <code>boot</code>
-			&mdash; the build for your panel, Tianma or Huaxing.
-			<a href="install-pmos.html">Both, step by step</a>.</div>
 		</div>
 	</div>
 </section>
