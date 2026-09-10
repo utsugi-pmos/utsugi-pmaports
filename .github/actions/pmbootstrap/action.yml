@@ -85,3 +85,27 @@ runs:
           ~/.local/var/pmbootstrap-utsugi/cache_distfiles
         key: pmb-${{ runner.arch }}-${{ hashFiles('upstream.lock') }}-${{ github.run_id }}
         restore-keys: pmb-${{ runner.arch }}-
+
+    # THE CACHE COMES BACK OWNED BY THE RUNNER, AND THE BUILDER IS NOT THE RUNNER.
+    #
+    # actions/cache restores as uid 1001; inside the chroot abuild runs as 'pmos',
+    # uid 12345. So the second CI kernel build -- the first one after the cache
+    # exists -- died with
+    #
+    #   ccache: error: failed to create temporary file for
+    #   /home/pmos/.ccache/tmp/cpp_stdout.tmp.XXXXXX.i: Permission denied
+    #
+    # after applying all 78 patches, which is why it looked like a patch problem
+    # and was not. noarch packages built fine throughout: nothing there compiles,
+    # so ccache never gets touched.
+    #
+    # Same fix as the signing key above, same reason: whatever the chroot writes
+    # to has to belong to 12345.
+    - name: give the cache to the chroot's user
+      shell: bash
+      run: |
+        W=~/.local/var/pmbootstrap-utsugi
+        for d in cache_ccache_aarch64 cache_distfiles; do
+          mkdir -p "$W/$d"
+          sudo chown -R 12345:12345 "$W/$d"
+        done
