@@ -12,6 +12,7 @@
 	<a href="index.html">Overview</a>
 	<a href="devices.html">Devices</a>
 	<a href="features.html">Features</a>
+	<a href="packages.html">Packages</a>
 	<a href="install.html" aria-current="page">Install</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
@@ -43,24 +44,28 @@
 			<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
 echo @URL@/main | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add utsugi-surya-full
+sudo apk add utsugi-surya-base
 <b># reboot as a separate, deliberate step</b></pre>
 		</div>
-		<h3>Pick a level</h3>
+		<h3>What that installs</h3>
 		<div class="scroll">
 		<table>
 			<tr><th class="mono">Package</th><th>What it brings</th></tr>
-			<tr><td class="mono">utsugi-surya-base</td><td>The hardware: patched kernel,
-			audio, sensors, GPS, cameras, power-off, charge mode.</td></tr>
-			<tr><td class="mono">utsugi-surya-full</td><td>Base, plus the six applications
-			and the Plasma Mobile fixes.</td></tr>
-			<tr><td class="mono">utsugi-surya-extras</td><td>Optional applications: browser,
-			mail, maps, messaging, photos. A choice, not a fix, which is why it is
-			separate.</td></tr>
+			<tr><td class="mono">utsugi-surya-base</td><td><b>The phone.</b> Patched kernel,
+			audio, sensors, GPS, cameras, power-off, charge mode, black box, the Plasma
+			Mobile fixes and the six own applications. Nothing here is a preference: all of
+			it is something that did not work.</td></tr>
+			<tr><td class="mono">utsugi-surya-extras</td><td>Applications anybody could pick
+			for themselves: browser, mail, two-factor, social, photos. A choice, not a fix,
+			which is why it is separate &mdash; and why each one can be installed on its
+			own.</td></tr>
 			<tr><td class="mono">utsugi-vayu-base</td><td>The experimental POCO X3 Pro set.
 			The modem does not work.</td></tr>
 		</table>
 		</div>
+		<p style="margin-top:20px"><a href="packages.html">Every package described, one by
+		one &rarr;</a></p>
+
 		<p style="margin-top:20px">From then on <code>apk upgrade</code> keeps everything
 		current, kernel included.</p>
 	</div>

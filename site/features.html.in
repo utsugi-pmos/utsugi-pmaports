@@ -12,6 +12,7 @@
 	<a href="index.html">Overview</a>
 	<a href="devices.html">Devices</a>
 	<a href="features.html" aria-current="page">Features</a>
+	<a href="packages.html">Packages</a>
 	<a href="install.html">Install</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
@@ -81,34 +82,15 @@ replaces="$_orig"</pre>
 <section>
 	<div class="wrap">
 		<div class="h"><span>03</span><h2>Applications</h2></div>
-		<p>Six, written because Plasma Mobile does not ship them. Each lives in its own
-		repository and is built here from a tagged tarball.</p>
-		<div class="grid">
-			<a href="https://github.com/utsugi-pmos/poconav">
-				<div class="n">poconav</div>
-				<p>Car navigation with neural-network voice, made to be read from a
-				dashboard.</p></a>
-			<a href="https://github.com/utsugi-pmos/screenglaze">
-				<div class="n">screenglaze</div>
-				<p>Screenshots with volume-down + power, like Android, and a sheet to
-				share, save or crop.</p></a>
-			<a href="https://github.com/utsugi-pmos/keepalive">
-				<div class="n">keepalive</div>
-				<p>Apps you mark minimise instead of closing when you swipe their card
-				away, so the next open is instant.</p></a>
-			<a href="https://github.com/utsugi-pmos/app-usage">
-				<div class="n">app-usage</div>
-				<p>Battery use per application &mdash; the screen Plasma Mobile does not
-				have.</p></a>
-			<a href="https://github.com/utsugi-pmos/smart-unlock">
-				<div class="n">smart-unlock</div>
-				<p>Skip the PIN on a trusted wifi, for a while after unlocking, or in
-				chosen time slots.</p></a>
-			<a href="https://github.com/utsugi-pmos/lost-phone">
-				<div class="n">lost-phone</div>
-				<p>Find your phone without Google: SMS, your own network, your own relay,
-				or ntfy.</p></a>
-		</div>
+		<p>Six, written because Plasma Mobile does not ship them: car navigation with a
+		neural-network voice, Android-style screenshots, apps that minimise instead of
+		closing, battery use per application, a smart unlock that trusts a wifi by BSSID
+		rather than by name, and a find-my-phone with four paths and no Google.</p>
+		<p>Each lives in its own repository, is built here from a tagged tarball, and
+		comes with <code>utsugi-surya-base</code>. They are described one by one, with
+		what they cost and what they pull in, on the
+		<a href="packages.html#session">packages page</a>.</p>
+
 		<div class="next">
 			<a href="install.html"><b>Next</b><span>Installation</span></a>
 			<a href="devices.html"><b>Back to</b><span>Devices</span></a>

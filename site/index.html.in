@@ -12,6 +12,7 @@
 	<a href="index.html" aria-current="page">Overview</a>
 	<a href="devices.html">Devices</a>
 	<a href="features.html">Features</a>
+	<a href="packages.html">Packages</a>
 	<a href="install.html">Install</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
@@ -71,7 +72,7 @@ sudo apk update</pre></div>
 				<div class="t">Install</div>
 				<p>The kernel comes with it. From here on <code>apk upgrade</code> keeps
 				everything current.</p>
-				<div class="sh" style="margin-top:14px"><pre>sudo apk add utsugi-surya-full</pre></div>
+				<div class="sh" style="margin-top:14px"><pre>sudo apk add utsugi-surya-base</pre></div>
 			</div>
 		</div>
 		<div class="note" style="margin-top:16px"><i></i><div>

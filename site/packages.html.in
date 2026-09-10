@@ -1,0 +1,285 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Packages &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Overview</a>
+	<a href="devices.html">Devices</a>
+	<a href="features.html">Features</a>
+	<a href="packages.html" aria-current="page">Packages</a>
+	<a href="packages.html" aria-current="page">Packages</a>
+	<a href="install.html">Install</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Two packages, one decision</div>
+		<h1>What is in each package</h1>
+		<p class="lede"><b>base</b> is the phone: the hardware, the Plasma Mobile fixes
+		and the six applications written for it. Nothing in it is a preference &mdash;
+		all of it is something that did not work. <b>extras</b> is applications anybody
+		could pick for themselves, which is the only real choice here.</p>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">Package</th><th>What you get</th><th>A decision?</th></tr>
+			<tr><td class="mono"><a href="#base">utsugi-surya-base</a></td><td>Kernel, audio,
+			sensors, GPS, cameras, power-off, charge mode, black box, the Plasma Mobile
+			fixes, and poconav, screenglaze, keepalive, app-usage, smart-unlock and
+			lost-phone</td><td><b>No.</b> If you want this phone to work, you want all of
+			it</td></tr>
+			<tr><td class="mono"><a href="#extras">utsugi-surya-extras</a></td><td>Browser,
+			mail, two-factor, social, photos &mdash; eight third-party packages</td>
+			<td>Yes, and each one installs on its own</td></tr>
+			<tr><td class="mono"><a href="#vayu">utsugi-vayu-base</a></td><td>The
+			experimental POCO X3 Pro set. The modem does not work</td><td>Only if you are
+			carrying the investigation further</td></tr>
+		</table>
+		</div>
+		<div class="note"><i></i><div>
+			<b>There used to be three, and the middle one was a mistake.</b>
+			A <code>utsugi-surya-full</code> sat between base and extras, and it failed in
+			the only place that mattered: "full" read as more of the same as "extras", so
+			the level nobody should have to think about looked optional. <code>base</code>
+			carries all of it now and still answers to the old name, so a phone that has
+			<code>utsugi-surya-full</code> migrates on the next <code>apk upgrade</code>
+			with nothing left behind.
+		</div></div>
+	</div>
+</section>
+
+<section id="base">
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>base &mdash; the hardware</h2></div>
+		<p>Everything here exists because something did not work. It comes in three
+		layers: what drives the hardware, what fixes the session, and the applications
+		Plasma Mobile does not ship.</p>
+		<h3>The hardware, written here</h3>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">Package</th><th>What it does</th></tr>
+			<tr><td class="mono">utsugi-surya-boot</td><td>The kernel command line as a
+			drop-in: <code>cma=512M</code> for the cameras, uncompressed pstore so a
+			ramoops dump survives bit errors, and <code>reboot=warm</code> so RAM survives
+			a reboot and the black box with it.</td></tr>
+			<tr><td class="mono">utsugi-surya-audio</td><td>Both speakers on at boot &mdash;
+			out of the box only the bottom one played &mdash; the volume restored instead of
+			booting mute, the UCM brought up before PulseAudio, and the configuration
+			<code>q6voiced</code> needs for voice in call.</td></tr>
+			<tr><td class="mono">utsugi-surya-sensors</td><td>Accelerometer with rotation,
+			light, compass and proximity, all four through the ADSP. It seeds the writable
+			copy of the sensor registry the DSP writes into, and ties the fastrpc servers to
+			the device so they start when the ADSP appears &mdash; and again when it comes
+			back from a crash.</td></tr>
+			<tr><td class="mono">utsugi-surya-gps</td><td>Unlocks the GNSS engine that
+			postmarketOS leaves locked on every Qualcomm device. Without it there is only
+			network position, with kilometres of error; with it, twelve satellites and a fix
+			in about forty seconds from cold.</td></tr>
+			<tr><td class="mono">utsugi-surya-power</td><td>A power-off that powers off: it
+			hands the shutdown to the kernel before the teardown, which is where this phone
+			freezes. Plus the charge screen when you plug in a phone that is off, the
+			hardware watchdog so a hang does not need a person, the USB-C direction switch
+			&mdash; the connector was source-only and the phone fed the laptop &mdash; and
+			the power-saving profile.</td></tr>
+			<tr><td class="mono">utsugi-surya-camera</td><td>The rear autofocus, as a
+			user-space engine against a measured curve. It has to be a service: the driver
+			returns the lens to origin and powers the chip off the moment the node is
+			closed, so someone must hold that descriptor open.</td></tr>
+			<tr><td class="mono">utsugi-surya-blackbox</td><td>So a freeze leaves a trace:
+			the ramoops console kept alive across suspend, the console level raised above
+			what <code>quiet</code> allows, a heartbeat in <code>/dev/pmsg0</code>, the
+			previous boot's journal archived &mdash; and <b>freeze-watchdog</b>, which
+			reboots the phone when its filesystem stops answering and leaves the kernel
+			stacks in <code>/sys/fs/pstore</code>.</td></tr>
+		</table>
+		</div>
+
+		<h3>Forked from upstream</h3>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">Package</th><th>Why it is forked</th></tr>
+			<tr><td class="mono">linux-postmarketos-qcom-sm7150-utsugi</td><td>The kernel
+			with 78 patches: the three cameras with C-PHY in CAMSS and three sensor drivers,
+			voice in call through Q6VOICE, the amplifier byte order that booted the phone
+			mute, 60 Hz as well as 120, the power-off, the watchdog.</td></tr>
+			<tr><td class="mono">alsa-ucm-conf-qcom-sm7150-utsugi</td><td>The UCM with the
+			microphone and the in-call profile this phone needs.</td></tr>
+			<tr><td class="mono">hexagonrpcd-utsugi</td><td>Four patches so it serves the
+			sensor registry the DSP asks to write into. Without them the sensor domain dies,
+			takes the ADSP with it, and the sound card goes with the ADSP.</td></tr>
+			<tr><td class="mono">iio-sensor-proxy-utsugi</td><td>Two patches that stopped the
+			screen rotation from being abrupt.</td></tr>
+			<tr><td class="mono">libcamera-utsugi</td><td>The software ISP enabled, the
+			viewfinder sized to what it can sustain, and sensor helpers for the three
+			cameras of this phone.</td></tr>
+		</table>
+		</div>
+		<p>Plus what the hardware needs to be driven from a shell:
+		<code>tuned</code> and <code>tuned-ppd</code>, <code>qmi-utils</code>,
+		<code>alsa-utils</code>, <code>i2c-tools</code>, <code>python3</code> and
+		<code>firmware-xiaomi-surya</code>.</p>
+	</div>
+</section>
+
+<section id="session" class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>base &mdash; the session and the applications</h2></div>
+
+		<h3>utsugi-surya-plasma &mdash; the fixes</h3>
+		<p>What a Plasma Mobile install on this phone is missing. None of it is a
+		preference: every item was something that did not work, and it lands in
+		<code>/etc/xdg</code>, the layer under <code>$HOME</code>, so anything you change
+		still wins.</p>
+		<div class="scroll">
+		<table>
+			<tr><th>Piece</th><th>What was wrong</th></tr>
+			<tr><td>The dialpad</td><td>Qt turned the second tap within 400 ms into a double
+			click &mdash; even on another key &mdash; and the button swallowed it: dialling
+			at a normal pace, one digit in six was lost. Ships as
+			<code>plasma-dialer-utsugi</code>, and it types on press.</td></tr>
+			<tr><td>Three quick settings</td><td>Location, power saving and USB power
+			direction, in the pull-down where you expect them. Plasma Mobile ships none of
+			the three.</td></tr>
+			<tr><td>The screen turning off</td><td>There was <b>no</b> timeout configured at
+			all, only the lock keys, so PowerDevil ran on factory values. All three profiles
+			are written and PowerDevil is restarted, which is the only thing that makes it
+			re-read them.</td></tr>
+			<tr><td>Notification popups</td><td>"Connection activated/deactivated" on every
+			wifi-to-data switch, covering what you are reading. Silenced.</td></tr>
+			<tr><td>Sound on notifications</td><td>Plasma Mobile does not play the ones
+			arriving over D-Bus &mdash; mail, messaging &mdash; and assigning a sound to its
+			generic event does not work either. A watcher listens to the bus and plays
+			it.</td></tr>
+			<tr><td>System dialogs</td><td>The portal prompts were drawn wider than the
+			screen and came out cut off on both sides, with "Cancel" outside it. That process
+			gets more logical pixels, without shrinking the rest of the phone.</td></tr>
+			<tr><td>Bar margins</td><td>The clock and the rotation button sat under the
+			rounded corners. Fixed as a device preset, which is upstreamable to KDE.</td></tr>
+			<tr><td>The dialer's first open</td><td>210 MB of libraries loaded on the first
+			call. Preheated at session start instead.</td></tr>
+		</table>
+		</div>
+
+		<h3>The six applications</h3>
+		<p>Each one exists because Plasma Mobile does not ship it, each lives in its own
+		repository, and each is built here from a tagged tarball.</p>
+		<div class="grid">
+			<a href="https://github.com/utsugi-pmos/poconav">
+				<div class="n">poconav</div>
+				<p><b>Car navigation.</b> Turn-by-turn with a neural-network voice
+				(<code>piper</code>), routing from your own offline maps through Valhalla,
+				and a screen made to be read at a glance from a dashboard rather than
+				held in a hand. Plans a route, announces the manoeuvre, and re-routes when
+				you miss it.</p></a>
+			<a href="https://github.com/utsugi-pmos/screenglaze">
+				<div class="n">screenglaze</div>
+				<p><b>Screenshots, the way a phone does them.</b> Volume-down and power
+				together, like Android, and then a sheet to share, save or crop what you
+				took. Plasma Mobile has Spectacle, but no way to reach it without a
+				keyboard.</p></a>
+			<a href="https://github.com/utsugi-pmos/keepalive">
+				<div class="n">keepalive</div>
+				<p><b>Apps that do not die when you tidy up.</b> Mark an application and
+				swiping its card away minimises it instead of closing it, so the next open
+				is instant &mdash; the dialer and messages by default. Costs about 125 MB
+				of RAM, brings its own settings module, and opens the marked ones on
+				unlock, never before it.</p></a>
+			<a href="https://github.com/utsugi-pmos/app-usage">
+				<div class="n">app-usage</div>
+				<p><b>Battery use per application</b>, the screen Plasma Mobile does not
+				have. A daemon samples what each application costs and calibrates itself
+				against the battery gauge, so the numbers are measured on your phone
+				rather than assumed.</p></a>
+			<a href="https://github.com/utsugi-pmos/smart-unlock">
+				<div class="n">smart-unlock</div>
+				<p><b>No PIN when it is safe.</b> On a wifi you trust &mdash; identified
+				by BSSID and gateway MAC, not by name, which is the part that makes it
+				worth having &mdash; for a while after you last unlocked, or inside time
+				slots you choose. Never on by default, and it respects a phone locked
+				remotely.</p></a>
+			<a href="https://github.com/utsugi-pmos/lost-phone">
+				<div class="n">lost-phone</div>
+				<p><b>Find the phone without Google.</b> Four paths, switched on one by
+				one: an SMS with your key from any phone (the only one that needs no data),
+				your home network with no server at all, your own relay with a web panel
+				and a map for when it is out on the street, or your ntfy. It rings at full
+				volume even silenced, turns wifi and GPS on to let itself be found and
+				gives them back, says where it is, and can lock or power off the phone from
+				the panel.</p></a>
+		</div>
+		<p>Between them they pull in what they need: <code>valhalla-utsugi</code> and
+		<code>maplibre-native-qt6</code> for the navigation, <code>espeak-ng</code> and
+		<code>piper-tts</code> for the voice, <code>spectacle</code> and
+		<code>purpose</code> for the screenshots, <code>plasma-settings</code> and
+		<code>kcmutils</code> for the modules that appear in Preferences.</p>
+	</div>
+</section>
+
+<section id="extras">
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>extras &mdash; eight choices, not fixes</h2></div>
+		<p>These are applications anybody could pick for themselves. They are here as one
+		<code>apk add</code> for a phone that has just been flashed, and every one of them
+		can be installed or removed on its own.</p>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">Package</th><th>What it is</th></tr>
+			<tr><td class="mono">firefox<br>mobile-config-firefox</td><td>Firefox adapted to
+			a phone screen, with uBlock Origin, and painting at a real 120 Hz &mdash; out of
+			the box it ran at 60, half of what this panel gives.</td></tr>
+			<tr><td class="mono">keysmith</td><td>Two-factor TOTP codes, native
+			Kirigami.</td></tr>
+			<tr><td class="mono">merkuro</td><td>Mail, calendar and contacts in one
+			Kirigami application.</td></tr>
+			<tr><td class="mono">tokodon</td><td>Mastodon, native Kirigami.</td></tr>
+			<tr><td class="mono">neochat</td><td>Matrix, native Kirigami.</td></tr>
+			<tr><td class="mono">alligator</td><td>RSS reader &mdash; which is also how you
+			follow a Bluesky profile, since it serves RSS per account.</td></tr>
+			<tr><td class="mono">koko</td><td>The photo gallery.</td></tr>
+		</table>
+		</div>
+		<p>Offline maps and the podcast reader were in this list until 2026-09-10, and
+		came out for the same reason: Pure Maps needs <code>osmscout-server</code> holding
+		the maps and <code>geoclue</code> answering "where am I", plus a download of your
+		own region to be useful at all. That is a decision to make, not a set to
+		preselect &mdash; <code>apk add pure-maps osmscout-server geoclue</code> and
+		<code>apk add kasts</code> are one command each.</p>
+		<div class="note"><i></i><div>
+			<b>One thing to know before installing the set.</b>
+			apk cannot leave a metapackage with an unmet dependency, so
+			<code>apk del firefox</code> removes <code>utsugi-surya-extras</code> along with
+			it &mdash; the other eleven stay, but the set stops existing and no upgrade
+			brings it back. If you would rather pick one by one, that is the supported way:
+			these are choices, and metapackages are for what has to stay.
+		</div></div>
+	</div>
+</section>
+
+<section id="vayu" class="panel">
+	<div class="wrap">
+		<div class="h"><span>04</span><h2>vayu &mdash; experimental</h2></div>
+		<p><code>utsugi-vayu-base</code> is the POCO X3 Pro set, and the honest summary is
+		one line: <b>the modem does not work, so it is not a phone.</b> It carries the
+		research kernel for the SM8150, the patched <code>qcom-diag</code> that measures
+		the modem, the kernel command line that turns a hung task into a panic instead of
+		a silent freeze, and a helper that extracts the IPA firmware from the vendor
+		partition of the phone you already own, because it cannot be redistributed.</p>
+		<p>It is published so the investigation is installable by anyone who wants to
+		carry it further. See <a href="devices.html">Devices</a> for where it stands.</p>
+		<div class="next">
+			<a href="install.html"><b>Next</b><span>Installation</span></a>
+			<a href="features.html"><b>Back to</b><span>What you get</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

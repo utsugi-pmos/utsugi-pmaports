@@ -36,17 +36,24 @@ KEY=utsugi-pmaports-6aa024e2.rsa.pub
 sudo wget -qO /etc/apk/keys/$KEY https://utsugi-pmos.github.io/utsugi-pmaports/keys/$KEY
 echo https://utsugi-pmos.github.io/utsugi-pmaports/main | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add utsugi-surya-full
+sudo apk add utsugi-surya-base
 ```
 
-Three levels, pick what you want:
+Two packages, and only one of them is a decision:
 
-- **`utsugi-surya-base`** -- what makes the hardware work: the patched kernel,
-  audio, sensors, GPS, power-off, charge mode, cameras.
-- **`utsugi-surya-full`** -- base plus our own applications and the Plasma Mobile
-  fixes.
-- **`utsugi-surya-extras`** -- optional applications: browser, mail, maps,
-  messaging, photos. A choice, not a fix, which is why it is separate.
+- **`utsugi-surya-base`** -- the phone. The patched kernel, audio, sensors, GPS,
+  cameras, power-off, charge mode, the Plasma Mobile fixes and the six own
+  applications. There is nothing to weigh up here: all of it is something that
+  did not work.
+- **`utsugi-surya-extras`** -- applications anybody could pick for themselves:
+  browser, mail, two-factor, social, photos. A choice, not a fix, which is why it
+  is separate and why every one of them can be installed on its own.
+
+It used to be three, with a `utsugi-surya-full` in the middle, and the split
+failed in the only place that mattered: "full" read as more of the same as
+"extras", so the level nobody should have to think about looked optional. `base`
+carries all of it now and still answers to the old name, so a phone that has
+`utsugi-surya-full` migrates on the next `apk upgrade`.
 
 Personal preferences (which browser, ad-blocking DNS, Telegram scaling, web app
 launchers) are deliberately **not** in either: they live in the interactive
