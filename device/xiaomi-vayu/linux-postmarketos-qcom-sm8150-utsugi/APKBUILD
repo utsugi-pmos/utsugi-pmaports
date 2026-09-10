@@ -1,12 +1,12 @@
 # Co-Maintainer: Viola Guerrera <guerrera.nicola@gmail.com>
 maintainer="Pan Ortiz <panjeoc@proton.me>"
-# LOCAL: apunta a sm8150/7.0-wip para incluir los DTB de xiaomi-vayu,
-# que no existen en ningun tag publicado (ver v6.17.0-sm8150).
+# LOCAL: points at sm8150/7.0-wip to include the xiaomi-vayu DTBs, which exist
+# in no published tag (see v6.17.0-sm8150).
 _flavor="postmarketos-qcom-sm8150"
 _orig=linux-$_flavor
 pkgname=$_orig-utsugi
 pkgver=7.0.0_git20260626
-pkgrel=18
+pkgrel=19
 
 # FORK of linux-postmarketos-qcom-sm8150, EXPERIMENTAL. The modem on this device
 # comes up and dies two to four seconds after the radio is switched on; these
@@ -55,7 +55,7 @@ builddir="$srcdir/linux-$_commit"
 prepare() {
 	default_prepare
 	cp "$srcdir/config-$_flavor.$arch" .config
-	# El config viene de 6.17; resolver simbolos nuevos de 7.0 sin preguntar
+	# The config comes from 6.17; resolve 7.0's new symbols without asking
 	make ARCH="$_carch" LLVM=1 olddefconfig
 }
 

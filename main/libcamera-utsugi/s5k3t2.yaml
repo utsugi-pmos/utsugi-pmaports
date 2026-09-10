@@ -1,14 +1,14 @@
 # SPDX-License-Identifier: CC0-1.0
 #
-# Ajuste minimo de libcamera para el S5K3T2 frontal del surya.
-# Va en /usr/share/libcamera/ipa/simple/s5k3t2.yaml
+# Minimal libcamera tuning for the surya's front S5K3T2.
+# Goes in /usr/share/libcamera/ipa/simple/s5k3t2.yaml
 #
-# El nivel de negro es el pedestal de 64 en 10 bits, que libcamera cuenta sobre
-# 16 bits: 64 << 6 = 4096. Es el mismo que usa el s5k3l6xx de este directorio,
-# que es otro Samsung de la misma epoca.
+# The black level is the pedestal of 64 in 10 bits, which libcamera counts over
+# 16 bits: 64 << 6 = 4096. It is the same one the s5k3l6xx in this directory
+# uses, another Samsung of the same era.
 #
-# Sin fichero propio libcamera usa uncalibrated.yaml, que deja el pedestal sin
-# restar y da una imagen lavada y con el negro gris.
+# With no file of its own libcamera uses uncalibrated.yaml, which leaves the
+# pedestal unsubtracted and gives a washed-out image with grey blacks.
 %YAML 1.1
 ---
 version: 1
