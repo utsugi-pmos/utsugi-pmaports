@@ -43,8 +43,9 @@
 			<tr><th>A USB cable</th><td>Data, not charge-only. Straight into the
 			computer if you can &mdash; hubs cause half the "device not found".</td></tr>
 			<tr><th>Bootloader unlocked</th><td>Xiaomi's own procedure: a Mi account,
-			seven days of waiting, and a Windows-only tool.
-			<a href="install-pmos.html">Step by step here</a>.</td></tr>
+			<b>seven days of waiting</b>, and a Windows-only tool.
+			<a href="unlock.html">Step by step here</a>. Without this, nothing below
+			works.</td></tr>
 			<tr><th>U-Boot on <code>boot</code></th><td>Matched to your panel. If this
 			phone has never run postmarketOS, do <a href="install-pmos.html">route 3</a>
 			first &mdash; only its U-Boot step.</td></tr>

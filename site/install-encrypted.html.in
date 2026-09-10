@@ -22,6 +22,9 @@
 		<h1>Encrypted</h1>
 		<p class="lede">Full-disk encryption with an on-screen keyboard at boot. It
 		works on this phone, and there is no image to download.</p>
+		<p>Like every route here, it needs the phone unlocked at Xiaomi first
+		&mdash; a Mi account and seven days of waiting.
+		<a href="unlock.html">The steps</a>.</p>
 	</div>
 </section>
 

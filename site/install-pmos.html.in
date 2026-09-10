@@ -28,33 +28,10 @@
 <section>
 	<div class="wrap">
 		<div class="h"><span>01</span><h2>Unlock the bootloader</h2></div>
-		<p>The phone leaves the factory refusing to boot anything but MIUI. Xiaomi
-		hands you the key, on their terms: a Mi account, a wait of several days,
-		and their tool. <b>Everything on the phone is erased</b> at the end of it.</p>
-		<p>On the phone:</p>
-		<ol>
-			<li>Put a SIM in and turn mobile data on. The next step will not go
-			through over wifi.</li>
-			<li><b>Settings &rarr; About phone</b> and tap <b>MIUI version</b> seven
-			times. That turns on the developer options.</li>
-			<li><b>Settings &rarr; Additional settings &rarr; Developer options
-			&rarr; Mi Unlock status</b>, then <b>Add account and device</b>. Sign in
-			with your Mi account.</li>
-			<li>Wait however long it tells you. The usual answer is 168 hours
-			&mdash; seven days. The clock runs on Xiaomi's side and nothing you do
-			shortens it.</li>
-		</ol>
-		<p>Then on a PC:</p>
-		<ol style="counter-reset:step 4">
-			<li>Get <b>Mi Unlock</b> from <a href="https://en.miui.com/unlock/">en.miui.com/unlock</a>
-			and sign in with the same account.</li>
-			<li>Turn the phone off. Hold <b>volume-down + power</b> until it says
-			<i>fastboot</i>, then plug the USB cable in.</li>
-			<li>Press Unlock. It wipes the phone and reboots into MIUI.</li>
-		</ol>
-		<p><b>Mi Unlock only runs on Windows.</b> This is the one step you cannot
-		do from Linux or a Mac: use a Windows machine, or a Windows VM with the USB
-		device passed through. Everything after this works anywhere.</p>
+		<p>Xiaomi's own procedure: a Mi account, seven days of waiting and a
+		Windows-only tool, and it wipes the phone. It gates everything else, so if
+		you have not started it, start it now.</p>
+		<p><a class="btn" href="unlock.html">The unlock, step by step &rarr;</a></p>
 
 		<div class="h" style="margin-top:34px"><span>02</span><h2>Find out which panel you have</h2></div>
 		<p>The POCO X3 NFC shipped with two different screens &mdash; <b>Tianma</b>

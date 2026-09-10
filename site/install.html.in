@@ -20,6 +20,12 @@
 	<div class="wrap">
 		<div class="eyebrow">Four ways, pick one</div>
 		<h1>Install</h1>
+		<div class="note"><i></i><div>
+			<b>First, Xiaomi has to unlock the phone. All four routes need it.</b>
+			A Mi account, <b>seven days of waiting</b> and a Windows-only tool, and
+			it wipes the phone. Start that today, whichever route you pick:
+			<a href="unlock.html">the steps</a>.
+		</div></div>
 		<div class="grid">
 			<a href="install-image.html">
 				<div class="n">1 &middot; Ready image</div>
