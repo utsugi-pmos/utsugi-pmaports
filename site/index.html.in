@@ -32,20 +32,49 @@
 		<div class="right">
 			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest"
 			   style="text-align:center">Download the image &mdash; 1.2 GB</a>
-			<div class="sh">
-				<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
-				<pre><i># install fastboot first:</i>
+			<div class="os">
+				<input type="radio" name="os" id="os-linux" checked>
+				<input type="radio" name="os" id="os-win">
+				<input type="radio" name="os" id="os-mac">
+				<div class="tabs">
+					<label for="os-linux">Linux</label>
+					<label for="os-win">Windows</label>
+					<label for="os-mac">macOS</label>
+				</div>
+				<div class="pane pane-linux"><div class="sh"><pre><i># install fastboot:</i>
 <i>#   Debian/Ubuntu  apt install android-sdk-platform-tools</i>
 <i>#   Arch           pacman -S android-tools</i>
-<i>#   Alpine         apk add android-tools</i>
+<i>#   Fedora         dnf install android-tools</i>
 
-<i># phone OFF, then hold volume-down + power</i>
-<i># until it says "fastboot". plug the USB cable in.</i>
-sudo fastboot devices        <b># must print your phone</b>
+<i># phone OFF, hold volume-down + power until it says</i>
+<i># "fastboot", then plug the USB cable in</i>
+sudo fastboot devices      <b># must print your phone</b>
 
-xz -d utsugi-surya-*.img.xz
-sudo fastboot flash userdata utsugi-surya-*.img
-sudo fastboot reboot</pre>
+xz -d @IMG@.xz
+sudo fastboot flash userdata @IMG@
+sudo fastboot reboot</pre></div></div>
+				<div class="pane pane-win"><div class="sh"><pre><i># 1. platform-tools.zip from developer.android.com,</i>
+<i>#    unzip it, open PowerShell in that folder</i>
+<i># 2. the Google USB Driver, or Windows will not see</i>
+<i>#    the phone in fastboot</i>
+<i># 3. 7-Zip to unpack the .img.xz</i>
+
+<i># phone OFF, hold volume-down + power, plug the cable</i>
+.\fastboot devices
+
+.\fastboot flash userdata @IMG@
+.\fastboot reboot
+<b># not tested by me: reports welcome</b></pre></div></div>
+				<div class="pane pane-mac"><div class="sh"><pre>brew install android-platform-tools xz
+
+<i># phone OFF, hold volume-down + power until it says</i>
+<i># "fastboot", then plug the USB cable in</i>
+fastboot devices           <b># no sudo needed on macOS</b>
+
+xz -d @IMG@.xz
+fastboot flash userdata @IMG@
+fastboot reboot
+<b># not tested by me: reports welcome</b></pre></div></div>
 			</div>
 			<div><b>First time on this phone?</b>U-Boot goes on <code>boot</code> first,
 			and which one depends on your panel.
