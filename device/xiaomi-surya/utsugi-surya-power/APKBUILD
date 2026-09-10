@@ -12,7 +12,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -64,7 +64,7 @@ systemd() {
 sha512sums="
 8be702045b59c632fef17b0acc43ed299b4cff8e3e38b768e675c8004a95a65b0bc4d7bfb9aeeb9a18513cdb098f8e58cc13f5c4f968b4ef6331de2dd729cab8  poweroff-for-real
 94c4f180fcbed541bf4416f5899fc7e86eada50204aa6e4a37e24b75d1f9a4099944056c450ab7c4fab88a24036ebd28615b1220b9de485f55acebf2437ff5a0  charge-mode
-aaf3046ffb980e538820acc2aea8da53a65230e785d3bc1084a9d9df59a0545b7a6e40881e7cea403b559826bdaa16e6a0e2330ac03c358c47fdfd7702637383  charge-mode-decide
+b32ea050a6eabab40856f7ba315bfd8197a9b816621e44dc678cc0ad564bc89ff10d1d13b2e1570fa54ec03a7b7ae2ec8e1161bb06d4c61238033621d9eed7d1  charge-mode-decide
 cc1899799460c048ae4e7cebeb294ef6bcb1d9ae3dc707effaf6b9e30b187c9fcf779d1eb00a30b1efbd9e7e9f19cb82d85ce8f621ba30b9fda80c14ac392987  charge-screen
 e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903e460509bb11cc2dc3b817b5ee39a8878e68358c7f011e5ef  poweroff-for-real.service
 d435c973e8f3e3d5be421704387c4a98e932115153b9cf96c50fdae30cc5c877ff6e97581474c99f8c0c3f9839a6444b6e960403ed420c4f78b9184c960755bc  charge-mode.service

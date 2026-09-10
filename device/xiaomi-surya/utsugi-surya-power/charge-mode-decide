@@ -26,6 +26,7 @@ RUN=/run/charge-mode
 USB_CHG=16      # BIT(4)
 DC_CHG=8        # BIT(3)
 KPDPWR=128      # BIT(7)
+HARD_RESET=1    # BIT(0)
 CHG=/sys/class/power_supply/pm8150b-charger
 
 motivo() {
@@ -54,7 +55,24 @@ n=$(motivo) || { echo "cannot read PON_REASON1: normal boot"; exit 0; }
 # can do nothing. When in doubt, normal boot.
 online=$(cat "$CHG/online" 2>/dev/null || echo 0)
 
-if [ $(( n & (USB_CHG | DC_CHG) )) -ne 0 ] && [ $(( n & KPDPWR )) -eq 0 ] && [ "$online" = 1 ]; then
+# HARD_RESET SETTLES IT, AND LEAVING IT OUT COST A DAY.
+#
+# PON_REASON1 does not describe THIS boot: it describes how the phone last left
+# the off state, and it survives every warm reboot after that. A phone that was
+# first woken by the cable keeps reading USB_CHG for as long as it stays powered,
+# so every reboot with the cable in came back in charge mode -- no graphical
+# session, a bare console, and a phone that looks like a failed install.
+#
+# Measured on 2026-09-10, after 'fastboot reboot' with the cable attached:
+#
+#     08c0: 11    = USB_CHG | HARD_RESET
+#
+# The register was saying both things at once: "the cable woke me" and "I have
+# been reset since". The second one is the one that matters, and it was already
+# written in the header of this file without being read.
+if [ $(( n & HARD_RESET )) -ne 0 ]; then
+	echo "came from a reboot (PON_REASON1=$n): full session"
+elif [ $(( n & (USB_CHG | DC_CHG) )) -ne 0 ] && [ $(( n & KPDPWR )) -eq 0 ] && [ "$online" = 1 ]; then
 	[ "$SOLO_DECIR" = 1 ] || : > "$RUN"
 	echo "turned on by the charger (PON_REASON1=$n): charge mode"
 else
