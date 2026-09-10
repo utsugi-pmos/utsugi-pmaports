@@ -121,10 +121,14 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
 	max-width:var(--wide);margin:0 auto;padding:0 20px}
 .hero .left{padding:52px 40px 52px 0;border-right:1px solid var(--line2)}
 .hero .right{padding:52px 0 52px 40px;display:flex;flex-direction:column;justify-content:center;gap:1px}
-.hero .right div{background:var(--panel2);padding:14px 16px;font-size:13px;
+/* Scoped so they cannot reach inside a shell block: 'any div in here' painted
+   the terminal box like a note -- light ground under near-white text, which is
+   an invisible install command -- and uppercased its <b>. */
+.hero .right > div:not(.sh){background:var(--panel2);padding:14px 16px;font-size:13px;
 	line-height:1.55;color:var(--mut)}
-.hero .right b{font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--mut);
-	font-weight:400;letter-spacing:.09em;text-transform:uppercase;display:block;margin-bottom:5px}
+.hero .right > div:not(.sh) b{font-family:"IBM Plex Mono",monospace;font-size:11px;
+	color:var(--mut);font-weight:400;letter-spacing:.09em;text-transform:uppercase;
+	display:block;margin-bottom:5px}
 @media (max-width:820px){
 	.hero{grid-template-columns:1fr}
 	.hero .left{padding:40px 0 32px;border-right:0;border-bottom:1px solid var(--line2)}
@@ -132,10 +136,11 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
 }
 
 
-/* A shell block inside the hero column keeps its own dark ground: the
-   descendant rule above would otherwise paint it like a note. */
-.hero .right .sh{background:var(--shell);padding:0}
-.hero .right .sh pre{white-space:pre-wrap}
+/* The hero's shell block: no bottom margin, and it wraps instead of scrolling
+   sideways, because a landing page cannot ask you to drag a scrollbar to read
+   the command you came for. */
+.hero .right .sh{margin:0}
+.hero .right .sh pre{white-space:pre-wrap;word-break:break-word}
 
 /* --- footer ------------------------------------------------------------- */
 footer{border-top:1px solid var(--line2);background:var(--panel)}

@@ -113,10 +113,15 @@ git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$
 # The landing page is a template in site/, not a heredoc: it is the first thing
 # anyone sees, and a page worth reading does not belong inside a shell script.
 # One page per template, plus whatever else site/ holds (the stylesheet).
+# @CSSV@ is the stylesheet's own hash. Without it a browser can hold an old
+# style.css against new markup: on 2026-09-11 that painted the hero's terminal
+# block like a note -- near-white text on a light ground -- and the install
+# command a visitor came for was invisible.
+CSSV="$(sha256sum "$REPO/site/style.css" | cut -c1-8)"
 for page in "$REPO"/site/*.html.in; do
 	name="$(basename "$page" .in)"
 	sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
-		"$page" > "$SITE/$name"
+		-e "s|@CSSV@|$CSSV|g" "$page" > "$SITE/$name"
 done
 for extra in "$REPO"/site/*.css "$REPO"/site/*.html; do
 	[ -e "$extra" ] && cp "$extra" "$SITE/"

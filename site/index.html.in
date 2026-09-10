@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=@CSSV@">
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
@@ -44,8 +44,8 @@ passwd            <b># it ships as user / 147147</b>
 sudo apk upgrade</pre>
 			</div>
 			<div><b>First time on this phone?</b>U-Boot goes on <code>boot</code> first,
-			and which one depends on your panel &mdash;
-			<a href="install-pmos.html">steps here</a>.</div>
+			and which one depends on your panel.
+			<a href="install-pmos.html">Steps here</a>.</div>
 		</div>
 	</div>
 </section>
@@ -83,11 +83,11 @@ sudo apk upgrade</pre>
 			<tr><th>Take photos</th><td>All three cameras, with autofocus: 64&nbsp;Mpx
 			rear, front, ultra-wide.</td></tr>
 			<tr><th>Make calls</th><td>Voice both ways over LTE. The other end hears an
-			echo &mdash; still open.</td></tr>
+			echo. Still open.</td></tr>
 			<tr><th>Hear things</th><td>Both speakers, earpiece, and the volume you left
 			it at. Out of the box this phone booted mute.</td></tr>
 			<tr><th>Rotate the screen</th><td>Accelerometer, light, compass, proximity
-			&mdash; all four.</td></tr>
+			, all four.</td></tr>
 			<tr><th>Find yourself</th><td>Twelve satellites, fix in about 40&nbsp;s from
 			cold. postmarketOS ships the GPS locked; this unlocks it.</td></tr>
 			<tr><th>Save battery</th><td>60&nbsp;Hz instead of 120 when you ask, and a
@@ -120,7 +120,7 @@ sudo apk upgrade</pre>
 				<div class="t">Will an update break it?</div>
 				<p>The patched packages are forks with their own names, so an upstream
 				release cannot silently replace them. The kernel comes with updates, so
-				reboot deliberately &mdash; not in a hurry.</p>
+				reboot deliberately, not in a hurry.</p>
 			</div>
 			<div>
 				<div class="t">Is the image encrypted?</div>
@@ -130,7 +130,7 @@ sudo apk upgrade</pre>
 			<div>
 				<div class="t">Do I need to trust your binaries?</div>
 				<p>Not much: everything is built from public recipes and signed. Or build
-				it yourself &mdash; <code>scripts/build --all</code>.</p>
+				it yourself with <code>scripts/build --all</code>.</p>
 			</div>
 			<div>
 				<div class="t">Why is the fingerprint impossible?</div>
