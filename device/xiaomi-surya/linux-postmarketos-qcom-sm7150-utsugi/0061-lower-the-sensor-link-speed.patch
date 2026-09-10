@@ -60,7 +60,7 @@ This does NOT fix anything on its own: it is for measuring.
 + * -DDR clock or bit rate- the link runs at 2394 or at 1197 Mbps per lane.
 + *
 + * The first one is right at the limit of the device: the CSIPHY timer of the
-+ * SM7150 solo tiene dos frecuencias, 19,2 y 300 MHz, y CAMSS exige
++ * SM7150 has only two frequencies, 19.2 and 300 MHz, and CAMSS requires
 + * link_freq/4 <= that frequency, that is 2400 Mbps per lane AS AN ABSOLUTE
 + * MAXIMUM. We would be at 99.7 %.
 + *

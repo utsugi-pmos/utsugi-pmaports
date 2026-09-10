@@ -67,7 +67,7 @@ between always leaves the doubt that something else may have changed.
   *    If the clock is changed, it has to be changed ALSO in the device tree
   *    (assigned-clock-rates) or the PLL will be wrong and there will be no image.
   *
-- * 2. D-PHY de 2 lanes. CAMSS solo admite D-PHY, y 2 lanes funciona tanto
+- * 2. Two-lane D-PHY. CAMSS only takes D-PHY, and two lanes work whether
 - *    whether the board has 2 or 4, because lanes 0 and 1 are always
 - *    wired. The sensor is configured for that with 0x0111=0x02 and
 - *    0x0114=0x01, which already come in the tables.

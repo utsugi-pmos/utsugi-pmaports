@@ -70,7 +70,7 @@ boots cold.
  	}
  
 +	/*
-+	 * "NO LO SE" NO ES "VACIA".
++	 * "I DO NOT KNOW" IS NOT "EMPTY".
 +	 *
 +	 * The S2 average is accumulated by the hardware, and after a COLD boot
 +	 * -not a reboot, which keeps the PMIC- it has no samples yet and

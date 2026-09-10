@@ -16,7 +16,7 @@ itself plausible.
  	 */
 -	if (voltage_now < voltage_min) {
 +	/*
-+	 * And "no lo se" is not "full" either. Measured on 2026-09-05, 17 s
++	 * And "I do not know" is not "full" either. Measured 2026-09-05, 17 s
 +	 * after a cold boot: the S2 average read 6.38 V on a 4.4 V cell, so
 +	 * this reported 100 % while the instantaneous ADC said 3.74 V (34 %).
 +	 * Seven minutes later the average had settled at 3.73 V. So the

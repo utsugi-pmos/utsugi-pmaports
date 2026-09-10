@@ -248,7 +248,7 @@ caused nor when it was caused.
 +		/*
 +		 * The supplies are the ones left free that fit in
 +		 * voltage. If the sensor does not wake with these, the
-+		 * resultado lo dira y se prueban otras.
++		 * result will say so and others get tried.
 +		 */
 +		vddio-supply = <&vreg_l13a_1p8>;
 +		vdda-supply = <&wl_avdd1>;
@@ -457,9 +457,9 @@ caused nor when it was caused.
 + * Registros de identificacion.
 + *
 + * THE BUG THAT COST THE WHOLE INVESTIGATION: 0x0f16 was copied from the driver
-+ * hi846 de mainline -donde HI846_REG_CHIP_ID_L vale 0x0f16 y devuelve 46 08- y
++ * mainline hi846 -where HI846_REG_CHIP_ID_L is 0x0f16 and returns 46 08- and
 + * and it was assumed that the Hi-1337, being SK Hynix too, would have it at the
-+ * mismo sitio. NO lo tiene.
++ * same place. It does NOT.
 + *
 + * The Hi-1337 puts its id at 0x0716, and there it answers a clean 1337. At
 + * 0x0f16 it returns 0000, which is what was being read round after round as
@@ -762,7 +762,7 @@ caused nor when it was caused.
 +	clk_bulk_disable_unprepare(nrelojes, relojes);
 +	regulator_bulk_disable(ARRAY_SIZE(surya_supplies), supplies);
 +
-+	/* Nunca se queda enlazado: es un instrumento de medida, no un driver. */
++	/* Never stays bound: it is a measuring instrument, not a driver. */
 +	dev_info(&cl->dev, "barrido terminado\n");
 +	return -ENODEV;
 +}

@@ -34,11 +34,11 @@ Details that have to be respected:
  		# SPEAKER AND EARPIECE PLAYBACK
  		cset "name='TERT_MI2S_RX Audio Mixer MultiMedia1' 1"
 +
-+		# Audio de llamada. El DSP puentea el modem con estos dos
-+		# backends cuando q6voiced abre la sesion de voz; mientras no
-+		# hay llamada no hacen nada, asi que se pueden dejar puestos.
-+		#   salida: la voz sale por TERT_MI2S_RX a los tas2562
-+		#   entrada: el microfono entra por TX_CODEC_DMA_TX_3
++		# In-call audio. The DSP bridges the modem with these two
++		# backends when q6voiced opens the voice session; while there
++		# is no call they do nothing, so they can be left in place.
++		#   out: the voice goes out through TERT_MI2S_RX to the tas2562
++		#   in:  the microphone comes in through TX_CODEC_DMA_TX_3
 +		cset "name='TERT_MI2S_RX Voice Mixer VoiceMMode1' 1"
 +		cset "name='VoiceMMode1 Capture Mixer TX_CODEC_DMA_TX_3' 1"
  	]
@@ -53,31 +53,31 @@ Details that have to be respected:
  	}
  }
  
-+# El volumen de los tas2562 NO se toca desde aqui, a proposito.
++# The tas2562 volume is NOT touched from here, on purpose.
 +#
-+# El control ALSA "Digital Volume Control" no sirve en este kernel: escribe en
-+# el chip un coeficiente que no corresponde con el valor pedido. Medido el
-+# 2026-08-10 poniendo 100 desde el UCM, el hardware quedaba en 0x197a967f
-+# (unos -14 dB), que no se oye. Y peor: esa escritura pisaba el valor bueno
-+# que el servicio audio-volumen ya habia puesto por I2C al arrancar.
++# The ALSA control "Digital Volume Control" is no use on this kernel: it writes
++# a coefficient into the chip that does not match the value asked for. Measured
++# on 2026-08-10, setting 100 from the UCM left the hardware at 0x197a967f
++# (about -14 dB), which cannot be heard. Worse: that write overwrote the good
++# value the audio-volume service had already set over I2C at boot.
 +#
-+# Lo gobierna audio-salida/audio-volumen, que escriben por I2C en el orden que
-+# el chip espera. Aqui solo queda el enrutado.
++# It is governed by audio-output/audio-volume, which write over I2C in the order
++# the chip expects. All that is left here is the routing.
 +#
-+# Cuidado con dos cosas, verificadas por oido el 2026-08-05:
-+#   - Los prefijos estan al reves de lo que sugiere el device tree:
-+#     "Left" (9-004d) es el ALTAVOZ de abajo y "Right" (9-004c) el AURICULAR.
-+#   - NUNCA poner 110: en este kernel el maximo escribe un coeficiente cero y
-+#     deja el amplificador mudo. El tope util es 109.
-+# El valor se pone a 0 antes del bueno porque el driver cachea y no reescribe
-+# si coincide con lo que ya tiene.
++# Two things to watch out for, verified by ear on 2026-08-05:
++#   - The prefixes are the reverse of what the device tree suggests:
++#     "Left" (9-004d) is the bottom SPEAKER and "Right" (9-004c) the EARPIECE.
++#   - NEVER set 110: on this kernel the maximum writes a zero coefficient and
++#     leaves the amplifier mute. The usable ceiling is 109.
++# The value is set to 0 before the good one because the driver caches and does
++# not rewrite when it matches what it already holds.
 +
  SectionDevice."Speaker" {
  	Comment "Speaker playback"
  
-+	# Los dos comparten el mismo PCM y solo puede sonar uno. Sin declararlo,
-+	# el servidor de audio se queda con uno solo y el otro no aparece como
-+	# puerto seleccionable.
++	# Both share the same PCM and only one can play. Without declaring it,
++	# the audio server keeps just one and the other does not show up as a
++	# selectable port.
 +	ConflictingDevice [
 +		"Earpiece"
 +	]
@@ -107,29 +107,29 @@ Details that have to be respected:
 +	Comment "Bottom microphone"
 +
 +	EnableSequence [
-+		# El frontend de captura es MultiMedia3; MultiMedia1 es
-+		# bidireccional y al grabar por el, q6asm intenta abrir tambien
-+		# un flujo de escritura y falla.
++		# The capture frontend is MultiMedia3; MultiMedia1 is
++		# bidirectional, and recording through it makes q6asm also try
++		# to open a write stream, and fail.
 +		cset "name='MultiMedia3 Mixer TX_CODEC_DMA_TX_3' 1"
 +
-+		# Decimador 0 <- SoundWire, canal ADC0 (= ADC1 del codec, que
-+		# es el microfono principal segun el mixer_paths de Xiaomi).
++		# Decimator 0 <- SoundWire, channel ADC0 (= the codec's ADC1,
++		# the main microphone according to Xiaomi's mixer_paths).
 +		cset "name='TX_AIF1_CAP Mixer DEC0' 1"
 +		cset "name='TX DEC0 MUX' SWR_MIC"
 +		cset "name='TX SMIC MUX0' ADC0"
 +
-+		# Los DMICn Switch tienen que quedarse apagados: encendidos
-+		# meten un segundo puerto SoundWire en el mismo flujo y
-+		# degradan la captura.
++		# The DMICn Switches have to stay off: switched on they put a
++		# second SoundWire port into the same stream and degrade the
++		# capture.
 +		cset "name='DMIC0 Switch' 0"
 +		cset "name='DMIC1 Switch' 0"
 +		cset "name='DMIC2 Switch' 0"
 +		cset "name='DMIC3 Switch' 0"
 +
-+		# Ganancia analogica al maximo (mejor relacion senal/ruido que
-+		# subir la digital) y la digital lo justo para que la grabacion
-+		# se oiga: 94 son +10 dB sobre la escala del control, que va de
-+		# -84 dB a +40 dB en pasos de 1 dB.
++		# Analogue gain at maximum (better signal-to-noise than raising
++		# the digital one) and the digital one just enough for the
++		# recording to be audible: 94 is +10 dB on the control's scale,
++		# which runs -84 dB to +40 dB in 1 dB steps.
 +		cset "name='ADC1 Switch' 1"
 +		cset "name='ADC1_MIXER Switch' 1"
 +		cset "name='ADC1 Volume' 20"
@@ -146,10 +146,10 @@ Details that have to be respected:
 +
 +	Value {
 +		CapturePriority 200
-+		# OJO: el numero de PCM depende del ORDEN de los enlaces en el device
-+		# tree. Al anadir el enlace de reproduccion del codec (los cascos)
-+		# MultiMedia3 paso de 2 a 3 y VoiceMMode1 de 4 a 5, y la tarjeta
-+		# dejo de abrirse (sink auto_null). Comprobar con /proc/asound/pcm.
++		# CAREFUL: the PCM number depends on the ORDER of the links in the
++		# device tree. Adding the codec playback link (the headphones) moved
++		# MultiMedia3 from 2 to 3 and VoiceMMode1 from 4 to 5, and the card
++		# stopped opening (sink auto_null). Check with /proc/asound/pcm.
 +		CapturePCM "hw:${CardId},3"
 +		CaptureChannels 1
 +	}

@@ -78,7 +78,7 @@ Rear 270 and front 90 it is.
 +	 * Without this libcamera warns "Failed to retrieve the camera location" and
 +	 * "Rotation control not available, default to 0 degrees", and the image
 +	 * comes out lying down in the viewfinder: the sensor is mounted rotated with respect to the
-+	 * movil y nadie se lo dice a nadie.
++	 * phone and nobody tells anybody.
 +	 *
 +	 * The two values come from the device tree, which is where they are because
 +	 * they depend on the board and not on the chip.

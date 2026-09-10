@@ -2417,7 +2417,7 @@ without recompiling.
 +		 * default frame of 3307. And libcamera, in the dark, asks for
 +		 * exactly the maximum: it ended up asking for TWICE what fits
 +		 * and the sensor stretched the frame so that it would fit, which
-+		 * acortarla no servia de nada.
++		 * shortening it did nothing at all.
 +		 *
 +		 * It is what mainline's hi846.c does, which is the close relative.
 +		 */
@@ -2509,7 +2509,7 @@ without recompiling.
 +	 * THE MINIMUM IS 720, NOT 4, AND IT IS MEASURED.
 +	 *
 +	 * Below ~720 this sensor STOPS STREAMING: the value is written to it,
-+	 * lo acepta y lo devuelve tal cual, y a partir de ahi no sale un solo
++	 * accepts it and returns it unchanged, and from there not a single
 +	 * packet over CSI. Bounded by bisection: 720 works, 690 does not.
 +	 *
 +	 * Declaring 4 was not harmless. Controls PERSIST, so as
@@ -2541,7 +2541,7 @@ without recompiling.
 +	 * Without this libcamera warns "Failed to retrieve the camera location",
 +	 * lists the camera as 'hi1337' instead of "Internal back camera", and the
 +	 * image comes out rotated because nobody has told it how to straighten it. The
-+	 * otras dos ya lo hacen; ver 0096-orientacion-y-rotacion.
++	 * other two already do; see 0096-orientation-and-rotation.
 +	 */
 +	ret = v4l2_fwnode_device_parse(hi1337->dev, &props);
 +	if (ret) {
@@ -3179,7 +3179,7 @@ without recompiling.
 +	 * version did not say it, and since reading the ID over i2c does NOT
 +	 * need MCLK, a stopped clock went unnoticed until much
 +	 * later, when no image would arrive. That is the worst thing a
-+	 * fallo: aparecer lejos de donde se causa.
++	 * fault: showing up far from where it is caused.
 +	 */
 +	dev_dbg(dev, "encendido: MCLK a %lu Hz\n", clk_get_rate(hi1337->mclk));
 +
