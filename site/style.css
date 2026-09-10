@@ -46,6 +46,14 @@ h2{margin:0;font-size:26px;font-weight:600;letter-spacing:-.015em}
 h3{margin:26px 0 10px;font-size:16px;font-weight:600}
 p{margin:0 0 20px;font-size:15px;line-height:1.65;color:var(--mut);max-width:74ch;text-wrap:pretty}
 p.lede{font-size:17px;line-height:1.6;max-width:60ch}
+ol,ul{margin:0 0 20px;padding-left:0;max-width:74ch;list-style:none;counter-reset:step}
+ol li,ul li{position:relative;padding-left:34px;margin-bottom:12px;font-size:15px;
+	line-height:1.65;color:var(--mut);text-wrap:pretty}
+ol li::before{counter-increment:step;content:counter(step);position:absolute;left:0;top:1px;
+	font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--accent);
+	border:1px solid var(--line2);width:20px;height:20px;line-height:19px;text-align:center}
+ul li::before{content:"";position:absolute;left:6px;top:9px;width:6px;height:6px;
+	background:var(--accent)}
 b,strong{color:var(--ink);font-weight:600}
 p code,td code,li code{color:var(--ink);font-size:.92em}
 
