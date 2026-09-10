@@ -1,0 +1,127 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Overview</a>
+	<a href="devices.html">Devices</a>
+	<a href="features.html">Features</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Three routes</div>
+		<h1>Installation</h1>
+		<p class="lede">postmarketOS is Alpine-based, so this is <b>apk</b>, not apt.
+		Which route you take depends on how much you want to keep.</p>
+		<div class="note"><i></i><div>
+			<b>Read this before the first reboot.</b>
+			The kernel comes with <code>base</code>. On the surya a kernel that does not
+			boot is not a failed install, it is a reboot loop: the watchdog fires
+			20&nbsp;s after PID&nbsp;1 and there is no screen left to fix it from. And the
+			<code>boot</code> partition holds U-Boot, not the kernel &mdash; writing a
+			kernel there leaves the phone unable to boot at all.
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/flash/surya.md">flash/surya.md</a>
+			has the way back in.
+		</div></div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>On an existing install</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON THE PHONE</span></div>
+			<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
+echo @URL@/main | sudo tee -a /etc/apk/repositories
+sudo apk update
+sudo apk add utsugi-surya-full
+<b># reboot as a separate, deliberate step</b></pre>
+		</div>
+		<h3>Pick a level</h3>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">Package</th><th>What it brings</th></tr>
+			<tr><td class="mono">utsugi-surya-base</td><td>The hardware: patched kernel,
+			audio, sensors, GPS, cameras, power-off, charge mode.</td></tr>
+			<tr><td class="mono">utsugi-surya-full</td><td>Base, plus the six applications
+			and the Plasma Mobile fixes.</td></tr>
+			<tr><td class="mono">utsugi-surya-extras</td><td>Optional applications: browser,
+			mail, maps, messaging, photos. A choice, not a fix, which is why it is
+			separate.</td></tr>
+			<tr><td class="mono">utsugi-vayu-base</td><td>The experimental POCO X3 Pro set.
+			The modem does not work.</td></tr>
+		</table>
+		</div>
+		<p style="margin-top:20px">From then on <code>apk upgrade</code> keeps everything
+		current, kernel included.</p>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>Flash a ready image</h2></div>
+		<p>On the <a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases
+		page</a>, with everything already inside. It carries the repository line and the
+		signing key, so updates are tracked from the first boot.</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON THE PC</span></div>
+			<pre>sha256sum -c SHA256SUMS
+xz -d utsugi-surya-&lt;tag&gt;.img.xz
+fastboot flash userdata utsugi-surya-&lt;tag&gt;.img   <b># userdata. never boot.</b>
+fastboot reboot</pre>
+		</div>
+		<p>On the surya, U-Boot lives in <code>boot</code> and the system lives inside a
+		disk image written to <code>userdata</code>. Flashing a kernel to <code>boot</code>
+		is how you lose the ability to boot at all.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>Encrypted &mdash; you build it</h2></div>
+		<p>There is no encrypted image to download, and that is deliberate rather than
+		lazy. A LUKS master key is created when the disk is formatted, which for an image
+		means on the machine that builds it. Changing the passphrase afterwards replaces
+		the slot protecting that key, <b>not the key itself</b>. An encrypted image handed
+		out would therefore give whoever built it the master key of every phone flashed
+		from it, and no passphrase change would take it back.</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
+cd utsugi-pmaports
+scripts/setup-workdir
+scripts/build-your-own-image --encrypted</pre>
+		</div>
+		<p>pmbootstrap asks <b>you</b> for the passphrase during the install, and the
+		master key is generated on your machine. Tested end to end on the surya: the
+		initramfs opens a LUKS that lives inside a loop file on <code>userdata</code>, and
+		<code>unl0kr</code> draws its keyboard on this panel.</p>
+		<div class="note"><i></i><div>
+			<b>Encrypting an existing install is not offered.</b>
+			It needs the filesystem shrunk to make room for the header, it cannot run on
+			the mounted root of the running system &mdash; which here lives inside a loop
+			file &mdash; and it ends with the initramfs, <code>fstab</code> and
+			<code>crypttab</code> rewritten by hand. Any of those half done leaves a phone
+			that does not boot, and recovery here means reinstalling, which wipes. Back up,
+			reinstall encrypted, restore.
+		</div></div>
+		<div class="next">
+			<a href="devices.html"><b>Check first</b><span>What does not work</span></a>
+			<a href="contribute.html"><b>Next</b><span>Contribute</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>
