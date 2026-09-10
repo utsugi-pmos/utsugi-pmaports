@@ -1,0 +1,56 @@
+#!/bin/sh
+# Reboot into fastboot, which on this phone means U-Boot's fastboot.
+#
+# WHY IT IS NOT 'systemctl reboot bootloader'
+# -------------------------------------------
+# Because that does not work here, and the way it fails is quiet. Measured on
+# 2026-09-10 with systemd 262_rc1:
+#
+#     # systemctl reboot bootloader
+#     Too many arguments.
+#
+# and a plain 'systemctl reboot' TRUNCATES /run/systemd/reboot-param, which is
+# the file poweroff-for-real reads to learn the reason. So the reason never
+# survives to the point where it could be handed to the kernel: every reboot
+# becomes a plain one and the request to stop in the bootloader is dropped
+# without a word. Reaching fastboot needed the syscall by hand, and that is what
+# this command is.
+#
+# WHAT IT DOES
+# ------------
+# sync, then the reboot syscall with LINUX_REBOOT_CMD_RESTART2 and the string
+# "bootloader". RESTART2 is the only call that carries a reason, and neither
+# glibc nor musl expose it through reboot(), hence python. The kernel writes the
+# reason where the bootloader looks for it and resets.
+#
+# IT DOES NOT SHUT DOWN GRACEFULLY, on purpose: going through systemd is exactly
+# what loses the reason. Everything is synced first, and the filesystem is
+# journalled, but do not run it with unsaved work.
+#
+# Usage:  sudo reboot-to-bootloader
+#         (out again with 'fastboot reboot', or a long press on power)
+set -eu
+
+[ "$(id -u)" = 0 ] || { echo "needs root: sudo reboot-to-bootloader" >&2; exit 1; }
+
+command -v python3 >/dev/null 2>&1 || {
+	echo "python3 is missing, and RESTART2 needs it: no reason can be carried" >&2
+	exit 1
+}
+
+echo "rebooting into fastboot; nothing else will be written from here on"
+sync
+
+python3 - bootloader <<'FIN'
+import ctypes, sys
+libc = ctypes.CDLL(None, use_errno=True)
+libc.syscall.restype = ctypes.c_long
+# aarch64: __NR_reboot = 142, LINUX_REBOOT_CMD_RESTART2 = 0xA1B2C3D4
+libc.syscall(ctypes.c_long(142), ctypes.c_ulong(0xfee1dead),
+             ctypes.c_ulong(672274793), ctypes.c_ulong(0xA1B2C3D4),
+             ctypes.c_char_p(sys.argv[1].encode()))
+FIN
+
+# Only reached if the syscall was refused.
+echo "the kernel did not take the reason: still running" >&2
+exit 1

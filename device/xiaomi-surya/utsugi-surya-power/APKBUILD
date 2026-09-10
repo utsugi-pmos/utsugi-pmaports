@@ -12,7 +12,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -24,6 +24,7 @@ source="poweroff-for-real
 	charge-mode
 	charge-mode-decide
 	charge-screen
+	reboot-to-bootloader
 	poweroff-for-real.service
 	charge-mode.service
 	charge-mode-decide.service
@@ -38,6 +39,9 @@ package() {
 	for helper in poweroff-for-real charge-mode charge-mode-decide charge-screen; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
+	# /usr/bin, not /usr/libexec: this one is typed by a person, and reaching
+	# fastboot is something you do with the phone in your hand.
+	install -Dm755 "$srcdir"/reboot-to-bootloader -t "$pkgdir"/usr/bin/
 
 	# Installed as the stock "powersave" profile rather than a name of our own, so
 	# tuned-ppd's out-of-the-box mapping (power-saver=powersave) reaches it with
@@ -66,6 +70,7 @@ sha512sums="
 94c4f180fcbed541bf4416f5899fc7e86eada50204aa6e4a37e24b75d1f9a4099944056c450ab7c4fab88a24036ebd28615b1220b9de485f55acebf2437ff5a0  charge-mode
 b32ea050a6eabab40856f7ba315bfd8197a9b816621e44dc678cc0ad564bc89ff10d1d13b2e1570fa54ec03a7b7ae2ec8e1161bb06d4c61238033621d9eed7d1  charge-mode-decide
 cc1899799460c048ae4e7cebeb294ef6bcb1d9ae3dc707effaf6b9e30b187c9fcf779d1eb00a30b1efbd9e7e9f19cb82d85ce8f621ba30b9fda80c14ac392987  charge-screen
+27fcfe99c97a6eb9523b630b138d63168a3c8b79030854556170f7a13108a4999a112fffa494654df92071a83fbb88906c1c2f7004b21d3adfa0e6c1949d01a1  reboot-to-bootloader
 e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903e460509bb11cc2dc3b817b5ee39a8878e68358c7f011e5ef  poweroff-for-real.service
 d435c973e8f3e3d5be421704387c4a98e932115153b9cf96c50fdae30cc5c877ff6e97581474c99f8c0c3f9839a6444b6e960403ed420c4f78b9184c960755bc  charge-mode.service
 dd43c63d7cb7f0eb68ca64e3d29db5c17e499cc6a9759ea6625b28d931bbfac597f989c15daf04502886a9d9bab11da8d3ddfb4556b9b14e9840f0a125465cce  charge-mode-decide.service
