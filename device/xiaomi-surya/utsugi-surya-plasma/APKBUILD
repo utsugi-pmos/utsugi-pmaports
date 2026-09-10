@@ -19,13 +19,17 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
-depends="kconfig plasma-dialer-utsugi"
+# plasma-camera-utsugi by name, and not because the fork happens to win on
+# version: it provides "plasma-camera" like Alpine's does, so which one apk
+# installs was decided by arithmetic. Named here, the zoom bar and tap-to-focus
+# are guaranteed to be the camera that ends up on the phone.
+depends="kconfig plasma-dialer-utsugi plasma-camera-utsugi"
 # /etc/xdg/plasmanotifyrc belongs to plasma-workspace. Two packages shipping the
 # same file is an error unless one is allowed to win, and ours has to: it is the
 # whole point of shipping a default. The priority is well above Alpine's so a

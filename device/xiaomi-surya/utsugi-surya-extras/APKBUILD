@@ -1,8 +1,14 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
-# The applications that make the phone a phone you would carry, once the hardware
-# already works. Everything here is a CHOICE, which is why it is a package of its
-# own and not part of utsugi-surya-full: nobody should have to argue with a
-# metapackage about which browser they want.
+# Applications anybody could pick for themselves, once the phone already works.
+# Everything here is a CHOICE, which is why it is a package of its own and not
+# part of utsugi-surya-base: nobody should have to argue with a metapackage about
+# which browser they want.
+#
+# The maps went out on 2026-09-10, and not for being bad: pure-maps needs
+# osmscout-server holding the offline maps and geoclue answering "where am I",
+# so it is three packages and a download of your own region to be useful at all.
+# That is a decision, not an install. Same for the podcast reader -- taste with
+# no phone-specific reason to be preselected.
 #
 # All of it comes from Alpine or postmarketOS, on purpose: it keeps itself up to
 # date with apk upgrade and there is nothing of ours to maintain.
@@ -11,9 +17,9 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # and web application launchers are written into the user's own directory. Those
 # stay in surya-setup, which runs on a booted phone with a session.
 pkgname=utsugi-surya-extras
-pkgver=1
+pkgver=2
 pkgrel=0
-pkgdesc="Optional applications: browser, mail, maps, messaging, photos"
+pkgdesc="Optional applications: browser, mail, two-factor, social, photos"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
@@ -23,13 +29,9 @@ depends="
 	mobile-config-firefox
 	keysmith
 	merkuro
-	pure-maps
-	osmscout-server
-	geoclue
 	tokodon
 	neochat
 	alligator
-	kasts
 	koko
 	"
 

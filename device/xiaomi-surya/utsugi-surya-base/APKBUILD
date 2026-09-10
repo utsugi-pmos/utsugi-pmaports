@@ -1,8 +1,18 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
-# Everything that makes the hardware of the POCO X3 NFC work. No applications and
-# no taste: what is here is the difference between a phone that boots and a phone
-# that has cameras, in-call voice, sound, sensors, GPS and a power-off that
-# actually powers off.
+# Everything this repository ships for the POCO X3 NFC: the hardware and the
+# session. What is here is the difference between a phone that boots and a phone
+# that has cameras, in-call voice, sound, sensors, GPS, a power-off that actually
+# powers off, a dialpad that does not drop digits, and the six applications
+# Plasma Mobile does not ship.
+#
+# IT USED TO BE TWO PACKAGES, base and full, and the split was a mistake in the
+# only place that matters: the person installing it. "full" read as more of the
+# same as "extras", so the one level nobody should have to think about looked
+# optional. There is one level now, and one choice left -- utsugi-surya-extras --
+# which is applications anybody could pick for themselves.
+#
+# It replaces utsugi-surya-full with a versioned provides, so a phone that has
+# the old name gets this on the next 'apk upgrade' with nothing left behind.
 #
 # The forks are named EXPLICITLY, not through the names they provide. That is
 # what keeps them installed: apk would otherwise be free to satisfy
@@ -12,13 +22,15 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # and the package no longer exists; asking for a package that is gone makes apk
 # abort the WHOLE transaction and the rest ends up uninstalled without warning.
 pkgname=utsugi-surya-base
-pkgver=1
+pkgver=2
 pkgrel=0
-pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras and power (no apps)"
+pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras, power, the Plasma Mobile fixes and six applications"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
+provides="utsugi-surya-full=$pkgver-r$pkgrel"
+replaces="utsugi-surya-full"
 depends="
 	utsugi-keys
 	device-qcom-sm7150
@@ -35,6 +47,13 @@ depends="
 	utsugi-surya-power
 	utsugi-surya-camera
 	utsugi-surya-blackbox
+	utsugi-surya-plasma
+	poconav
+	screenglaze
+	keepalive
+	app-usage
+	smart-unlock
+	lost-phone
 	tuned
 	tuned-ppd
 	qmi-utils

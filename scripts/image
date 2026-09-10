@@ -21,7 +21,7 @@ while [ $# -gt 0 ]; do
 	esac
 done
 case "$DEVICE" in
-	surya) PMOS_DEVICE=qcom-sm7150; META=utsugi-surya-full ;;
+	surya) PMOS_DEVICE=qcom-sm7150; META=utsugi-surya-base ;;
 	vayu)  PMOS_DEVICE=xiaomi-vayu; META=utsugi-vayu-base ;;
 	*) die "--device must be surya or vayu" ;;
 esac
