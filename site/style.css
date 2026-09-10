@@ -131,6 +131,12 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
 	.hero .right{padding:24px 0 40px}
 }
 
+
+/* A shell block inside the hero column keeps its own dark ground: the
+   descendant rule above would otherwise paint it like a note. */
+.hero .right .sh{background:var(--shell);padding:0}
+.hero .right .sh pre{white-space:pre-wrap}
+
 /* --- footer ------------------------------------------------------------- */
 footer{border-top:1px solid var(--line2);background:var(--panel)}
 footer>div{max-width:var(--wide);margin:0 auto;padding:22px 20px;display:flex;
