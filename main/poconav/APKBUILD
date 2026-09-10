@@ -1,12 +1,18 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=poconav
 pkgver=1.2
-pkgrel=0
+pkgrel=1
 pkgdesc="Car navigation with neural-network voice, made for the dashboard"
 url="https://github.com/utsugi-pmos/poconav"
 arch="all"
 license="LGPL-2.0-or-later"
 options="!check"
+# maplibre-native-qt6 is not optional, and it was missing: the map switches to
+# the maplibre plugin the moment there are downloaded tiles (main.qml:
+# name: root.localDrawing ? "maplibre" : "osm"). The plugin was published and
+# depended on by nobody, so a phone drew fine on the online tiles and went blank
+# the day you downloaded your own region -- the one case the offline design
+# exists for.
 depends="
 	qt6-qtdeclarative
 	qt6-qtlocation
@@ -17,6 +23,7 @@ depends="
 	alsa-utils
 	python3
 	py3-valhalla-utsugi
+	maplibre-native-qt6
 	"
 makedepends="
 	cmake
