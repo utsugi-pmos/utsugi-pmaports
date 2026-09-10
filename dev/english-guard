@@ -1,0 +1,55 @@
+#!/bin/sh
+# English-only guard for this repo, run as a Claude Code PreToolUse hook on
+# Write/Edit/MultiEdit (wired in .claude/settings.json). It reads the hook JSON on
+# stdin, looks at the TEXT the tool is about to write, and denies the edit if it
+# introduces Spanish — so a Claude session cannot backslide the repo out of English.
+#
+# The rule: code, identifiers, comments and documentation are English (see
+# ~/.claude/CLAUDE.md and ENGLISH-MIGRATION-PLAN.md). A line trips the guard if it
+# carries an accent / ñ / ¿ / ¡, or two+ Spanish function words after the allow-list.
+# It exempts intentional data (a [es] translation value, the mirror, upstream copies,
+# captured dumps, .patch bodies, the migration reference docs, and this tooling).
+#
+# Output contract: prints a PreToolUse decision JSON. "deny" blocks the edit and the
+# reason is shown to Claude; anything else allows it. It never hard-errors the turn.
+set -u
+
+payload="$(cat)"
+
+file="$(printf '%s' "$payload" | jq -r '.tool_input.file_path // empty' 2>/dev/null)"
+# Text the tool would add: Write.content, Edit.new_string, or every MultiEdit new_string.
+added="$(printf '%s' "$payload" | jq -r '
+	[ .tool_input.content,
+	  .tool_input.new_string,
+	  ( .tool_input.edits // [] | .[]?.new_string )
+	] | map(select(. != null)) | join("\n")' 2>/dev/null)"
+
+allow() { printf '%s\n' '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow"}}'; exit 0; }
+
+[ -z "$added" ] && allow
+
+case "$file" in
+	*.orig|*.referencia|*.reference|*.ts|*.qwsp|*.patch) allow ;;
+	*/dev/english-guard) allow ;;
+	*.png|*.jpg|*.svg|*.oga|*.ogg|*.gz|*.tgz|*.img|*.bin|*.apk|*.ttf|*.woff*) allow ;;
+esac
+
+PF='\b(el|la|los|las|un|una|unos|unas|del|con|sin|por|para|que|como|pero|porque|cuando|donde|esta|este|esto|esa|ese|eso|son|hay|desde|hasta|entre|sobre|cada|solo|ya|se|le|lo|su|sus|al)\b'
+PERMITIDOS='surya|vayu|poconav|spacebar|mercurygram|tunante|salamando|lumina|undine'
+
+# Offending added lines: accent/punctuation, or two+ function words after the allow-list.
+# A localized [es] value is allowed.
+bad="$(printf '%s\n' "$added" | grep -vE '\[es\]' | while IFS= read -r line; do
+	printf '%s\n' "$line" | grep -qE '[áéíóúÁÉÍÓÚñÑ¿¡]' && { printf '%s\n' "$line"; continue; }
+	stripped="$(printf '%s\n' "$line" | sed -E "s/($PERMITIDOS)//g")"
+	printf '%s\n' "$stripped" | grep -qiE "$PF.*$PF" && printf '%s\n' "$line"
+done | head -5)"
+
+[ -z "$bad" ] && allow
+
+reason="This repo is English-only. The text being written to ${file:-this file} adds Spanish:
+$(printf '%s' "$bad" | sed 's/^/  | /')
+Translate it to English before writing. If this is intentional data (a [es] value, a proper/carrier name, a captured dump, or a phase 4/6/7 rename touching old Spanish names), it belongs in an exempt file or as a [es] entry."
+
+jq -n --arg r "$reason" '{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":$r}}'
+exit 0

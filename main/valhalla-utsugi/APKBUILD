@@ -1,44 +1,46 @@
-# Valhalla CON enlaces de Python, que es lo unico que le falta al de Alpine.
+# Valhalla WITH the Python bindings, which is the one thing Alpine's package is
+# missing.
 #
-# POR QUE ESTA RECETA EXISTE
-# --------------------------
-# PocoNav tiene que poder calcular rutas SIN depender de osmscout-server. Hoy
-# depende, y eso no es independencia: es haber cambiado un servidor remoto por
-# uno local ajeno.
+# WHY THIS RECIPE EXISTS
+# ----------------------
+# PocoNav has to be able to compute routes WITHOUT depending on osmscout-server.
+# Today it does, and that is not independence: it is having swapped a remote
+# server for a local one belonging to somebody else.
 #
-# 'libvalhalla.so' ya esta en el movil -- osmscout-server no hace nada magico,
-# solo la enlaza. El problema es COMO llegar a ella desde PocoNav:
+# 'libvalhalla.so' is already on the phone -- osmscout-server does nothing
+# magic, it just links it. The problem is HOW to reach it from PocoNav:
 #
-#   valhalla_service   el servidor HTTP propio de Valhalla. NO se puede: exige
-#                      'prime_server', que Alpine no empaqueta. Por eso la
-#                      receta original lleva -DENABLE_SERVICES=OFF.
-#   cabeceras C++      'valhalla-dev' de Alpine esta VACIO -- comprobado con
-#                      'apk info -L': cero ficheros. Sin ellas no se puede
-#                      compilar nada contra la biblioteca.
-#   enlaces de Python  SI se puede: 'py3-pybind11' esta en los repositorios.
+#   valhalla_service   Valhalla's own HTTP server. NOT possible: it requires
+#                      'prime_server', which Alpine does not package. That is
+#                      why the original recipe carries -DENABLE_SERVICES=OFF.
+#   C++ headers        Alpine's 'valhalla-dev' is EMPTY -- checked with
+#                      'apk info -L': zero files. Without them nothing can be
+#                      compiled against the library.
+#   Python bindings    these DO work: 'py3-pybind11' is in the repositories.
 #
-# Asi que se enciende esa unica opcion. Con ella, PocoNav arranca su propio
-# servidor de rutas en Python y no necesita a nadie mas.
+# So that single option gets turned on. With it, PocoNav starts its own routing
+# server in Python and needs nobody else.
 #
-# Los servicios siguen apagados: no hay 'prime_server' y no hacen falta.
+# The services stay off: there is no 'prime_server' and they are not needed.
 #
-# ENABLE_DATA_TOOLS SI hay que encenderlo, aunque no se usen las herramientas.
-# Medido: con ella apagada los enlaces de Python compilan pero NO enlazan --
+# ENABLE_DATA_TOOLS does have to be turned on, even though the tools go unused.
+# Measured: with it off the Python bindings compile but do NOT link --
 #
 #   ImportError: Error relocating _valhalla.abi3.so:
 #   valhalla::mjolnir::compute_tileset_build_id: symbol not found
 #
-# El modulo llama a 'mjolnir', que es la biblioteca de teselas, y esa solo se
-# construye con DATA_TOOLS. No es opcional para lo que queremos.
+# The module calls into 'mjolnir', the tile library, and that one is only built
+# with DATA_TOOLS. It is not optional for what we want.
 #
-# Los enlaces usan 'nanobind', que viene dentro del propio arbol de Valhalla, no
-# pybind11. 'py3-pybind11' se deja en makedepends por si alguna version lo
-# vuelve a pedir, pero hoy no se toca.
+# The bindings use 'nanobind', which comes inside Valhalla's own tree, not
+# pybind11. 'py3-pybind11' is left in makedepends in case some version asks for
+# it again, but today it goes untouched.
+
 maintainer="Bart Ribbers <bribbers@disroot.org>"
 _orig=valhalla
 pkgname=$_orig-utsugi
 pkgver=3.8.3
-pkgrel=2
+pkgrel=3
 # FORK of valhalla. Same files as upstream, so it claims upstream's name with a
 # versioned provides and a replaces: apk then refuses to have both installed and
 # every package that depends on "valhalla" is satisfied by this one.
@@ -63,8 +65,8 @@ depends_dev="
 	zeromq-dev
 	zlib-dev
 	"
-# geos, openssl y expat solo los pide el bloque de DATA_TOOLS, que Alpine tiene
-# apagado. Por eso no estan en la receta original.
+# geos, openssl and expat are asked for only by the DATA_TOOLS block, which
+# Alpine has turned off. That is why they are not in the original recipe.
 makedepends="$depends_dev
 	cmake
 	samurai
@@ -83,18 +85,18 @@ options="!check"
 prepare() {
 	default_prepare
 
-	# DATA_TOOLS exige los ejecutables 'spatialite' y 'spatialite_tool', que
-	# Alpine NO empaqueta -- solo tiene la biblioteca. Sin este parche, cmake ni
-	# siquiera llega a compilar.
+	# DATA_TOOLS requires the 'spatialite' and 'spatialite_tool' executables,
+	# which Alpine does NOT package -- it only has the library. Without this
+	# patch cmake does not even get as far as compiling.
 	#
-	# Se puede quitar sin consecuencias AQUI. Su comentario en el CMakeLists dice
-	# para que son: "make sure we can build tz.sqlite", la base de husos horarios.
-	# Esa base se construye a partir de datos de OSM, y nosotros NO construimos
-	# teselas en el movil: las descargamos ya hechas, con su tz.sqlite dentro.
+	# It can be dropped with no consequences HERE. Its comment in the CMakeLists
+	# says what they are for: "make sure we can build tz.sqlite", the time-zone
+	# database. That database is built from OSM data, and we do NOT build tiles
+	# on the phone: they are downloaded ready-made, with their tz.sqlite inside.
 	#
-	# Lo que se pierde es la capacidad de generar teselas desde cero en este
-	# aparato, que no es algo que un movil vaya a hacer nunca: son horas de CPU y
-	# decenas de gigas de .pbf.
+	# What is lost is the ability to generate tiles from scratch on this device,
+	# which is not something a phone is ever going to do: it is hours of CPU and
+	# tens of gigabytes of .pbf.
 	sed -i '/spatialite-tools not found/s/FATAL_ERROR/WARNING/' CMakeLists.txt
 }
 
@@ -128,8 +130,8 @@ package() {
 	DESTDIR="$pkgdir" cmake --install build
 }
 
-# El modulo de Python en su propio paquete, para poder instalarlo sin arrastrar
-# nada y para que 'apk' sepa que depende de python3.
+# The Python module in a package of its own, so it can be installed without
+# dragging anything else in and so 'apk' knows it depends on python3.
 _py3() {
 	pkgdesc="$pkgdesc (Python module)"
 	provides="py3-$_orig=$pkgver-r$pkgrel"
