@@ -23,27 +23,19 @@
 		<div class="grid">
 			<a href="install-image.html">
 				<div class="n">1 &middot; Ready image</div>
-				<p><b>Start here.</b> One download, everything inside, two fastboot
-				commands. Wipes the phone. Not encrypted.</p></a>
+				<p><b>Start here.</b> One download, two fastboot commands. Wipes the
+				phone.</p></a>
 			<a href="install-repo.html">
-				<div class="n">2 &middot; On a phone already running pmOS</div>
-				<p>Three commands. Keeps your data. Brings the kernel, so the reboot is
-				a separate step.</p></a>
+				<div class="n">2 &middot; Phone already running postmarketOS</div>
+				<p>Four commands on the phone. Keeps everything on it.</p></a>
 			<a href="install-pmos.html">
-				<div class="n">3 &middot; Install postmarketOS yourself first</div>
-				<p>U-Boot for your panel, pmbootstrap, then route 2. For a phone that
-				has never run Linux.</p></a>
+				<div class="n">3 &middot; Phone that has never run Linux</div>
+				<p>Unlock it at Xiaomi, U-Boot, pmbootstrap, then route 2.</p></a>
 			<a href="install-encrypted.html">
 				<div class="n">4 &middot; Encrypted</div>
-				<p>Build it yourself, one command. There is no encrypted image to
-				download, and that is deliberate.</p></a>
+				<p>Build the image yourself, one command. There is no encrypted
+				download.</p></a>
 		</div>
-		<div class="note"><i></i><div>
-			<b>One rule on this phone, whatever route you take.</b>
-			<code>boot</code> holds U-Boot, not the kernel. Flash the system to
-			<code>userdata</code>. <code>fastboot flash boot &lt;kernel&gt;</code> leaves
-			the phone unable to boot at all.
-		</div></div>
 	</div>
 </section>
 <footer><div>
