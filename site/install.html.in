@@ -106,6 +106,16 @@ scripts/build-your-own-image --encrypted</pre>
 		initramfs opens a LUKS that lives inside a loop file on <code>userdata</code>, and
 		<code>unl0kr</code> draws its keyboard on this panel.</p>
 		<div class="note"><i></i><div>
+			<b>What encryption costs here, measured.</b>
+			With the root inside dm-crypt, a kernel workqueue that jams takes the whole
+			filesystem with it instead of one subsystem. On 2026-09-10 an ADSP crash whose
+			recovery deadlocked left this phone frozen for seven hours: load 114 with one
+			task running, 96% full I/O stall, and a black screen. The cause is fixed, and
+			<code>utsugi-surya-blackbox</code> now ships a watchdog that turns that state
+			into a reboot with the kernel stacks saved in <code>/sys/fs/pstore</code>
+			instead of a phone that sits dead until someone holds the power button.
+		</div></div>
+		<div class="note"><i></i><div>
 			<b>Encrypting an existing install is not offered.</b>
 			It needs the filesystem shrunk to make room for the header, it cannot run on
 			the mounted root of the running system &mdash; which here lives inside a loop
