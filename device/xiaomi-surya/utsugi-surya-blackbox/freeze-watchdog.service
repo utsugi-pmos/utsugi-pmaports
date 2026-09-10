@@ -1,0 +1,24 @@
+[Unit]
+Description=Reboot the phone when its filesystem stops answering, and leave the reason in RAM
+Documentation=file:/usr/libexec/utsugi-surya/freeze-watchdog
+# No default dependencies and no ordering on anything that can hang: the whole
+# point is to be running when the rest is not.
+DefaultDependencies=no
+After=sysinit.target
+Conflicts=shutdown.target
+Before=shutdown.target
+
+[Service]
+Type=simple
+EnvironmentFile=-/etc/default/utsugi-surya-freeze-watchdog
+ExecStart=/usr/libexec/utsugi-surya/freeze-watchdog
+Restart=always
+RestartSec=30
+# It locks its pages: without this, mlockall fails and a page fault under a full
+# stall would silence the only process that can end it.
+LimitMEMLOCK=infinity
+# And it must not be what the OOM killer picks, for the same reason.
+OOMScoreAdjust=-900
+
+[Install]
+WantedBy=sysinit.target
