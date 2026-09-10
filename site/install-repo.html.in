@@ -23,6 +23,8 @@
 		<p class="lede">Four commands on the phone, and it keeps everything you
 		already have on it. Works on a stock <code>qcom-sm7150</code> install with
 		Plasma Mobile and systemd.</p>
+		<p>If the phone is already running postmarketOS, Xiaomi's unlock is behind
+		you. If it is not, that comes first: <a href="unlock.html">the steps</a>.</p>
 	</div>
 </section>
 
