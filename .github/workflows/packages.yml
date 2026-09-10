@@ -47,6 +47,19 @@ jobs:
           else
             scripts/build --force --changed '${{ github.event.before }}'
           fi
+      # pmbootstrap keeps the real error in its own log and prints only
+      # "Couldn't build ...". Without this, a CI failure says which package
+      # broke and refuses to say why -- which is exactly what happened to
+      # r254 on 2026-09-10.
+      - name: pmbootstrap log
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pmbootstrap-log
+          path: ~/.local/var/pmbootstrap-utsugi/log.txt
+          if-no-files-found: warn
+          retention-days: 14
+
       - uses: actions/upload-artifact@v4
         with:
           name: apks
