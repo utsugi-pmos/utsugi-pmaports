@@ -33,13 +33,19 @@
 			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest"
 			   style="text-align:center">Download the image &mdash; 1.2 GB</a>
 			<div class="sh">
-				<div class="bar"><i></i><span>THEN, WITH THE PHONE IN FASTBOOT</span></div>
-				<pre>xz -d utsugi-surya-*.img.xz
-fastboot flash userdata utsugi-surya-*.img
-fastboot reboot
+				<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+				<pre><i># install fastboot first:</i>
+<i>#   Debian/Ubuntu  apt install android-sdk-platform-tools</i>
+<i>#   Arch           pacman -S android-tools</i>
+<i>#   Alpine         apk add android-tools</i>
 
-<i># it boots to the desktop. on the phone:</i>
-passwd            <b># ships as user / 147147</b></pre>
+<i># phone OFF, then hold volume-down + power</i>
+<i># until it says "fastboot". plug the USB cable in.</i>
+sudo fastboot devices        <b># must print your phone</b>
+
+xz -d utsugi-surya-*.img.xz
+sudo fastboot flash userdata utsugi-surya-*.img
+sudo fastboot reboot</pre>
 			</div>
 			<div><b>First time on this phone?</b>U-Boot goes on <code>boot</code> first,
 			and which one depends on your panel.
