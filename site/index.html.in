@@ -25,64 +25,53 @@
 			cameras, calls, LTE, GPS, sensors, both speakers, 120&nbsp;Hz. Then
 			<code>apk upgrade</code> keeps it current, kernel included.</p>
 			<div class="btns">
-				<a class="btn" href="install-image.html">Flash it &mdash; 5 minutes</a>
+				<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest">Download the image &mdash; 1.2 GB</a>
 				<a class="btn ghost" href="devices.html">See what does not work</a>
-			</div>
-			<div class="grid tight">
-				<div><div class="num">1</div><small>image, all in</small></div>
-				<div><div class="num">3</div><small>cameras</small></div>
-				<div><div class="num">78</div><small>kernel patches</small></div>
-				<div><div class="num">68</div><small>packages</small></div>
 			</div>
 		</div>
 		<div class="right">
-			<div><b>You get</b>Cameras, calls, LTE, GPS, sensors, audio, 120 Hz, a
-			power-off that powers off</div>
-			<div><b>You do not get</b>Fingerprint, stereo speakers. Calls echo on the
-			other end</div>
-			<div><b>Download</b>1.2 GB. Browser, mail, maps, photos and six own apps
-			already inside</div>
-			<div><b>Daily driver</b>One person's only phone since August 2026</div>
+			<div class="sh">
+				<div class="bar"><i></i><span>INSTALL &mdash; ABOUT 5 MINUTES</span></div>
+				<pre><i># download the .img.xz and SHA256SUMS from the releases page</i>
+sha256sum -c SHA256SUMS
+xz -d utsugi-surya-*.img.xz
+
+fastboot flash userdata utsugi-surya-*.img
+fastboot reboot
+
+<i># it boots to the desktop. then, on the phone:</i>
+passwd            <b># it ships as user / 147147</b>
+sudo apk upgrade</pre>
+			</div>
+			<div><b>First time on this phone?</b>U-Boot goes on <code>boot</code> first,
+			and which one depends on your panel &mdash;
+			<a href="install-pmos.html">steps here</a>.</div>
 		</div>
 	</div>
 </section>
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>Three steps</h2></div>
-		<div class="grid">
-			<div>
-				<div class="cap">STEP 1</div>
-				<div class="t">Download and check</div>
-				<p>One file from the releases page, and the checksum next to it.</p>
-				<div class="sh" style="margin-top:14px"><pre>sha256sum -c SHA256SUMS
-xz -d utsugi-surya-*.img.xz</pre></div>
-			</div>
-			<div>
-				<div class="cap">STEP 2</div>
-				<div class="t">Flash it</div>
-				<p>To <code>userdata</code>. Never to <code>boot</code> &mdash; that is
-				where U-Boot lives.</p>
-				<div class="sh" style="margin-top:14px"><pre>fastboot flash userdata \
-  utsugi-surya-*.img
-fastboot reboot</pre></div>
-			</div>
-			<div>
-				<div class="cap">STEP 3</div>
-				<div class="t">Use it</div>
-				<p>It boots to the desktop. Log in as <code>user</code> / <code>147147</code>
-				and change the password.</p>
-				<div class="sh" style="margin-top:14px"><pre>passwd
-sudo apk upgrade</pre></div>
-			</div>
+		<div class="h"><span>01</span><h2>What is in the image</h2></div>
+		<p>One file, 1.2&nbsp;GB compressed. Nothing to add afterwards.</p>
+		<div class="scroll">
+		<table>
+			<tr><th>The hardware</th><td>Patched kernel, cameras, in-call audio,
+			sensors, GPS, power-off, charge mode, 60 and 120&nbsp;Hz.</td></tr>
+			<tr><th>Plasma Mobile, fixed</th><td>A dialpad that does not drop digits,
+			quick settings for location, power saving and USB power, a screen that turns
+			itself off, notification sounds.</td></tr>
+			<tr><th>Six own apps</th><td>Navigation with voice, screenshots on the
+			buttons, always-alive apps, battery per app, smart unlock,
+			find-my-phone.</td></tr>
+			<tr><th>The usual ones</th><td>Firefox at 120&nbsp;Hz, mail and calendar,
+			two-factor, Mastodon, Matrix, RSS, photo gallery.</td></tr>
+		</table>
 		</div>
-		<div class="note" style="margin-top:16px"><i></i><div>
-			<b>Never run postmarketOS on this phone before?</b>
-			U-Boot goes on <code>boot</code> first, and which one depends on your panel
-			&mdash; Tianma or Huaxing. Wrong one, black screen.
-			<a href="install-pmos.html">First-install steps &rarr;</a>
-		</div></div>
-		<p><a class="btn" href="install-image.html">Download and full instructions</a></p>
+		<p style="margin-top:20px">
+			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest">Download the image</a>
+			<a class="btn ghost" href="install.html">Other ways to install</a>
+		</p>
 	</div>
 </section>
 
