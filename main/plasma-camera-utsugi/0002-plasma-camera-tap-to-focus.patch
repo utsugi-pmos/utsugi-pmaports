@@ -19,8 +19,8 @@ generic autofocus contemplates:
   - and on closing its node, the driver returns the lens to the origin and
     powers the chip down.
 
-The second one is solved by the `enfoque-surya` service (camara/enfoque-surya),
-which keeps the node open and accepts positions through /run/enfoque-surya. The
+The second one is solved by the `focus-engine` service (utsugi-surya-camera),
+which keeps the node open and accepts positions through /run/focus-engine. The
 first one stops being a problem right here: the preview IS ALREADY streaming
 when the user taps the screen. Which is, looking at it properly, how any real
 autofocus works.
@@ -97,7 +97,7 @@ diff -ruN a/src/CMakeLists.txt b/src/CMakeLists.txt
      plasmacamera.cpp
      plasmacameramanager.cpp
      plasmacamera/converter.cpp
-+    plasmacamera/enfocador.cpp
++    plasmacamera/focuser.cpp
      plasmacamera/image.cpp
      plasmacamera/path.cpp
      plasmacamera/settings.cpp
@@ -108,7 +108,7 @@ diff -ruN a/src/contents/ui/camera/CameraPage.qml b/src/contents/ui/camera/Camer
          anchors.fill: parent
  
          camera: root.camera
-+        enfocador: root.captureSession ? root.captureSession.enfocador : null
++        focuser: root.captureSession ? root.captureSession.focuser : null
          bottomMargin: controlContainer.height
  
          // Header controls
@@ -123,7 +123,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +    // The autofocus, which lives in the manager because that is where the
 +    // frames go through. It can be null: if the actuator service is not installed,
 +    // the tap does nothing instead of breaking.
-+    property var enfocador: null
++    property var focuser: null
      property real bottomMargin: 0
  
      property alias videoSink: viewfinder.videoSink
@@ -136,7 +136,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +    // It coexists with pinch without fighting it: a single tap is not a pinch,
 +    // and Qt tells them apart on its own.
 +    TapHandler {
-+        enabled: root.camera.available && root.enfocador && root.enfocador.disponible
++        enabled: root.camera.available && root.focuser && root.focuser.available
 +
 +        onTapped: (evento) => {
 +            // The point has to be mapped to IMAGE coordinates, not to
@@ -153,7 +153,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +            marca.y = evento.position.y - marca.height / 2;
 +            marca.visible = true;
 +            relojDeLaMarca.restart();
-+            root.enfocador.enfocarEn(u, v);
++            root.focuser.focusAt(u, v);
 +        }
 +    }
 +
@@ -169,14 +169,14 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +        visible: false
 +        color: "transparent"
 +        border.width: 2
-+        border.color: root.enfocador && root.enfocador.enfocando
++        border.color: root.focuser && root.focuser.focusing
 +                      ? "white"
-+                      : (root.enfocador && root.enfocador.logrado ? "#40d060" : "#e06040")
++                      : (root.focuser && root.focuser.logrado ? "#40d060" : "#e06040")
 +        radius: 4
-+        opacity: root.enfocador && root.enfocador.enfocando ? 1.0 : 0.85
++        opacity: root.focuser && root.focuser.focusing ? 1.0 : 0.85
 +
 +        SequentialAnimation on scale {
-+            running: marca.visible && root.enfocador && root.enfocador.enfocando
++            running: marca.visible && root.focuser && root.focuser.focusing
 +            loops: Animation.Infinite
 +            NumberAnimation { from: 1.0; to: 0.88; duration: 500 }
 +            NumberAnimation { from: 0.88; to: 1.0; duration: 500 }
@@ -187,7 +187,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +            // It stays for a while after finishing so there is time to see the
 +            // color of the result, not just the search.
 +            interval: 2500
-+            onTriggered: if (!root.enfocador || !root.enfocador.enfocando) marca.visible = false;
++            onTriggered: if (!root.focuser || !root.focuser.focusing) marca.visible = false;
 +                         else restart()
 +        }
 +    }
@@ -195,13 +195,13 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
      // THE PINCH, which is the only way to move the zoom.
      //
      // With no animation in between: an animation on the scale makes the
-diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
---- a/src/plasmacamera/enfocador.cpp
-+++ b/src/plasmacamera/enfocador.cpp
+diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
+--- a/src/plasmacamera/focuser.cpp
++++ b/src/plasmacamera/focuser.cpp
 @@ -0,0 +1,331 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +
-+#include "enfocador.h"
++#include "focuser.h"
 +
 +#include <QDebug>
 +#include <QFile>
@@ -214,9 +214,9 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +
 +namespace
 +{
-+// The pipe of the `enfoque-surya` service, which is what keeps the actuator
++// The pipe of the `focus-engine` service, which is what keeps the actuator
 +// node open. Without it, the lens returns to origin as soon as nobody holds it.
-+constexpr const char *kTuberia = "/run/enfoque-surya";
++constexpr const char *kPipe = "/run/focus-engine";
 +
 +constexpr int kMin = 0;
 +constexpr int kMax = 1023;
@@ -236,67 +236,67 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +constexpr double kRelacionMinima = 1.25;
 +}
 +
-+Enfocador::Enfocador(QObject *parent)
++Focuser::Focuser(QObject *parent)
 +    : QObject(parent)
 +{
 +    // The service may not be installed. It is checked once and reported, instead
 +    // of failing silently every time somebody taps the screen.
-+    m_disponible = QFile::exists(QString::fromLatin1(kTuberia));
-+    if (!m_disponible) {
-+        qWarning() << "focus: no service at" << kTuberia
++    m_available = QFile::exists(QString::fromLatin1(kPipe));
++    if (!m_available) {
++        qWarning() << "focus: no service at" << kPipe
 +                   << "- tap to focus will do nothing";
 +    }
 +}
 +
-+bool Enfocador::pedirPosicion(int posicion)
++bool Focuser::requestPosition(int position)
 +{
 +    // O_NONBLOCK on purpose: opening a pipe for writing BLOCKS until
 +    // there is somebody reading, and here we are on the UI thread. If
 +    // the service is not there, this fails with ENXIO instantly instead of hanging
 +    // the whole application, which is exactly what must not happen.
-+    const int fd = ::open(kTuberia, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
++    const int fd = ::open(kPipe, O_WRONLY | O_NONBLOCK | O_CLOEXEC);
 +    if (fd < 0) {
 +        return false;
 +    }
-+    const QByteArray linea = QByteArray::number(posicion) + '\n';
++    const QByteArray linea = QByteArray::number(position) + '\n';
 +    const ssize_t escrito = ::write(fd, linea.constData(), linea.size());
 +    ::close(fd);
 +    return escrito == linea.size();
 +}
 +
-+void Enfocador::moverA(int posicion)
++void Focuser::moverA(int position)
 +{
-+    posicion = qBound(kMin, posicion, kMax);
-+    if (pedirPosicion(posicion)) {
-+        setPosicion(posicion);
++    position = qBound(kMin, position, kMax);
++    if (requestPosition(position)) {
++        setPosition(position);
 +    }
 +}
 +
-+void Enfocador::enfocarEn(qreal x, qreal y)
++void Focuser::focusAt(qreal x, qreal y)
 +{
-+    if (!m_disponible) {
++    if (!m_available) {
 +        return;
 +    }
-+    m_punto = QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0));
-+    Q_EMIT puntoChanged();
++    m_point = QPointF(qBound(0.0, x, 1.0), qBound(0.0, y, 1.0));
++    Q_EMIT pointChanged();
 +
 +    // It starts from scratch even if a search was in progress: the user
 +    // has just said where they want to look, and the earlier measurements are from another
 +    // place in the image.
 +    m_medidas.clear();
 +    m_pendientes.clear();
-+    m_etapa = 0;
++    m_stage = 0;
 +    setLogrado(false);
 +
 +    for (int i = 0; i < kPointsPerStage; ++i) {
 +        m_pendientes.append(kMin + (kMax - kMin) * i / (kPointsPerStage - 1));
 +    }
 +    ordenarDesdeDondeEsta();
-+    setEnfocando(true);
-+    siguientePosicion();
++    setFocusing(true);
++    nextPosition();
 +}
 +
-+void Enfocador::ordenarDesdeDondeEsta()
++void Focuser::ordenarDesdeDondeEsta()
 +{
 +    // WALK EACH STAGE IN THE DIRECTION THAT STARTS CLOSER
 +    //
@@ -311,37 +311,37 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    // Walking each stage towards the side that starts closer, that trip
 +    // disappears. The same positions are measured and the same result comes out:
 +    // only the order changes, and with it, the noise and the time.
-+    if (m_pendientes.size() < 2 || m_posicion < 0) {
++    if (m_pendientes.size() < 2 || m_position < 0) {
 +        return;
 +    }
 +    std::sort(m_pendientes.begin(), m_pendientes.end());
-+    const int aLoBajo = qAbs(m_pendientes.first() - m_posicion);
-+    const int aLoAlto = qAbs(m_pendientes.last() - m_posicion);
++    const int aLoBajo = qAbs(m_pendientes.first() - m_position);
++    const int aLoAlto = qAbs(m_pendientes.last() - m_position);
 +    if (aLoAlto < aLoBajo) {
 +        std::reverse(m_pendientes.begin(), m_pendientes.end());
 +    }
 +}
 +
-+void Enfocador::siguientePosicion()
++void Focuser::nextPosition()
 +{
 +    if (m_pendientes.isEmpty()) {
 +        return;
 +    }
 +    const int siguiente = m_pendientes.takeFirst();
-+    if (!pedirPosicion(siguiente)) {
++    if (!requestPosition(siguiente)) {
 +        // The service died halfway. Better to give up than to keep measuring
 +        // a lens that no longer moves and give a result that looks good.
 +        qWarning() << "focus: the pipe stopped accepting; giving up";
-+        setEnfocando(false);
++        setFocusing(false);
 +        return;
 +    }
-+    setPosicion(siguiente);
++    setPosition(siguiente);
 +    m_porTirar = kFotogramasDeEspera;
 +}
 +
-+void Enfocador::nuevoFotograma(const QImage &imagen)
++void Focuser::nuevoFotograma(const QImage &imagen)
 +{
-+    if (!m_enfocando || imagen.isNull()) {
++    if (!m_focusing || imagen.isNull()) {
 +        return;
 +    }
 +    if (m_porTirar > 0) {
@@ -349,19 +349,19 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +        return;
 +    }
 +
-+    m_medidas.append({m_posicion, nitidez(imagen)});
++    m_medidas.append({m_position, sharpness(imagen)});
 +
 +    if (!m_pendientes.isEmpty()) {
-+        siguientePosicion();
++        nextPosition();
 +        return;
 +    }
 +
 +    // Stage finished. If any is left, it refines around the best with a
 +    // span the width of ONE STEP of this stage on each side: less risk of
 +    // leaving the maximum out when the best fell on the edge of the hill,
-+    // y mas no afina nada.
-+    ++m_etapa;
-+    if (m_etapa < kEtapas) {
++    // and more than that refines nothing.
++    ++m_stage;
++    if (m_stage < kEtapas) {
 +        int best = m_medidas.first().first;
 +        double valor = m_medidas.first().second;
 +        int menor = best, mayor = best;
@@ -392,16 +392,16 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +        }
 +        if (!m_pendientes.isEmpty()) {
 +            ordenarDesdeDondeEsta();
-+            siguientePosicion();
++            nextPosition();
 +            return;
 +        }
 +    }
 +    terminar();
 +}
 +
-+void Enfocador::terminar()
++void Focuser::terminar()
 +{
-+    int best = m_posicion;
++    int best = m_position;
 +    double height = 0.0;
 +    double bajo = 0.0;
 +    bool primero = true;
@@ -426,26 +426,26 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    // some arbitrary maximum that looks perfectly good. It already happened: a
 +    // whole search converged to 972 without a single error, with the camera looking
 +    // at nothing. Better to leave focus where it was and report that it failed.
-+    const double relacion = bajo > 0.0 ? height / bajo : 0.0;
-+    const bool bien = m_medidas.size() >= 3 && relacion >= kRelacionMinima;
++    const double ratio = bajo > 0.0 ? height / bajo : 0.0;
++    const bool bien = m_medidas.size() >= 3 && ratio >= kRelacionMinima;
 +
 +    if (bien) {
-+        pedirPosicion(best);
-+        setPosicion(best);
++        requestPosition(best);
++        setPosition(best);
 +    }
 +    setLogrado(bien);
-+    setEnfocando(false);
++    setFocusing(false);
 +}
 +
-+void Enfocador::setGiro(int grados)
++void Focuser::setGiro(int grados)
 +{
 +    m_giro = ((grados % 360) + 360) % 360;
 +}
 +
-+QPointF Enfocador::puntoEnElSensor() const
++QPointF Focuser::pointOnSensor() const
 +{
-+    const qreal u = m_punto.x();
-+    const qreal v = m_punto.y();
++    const qreal u = m_point.x();
++    const qreal v = m_point.y();
 +    switch (m_giro) {
 +    case 90:
 +        // The image is displayed rotated a quarter turn clockwise, that is
@@ -461,9 +461,9 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    }
 +}
 +
-+double Enfocador::nitidez(const QImage &imagen) const
++double Focuser::sharpness(const QImage &imagen) const
 +{
-+    const QPointF p = puntoEnElSensor();
++    const QPointF p = pointOnSensor();
 +    const int lado = qMax(16, int(qMin(imagen.width(), imagen.height()) * kLadoRecorte));
 +    const int cx = int(p.x() * imagen.width());
 +    const int cy = int(p.y() * imagen.height());
@@ -504,25 +504,25 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    return varianza / (nivelMedio * nivelMedio);
 +}
 +
-+void Enfocador::setEnfocando(bool valor)
++void Focuser::setFocusing(bool valor)
 +{
-+    if (m_enfocando == valor) {
++    if (m_focusing == valor) {
 +        return;
 +    }
-+    m_enfocando = valor;
-+    Q_EMIT enfocandoChanged();
++    m_focusing = valor;
++    Q_EMIT focusingChanged();
 +}
 +
-+void Enfocador::setPosicion(int valor)
++void Focuser::setPosition(int valor)
 +{
-+    if (m_posicion == valor) {
++    if (m_position == valor) {
 +        return;
 +    }
-+    m_posicion = valor;
-+    Q_EMIT posicionChanged();
++    m_position = valor;
++    Q_EMIT positionChanged();
 +}
 +
-+void Enfocador::setLogrado(bool valor)
++void Focuser::setLogrado(bool valor)
 +{
 +    if (m_logrado == valor) {
 +        return;
@@ -530,9 +530,9 @@ diff -ruN a/src/plasmacamera/enfocador.cpp b/src/plasmacamera/enfocador.cpp
 +    m_logrado = valor;
 +    Q_EMIT logradoChanged();
 +}
-diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
---- a/src/plasmacamera/enfocador.h
-+++ b/src/plasmacamera/enfocador.h
+diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
+--- a/src/plasmacamera/focuser.h
++++ b/src/plasmacamera/focuser.h
 @@ -0,0 +1,166 @@
 +// SPDX-License-Identifier: GPL-2.0-or-later
 +//
@@ -549,11 +549,11 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +//   - and on closing its node, the driver returns the lens to origin and powers off the
 +//     chip.
 +//
-+// The second one is solved by the `enfoque-surya` service, which keeps the node
++// The second one is solved by the `focus-engine` service, which keeps the node
 +// open and accepts positions over a pipe. The first one stops being a
 +// problem right here: the preview is ALREADY streaming when the user
 +// taps the screen. Which is, looking at it properly, how any
-+// autoenfoque de verdad.
++// real autofocus.
 +//
 +// THE METHOD
 +// ---------
@@ -573,30 +573,30 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +#include <QObject>
 +#include <QPointF>
 +
-+class Enfocador : public QObject
++class Focuser : public QObject
 +{
 +    Q_OBJECT
 +
-+    Q_PROPERTY(bool enfocando READ enfocando NOTIFY enfocandoChanged)
-+    Q_PROPERTY(bool disponible READ disponible NOTIFY disponibleChanged)
-+    Q_PROPERTY(int posicion READ posicion NOTIFY posicionChanged)
-+    Q_PROPERTY(QPointF punto READ punto NOTIFY puntoChanged)
++    Q_PROPERTY(bool focusing READ focusing NOTIFY focusingChanged)
++    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
++    Q_PROPERTY(int position READ position NOTIFY positionChanged)
++    Q_PROPERTY(QPointF point READ point NOTIFY pointChanged)
 +    Q_PROPERTY(bool logrado READ logrado NOTIFY logradoChanged)
 +
 +public:
-+    explicit Enfocador(QObject *parent = nullptr);
++    explicit Focuser(QObject *parent = nullptr);
 +
 +    /*!
 +     * Starts focusing at a point of the image, in coordinates from 0 to 1.
-+     * Si ya se estaba enfocando, se descarta lo anterior y se empieza de nuevo
++     * If it was already focusing, the previous run is dropped and it starts
 +     * at the new point: the user has just said where they want to look.
 +     */
-+    Q_INVOKABLE void enfocarEn(qreal x, qreal y);
++    Q_INVOKABLE void focusAt(qreal x, qreal y);
 +
 +    /*!
 +     * Moves the lens to a specific position, without searching. For manual control.
 +     */
-+    Q_INVOKABLE void moverA(int posicion);
++    Q_INVOKABLE void moverA(int position);
 +
 +    //! Every preview frame. Cheap when not focusing.
 +    void nuevoFotograma(const QImage &imagen);
@@ -613,21 +613,21 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +     */
 +    void setGiro(int grados);
 +
-+    bool enfocando() const
++    bool focusing() const
 +    {
-+        return m_enfocando;
++        return m_focusing;
 +    }
-+    bool disponible() const
++    bool available() const
 +    {
-+        return m_disponible;
++        return m_available;
 +    }
-+    int posicion() const
++    int position() const
 +    {
-+        return m_posicion;
++        return m_position;
 +    }
-+    QPointF punto() const
++    QPointF point() const
 +    {
-+        return m_punto;
++        return m_point;
 +    }
 +    bool logrado() const
 +    {
@@ -635,15 +635,15 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +    }
 +
 +Q_SIGNALS:
-+    void enfocandoChanged();
-+    void disponibleChanged();
-+    void posicionChanged();
-+    void puntoChanged();
++    void focusingChanged();
++    void availableChanged();
++    void positionChanged();
++    void pointChanged();
 +    void logradoChanged();
 +
 +private:
 +    //! Writes the position to the service pipe. False if there is no service.
-+    bool pedirPosicion(int posicion);
++    bool requestPosition(int position);
 +
 +    /*!
 +     * Sharpness of the crop around the chosen point.
@@ -658,10 +658,10 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +     * two by 54.3-. Here the image does not come decimated, so adding the
 +     * vertical axis would give more signal; it is left for when it is measured, not before.
 +     */
-+    double nitidez(const QImage &imagen) const;
++    double sharpness(const QImage &imagen) const;
 +
 +    void terminar();
-+    void siguientePosicion();
++    void nextPosition();
 +
 +    /*!
 +     * Orders the stage positions in the direction that starts closer to
@@ -669,24 +669,24 @@ diff -ruN a/src/plasmacamera/enfocador.h b/src/plasmacamera/enfocador.h
 +     */
 +    void ordenarDesdeDondeEsta();
 +
-+    void setEnfocando(bool valor);
-+    void setPosicion(int valor);
++    void setFocusing(bool valor);
++    void setPosition(int valor);
 +    void setLogrado(bool valor);
 +
-+    bool m_enfocando = false;
-+    bool m_disponible = false;
++    bool m_focusing = false;
++    bool m_available = false;
 +    bool m_logrado = false;
-+    int m_posicion = -1;
-+    QPointF m_punto{0.5, 0.5};
++    int m_position = -1;
++    QPointF m_point{0.5, 0.5};
 +    int m_giro = 0;
 +
 +    //! The tapped point, mapped to the coordinates of the unrotated image.
-+    QPointF puntoEnElSensor() const;
++    QPointF pointOnSensor() const;
 +
 +    //! Positions remaining in the current stage, and what has been measured so far.
 +    QList<int> m_pendientes;
 +    QList<QPair<int, double>> m_medidas;
-+    int m_etapa = 0;
++    int m_stage = 0;
 +
 +    /*!
 +     * Frames dropped after moving the lens.
@@ -711,8 +711,8 @@ diff -ruN a/src/plasmacameramanager.cpp b/src/plasmacameramanager.cpp
 +    // The autofocus measures on THIS frame, before rotating it: the rotation
 +    // is applied to the QVideoFrame below, not to the image. That is why the
 +    // rotation is passed separately, so it can translate the point the user tapped.
-+    m_enfocador.setGiro(int(outputOrientationDegrees()));
-+    m_enfocador.nuevoFotograma(image);
++    m_focuser.setGiro(int(outputOrientationDegrees()));
++    m_focuser.nuevoFotograma(image);
 +
      QVideoFrame frame = QVideoFrame(image);
  
@@ -724,7 +724,7 @@ diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
  #include <libcamera/camera_manager.h>
  
  #include "plasmacamera.h"
-+#include "plasmacamera/enfocador.h"
++#include "plasmacamera/focuser.h"
  
  /*!
   * \brief Manages the libcamera camera controller (similar to QMediaCaptureSession)
@@ -733,7 +733,7 @@ diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
      Q_PROPERTY(PlasmaCamera *plasmaCamera READ plasmaCamera WRITE setPlasmaCamera NOTIFY plasmaCameraChanged)
      Q_PROPERTY(QVideoSink *videoSink READ videoSink WRITE setVideoSink NOTIFY videoSinkChanged)
 +    //! The autofocus. It lives here because this is where the frames go through.
-+    Q_PROPERTY(Enfocador *enfocador READ enfocador CONSTANT)
++    Q_PROPERTY(Focuser *focuser READ focuser CONSTANT)
      Q_PROPERTY(QMediaRecorder *recorder READ recorder WRITE setRecorder NOTIFY recorderChanged)
      Q_PROPERTY(bool audioRecordingEnabled READ audioRecordingEnabled WRITE setAudioRecordingEnabled NOTIFY audioRecordingEnabledChanged)
      Q_PROPERTY(QAudioInput *audioInput READ audioInput WRITE setAudioInput NOTIFY audioInputChanged)
@@ -741,9 +741,9 @@ diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
       */
      Q_INVOKABLE void stopRecordingVideo();
  
-+    Enfocador *enfocador()
++    Focuser *focuser()
 +    {
-+        return &m_enfocador;
++        return &m_focuser;
 +    }
 +
  Q_SIGNALS:
@@ -753,7 +753,7 @@ diff -ruN a/src/plasmacameramanager.h b/src/plasmacameramanager.h
      // preview and video recording
      PlasmaCamera *m_plasmaCamera = nullptr;
  
-+    Enfocador m_enfocador;
++    Focuser m_focuser;
 +
      QImage m_currentFrame;
      QVideoFrame m_videoFrame;

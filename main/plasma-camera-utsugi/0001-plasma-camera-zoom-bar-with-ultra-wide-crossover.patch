@@ -110,7 +110,7 @@ the ultra-wide has its own path.
 +    // ------------------------------------------------------------------
 +    // The value is ALWAYS read at the center and what moves is the ruler, as
 +    // on a dial gauge. It is driven ONLY by pinch: dragging the
-+    // indicador no hace nada, a proposito.
++    // indicator does nothing, on purpose.
 +    //
 +    // 1x is ALWAYS the main camera, not "whichever one is selected": if zoom
 +    // meant a different thing depending on where you are, it would mean nothing.
@@ -302,7 +302,7 @@ the ultra-wide has its own path.
 +    // A small fixed tick at the center; what slides is the ruler. It is only
 +    // visible while pinching and for a moment after, so as not to cover the framing.
 +    Item {
-+        id: regla
++        id: ruler
 +
 +        anchors {
 +            left: parent.left
@@ -329,7 +329,7 @@ the ultra-wide has its own path.
 +        // a bit more than three doublings, which is comfortable to cover with two fingers.
 +        readonly property real pixelesPorDoble: width / 3.2
 +
-+        function posicion(z) {
++        function position(z) {
 +            return width / 2
 +                 + (Math.log(z) - Math.log(root.zoomPedido)) / Math.LN2 * pixelesPorDoble;
 +        }
@@ -342,10 +342,10 @@ the ultra-wide has its own path.
 +
 +                visible: modelData >= root.zoomMinimo - 0.001
 +                         && modelData <= root.zoomMaximo + 0.001
-+                x: regla.posicion(modelData)
++                x: ruler.position(modelData)
 +                y: 0
 +                width: 1
-+                height: regla.height
++                height: ruler.height
 +
 +                // A stop is where the zoom snaps; it is drawn more prominently
 +                // so it can be seen what it will snap to before releasing.
@@ -393,7 +393,7 @@ the ultra-wide has its own path.
 +    QQC2.Label {
 +        anchors {
 +            horizontalCenter: parent.horizontalCenter
-+            bottom: regla.top
++            bottom: ruler.top
 +            bottomMargin: Kirigami.Units.smallSpacing
 +        }
          visible: root.camera.available
