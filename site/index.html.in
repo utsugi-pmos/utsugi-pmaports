@@ -76,9 +76,10 @@ fastboot flash userdata @IMG@
 fastboot reboot
 <b># not tested by me: reports welcome</b></pre></div></div>
 			</div>
-			<div><b>First time on this phone?</b>U-Boot goes on <code>boot</code> first,
-			and which one depends on your panel.
-			<a href="install-pmos.html">Steps here</a>.</div>
+			<div><b>First time on this phone?</b>Two things come before this: Xiaomi
+			has to unlock the bootloader (a Mi account and seven days of waiting), and
+			U-Boot goes on <code>boot</code> &mdash; the build for your panel, Tianma
+			or Huaxing. <a href="install-pmos.html">Both, step by step</a>.</div>
 		</div>
 	</div>
 </section>

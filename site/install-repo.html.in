@@ -20,20 +20,36 @@
 	<div class="wrap">
 		<div class="eyebrow">Route 2 &middot; keeps your data</div>
 		<h1>On a phone already running postmarketOS</h1>
-		<p class="lede">Three commands on the phone. Works on a stock
-		<code>qcom-sm7150</code> install with Plasma Mobile and systemd.</p>
+		<p class="lede">Four commands on the phone, and it keeps everything you
+		already have on it. Works on a stock <code>qcom-sm7150</code> install with
+		Plasma Mobile and systemd.</p>
 	</div>
 </section>
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>Add it</h2></div>
+		<div class="h"><span>01</span><h2>Where you type this</h2></div>
+		<p>These commands run <b>on the phone</b>, not on your PC. Two ways to get
+		a prompt there, either is fine:</p>
+		<ul>
+			<li>The <b>Terminal</b> app that comes with Plasma Mobile. Painful for
+			four long commands, but it works.</li>
+			<li><b>Over ssh from your PC</b>, which is much easier. Plug the USB
+			cable in &mdash; postmarketOS brings up a network over it &mdash; and
+			from your PC run <code>ssh youruser@172.16.42.1</code>. Same password you
+			set when you installed.</li>
+		</ul>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Add the repository</h2></div>
 		<div class="sh">
 			<div class="bar"><i></i><span>ON THE PHONE</span></div>
 			<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
 echo @URL@/main | sudo tee -a /etc/apk/repositories
 sudo apk update
-sudo apk add utsugi-surya-base</pre>
+sudo apk add utsugi-surya-base
+
+<i># optional, the extra apps:</i>
+sudo apk add utsugi-surya-extras</pre>
 		</div>
 		<p>Untagged, on purpose. A tagged line makes apk prefer upstream for every
 		dependency and the patched packages silently lose.</p>
@@ -50,7 +66,7 @@ sudo apk add utsugi-surya-base</pre>
 
 <section class="panel">
 	<div class="wrap">
-		<div class="h"><span>02</span><h2>Then reboot &mdash; deliberately</h2></div>
+		<div class="h"><span>03</span><h2>Then reboot &mdash; deliberately</h2></div>
 		<div class="note"><i></i><div>
 			<b>The kernel comes with it, and a kernel that does not boot is a reboot
 			loop.</b> The watchdog fires 20&nbsp;s after PID&nbsp;1 and there is no

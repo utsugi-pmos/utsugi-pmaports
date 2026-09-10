@@ -42,8 +42,9 @@
 			<code>dnf install android-tools</code>.</td></tr>
 			<tr><th>A USB cable</th><td>Data, not charge-only. Straight into the
 			computer if you can &mdash; hubs cause half the "device not found".</td></tr>
-			<tr><th>Bootloader unlocked</th><td>Xiaomi's own procedure, with its waiting
-			period.</td></tr>
+			<tr><th>Bootloader unlocked</th><td>Xiaomi's own procedure: a Mi account,
+			seven days of waiting, and a Windows-only tool.
+			<a href="install-pmos.html">Step by step here</a>.</td></tr>
 			<tr><th>U-Boot on <code>boot</code></th><td>Matched to your panel. If this
 			phone has never run postmarketOS, do <a href="install-pmos.html">route 3</a>
 			first &mdash; only its U-Boot step.</td></tr>
@@ -76,8 +77,7 @@
 		<div class="h"><span>03</span><h2>Flash it</h2></div>
 		<div class="sh">
 			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre>sha256sum -c SHA256SUMS   <b># catches a truncated download before you write it</b>
-xz -d @IMG@.xz
+			<pre>xz -d @IMG@.xz            <i># a half-downloaded file fails right here</i>
 
 sudo fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
 sudo fastboot reboot</pre>
