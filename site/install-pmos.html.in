@@ -30,35 +30,103 @@
 <section>
 	<div class="wrap">
 		<div class="h"><span>01</span><h2>Unlock the bootloader</h2></div>
-		<p>Xiaomi's own procedure, with its waiting period. Everything is wiped.</p>
+		<p>The phone leaves the factory refusing to boot anything but MIUI. Xiaomi
+		hands you the key, on their terms: a Mi account, a wait of several days,
+		and their tool. <b>Everything on the phone is erased</b> at the end of it.</p>
+		<p>On the phone:</p>
+		<ol>
+			<li>Put a SIM in and turn mobile data on. The next step will not go
+			through over wifi.</li>
+			<li><b>Settings &rarr; About phone</b> and tap <b>MIUI version</b> seven
+			times. That turns on the developer options.</li>
+			<li><b>Settings &rarr; Additional settings &rarr; Developer options
+			&rarr; Mi Unlock status</b>, then <b>Add account and device</b>. Sign in
+			with your Mi account.</li>
+			<li>Wait however long it tells you. The usual answer is 168 hours
+			&mdash; seven days. The clock runs on Xiaomi's side and nothing you do
+			shortens it.</li>
+		</ol>
+		<p>Then on a PC:</p>
+		<ol style="counter-reset:step 4">
+			<li>Get <b>Mi Unlock</b> from <a href="https://en.miui.com/unlock/">en.miui.com/unlock</a>
+			and sign in with the same account.</li>
+			<li>Turn the phone off. Hold <b>volume-down + power</b> until it says
+			<i>fastboot</i>, then plug the USB cable in.</li>
+			<li>Press Unlock. It wipes the phone and reboots into MIUI.</li>
+		</ol>
+		<p><b>Mi Unlock only runs on Windows.</b> This is the one step you cannot
+		do from Linux or a Mac: use a Windows machine, or a Windows VM with the USB
+		device passed through. Everything after this works anywhere.</p>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>U-Boot, matched to your panel</h2></div>
-		<p><b>Tianma or Huaxing.</b> Get it wrong and the screen stays black &mdash;
-		the phone is fine, it just draws nothing. Check which one you have before
-		flashing.</p>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Find out which panel you have</h2></div>
+		<p>The POCO X3 NFC shipped with two different screens &mdash; <b>Tianma</b>
+		and <b>Huaxing</b> &mdash; and U-Boot comes as one build per panel. The wrong
+		one leaves the screen black: the phone boots fine, it just draws nothing.
+		You flash the other one and it comes back.</p>
+		<p>The quick way, from MIUI, with USB debugging on (you turned the developer
+		options on in step 01) and <code>adb</code> installed:</p>
 		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre><i># releases: github.com/sm7150-mainline/u-boot</i>
-fastboot erase dtbo
-fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img</pre>
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC</span></div>
+			<pre>adb shell cat /proc/cmdline | tr ' ' '\n' | grep -i dsi</pre>
 		</div>
-		<p>This is the only thing that ever goes to <code>boot</code>. The kernel
-		lives inside the system image on <code>userdata</code>.</p>
+		<p>Xiaomi's kernel names the panel in there: the line has
+		<code>tianma</code> or <code>huaxing</code> in it. That is your answer.</p>
+		<p>If that prints nothing useful, do it the blunt way: flash one, power the
+		phone on, look at the screen. Black means it was the other one. Nothing
+		breaks and you can reflash as many times as you like.</p>
 
-		<div class="h" style="margin-top:34px"><span>03</span><h2>Build a system with pmbootstrap</h2></div>
+		<div class="h" style="margin-top:34px"><span>03</span><h2>U-Boot goes on <code>boot</code></h2></div>
+		<p>The generic <code>qcom-sm7150</code> port does not boot a kernel from
+		the <code>boot</code> partition &mdash; it boots U-Boot from there, and
+		U-Boot loads the kernel out of the system on <code>userdata</code>. So
+		<code>boot</code> gets written once, with U-Boot, and never again.</p>
+		<p>Download the image for your panel from the releases page of
+		<a href="https://github.com/sm7150-mainline/u-boot/releases">sm7150-mainline/u-boot</a>
+		(<code>u-boot-sm7150-xiaomi-surya-tianma.img</code> or
+		<code>&hellip;-huaxing.img</code>), put the phone in fastboot &mdash; off,
+		then volume-down + power &mdash; and:</p>
 		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre>pmbootstrap init            <i># device: qcom-sm7150, UI: plasma-mobile</i>
-pmbootstrap config service_manager systemd   <b># with OpenRC the image comes out broken</b>
-pmbootstrap install
-pmbootstrap flasher flash_rootfs             <b># goes to userdata</b></pre>
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>sudo fastboot devices        <b># must print your phone</b>
+sudo fastboot erase dtbo     <i># MIUI's device tree overlay would fight U-Boot</i>
+sudo fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
+sudo fastboot reboot</pre>
 		</div>
-		<p>That gives you a stock postmarketOS: no working cameras, no in-call voice,
-		muted speakers, locked GPS. Which is what the next step is for.</p>
+		<p>On Windows drop the <code>sudo</code> and call it
+		<code>.\fastboot</code>; on a Mac drop the <code>sudo</code>. If
+		<code>fastboot</code> is not installed yet, the front page lists the package
+		for each system.</p>
+		<p>What you should see: a text console instead of the MIUI logo, complaining
+		that it has nothing to boot. That complaint is the good outcome &mdash; there
+		is no system on <code>userdata</code> yet. A screen that stays black means
+		the other panel.</p>
 
-		<div class="h" style="margin-top:34px"><span>04</span><h2>Add this repository</h2></div>
-		<p>Three commands, and the phone becomes the one described on the front page.</p>
-		<p><a class="btn" href="install-repo.html">Route 2 &rarr;</a></p>
+		<div class="h" style="margin-top:34px"><span>04</span><h2>Build a system with pmbootstrap</h2></div>
+		<p><b>pmbootstrap</b> is postmarketOS's build tool. It runs on Linux (a VM
+		is fine), downloads its own Alpine chroots and builds the whole system
+		image for you:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>pipx install pmbootstrap      <i># or: pip install --user pmbootstrap</i>
+
+pmbootstrap init              <i># vendor: qcom &middot; device: sm7150 &middot; UI: plasma-mobile</i>
+pmbootstrap config service_manager systemd   <b># OpenRC gives a broken image here</b>
+pmbootstrap install           <i># asks for a user name and password</i>
+
+<i># phone in fastboot again, then:</i>
+pmbootstrap flasher flash_rootfs             <b># userdata. never flash_kernel.</b></pre>
+		</div>
+		<p>Answer <code>edge</code> when it asks for the channel. The first
+		<code>install</code> takes a while &mdash; it is downloading and assembling a
+		distribution. First boot is slow too, a couple of minutes.</p>
+		<p>What you get is stock postmarketOS on this phone: it boots, the screen
+		and the touch work, wifi works. No cameras, no voice on calls, silent
+		speakers, GPS that never locks. That is what the last step fixes.</p>
+
+		<div class="h" style="margin-top:34px"><span>05</span><h2>Add this repository</h2></div>
+		<p>Three commands on the phone and it turns into the one the front page
+		describes: kernel with the hardware patched, audio, sensors, GPS, cameras.</p>
+		<p><a class="btn" href="install-repo.html">The three commands &rarr;</a></p>
 		<div class="next">
 			<a href="install-image.html"><b>Shorter</b><span>Flash the ready image</span></a>
 			<a href="contribute.html"><b>Building packages?</b><span>Contribute</span></a>

@@ -23,7 +23,7 @@
 		<p class="lede">One download, everything inside: kernel, hardware fixes, the
 		six own applications, browser, mail, maps, photos. About 1&nbsp;GB
 		compressed.</p>
-		<p><a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest">Download the latest image</a></p>
+		<p><a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/@IMG@.xz">Download @IMG@.xz &mdash; 1.2 GB</a></p>
 	</div>
 </section>
 
