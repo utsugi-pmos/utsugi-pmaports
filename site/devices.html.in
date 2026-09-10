@@ -87,6 +87,11 @@
 			explained.</td></tr>
 			<tr><td>Microphone level</td><td>It records. Whether the gain is right has not
 			been measured against anything.</td></tr>
+			<tr><td>ADSP crash freezes the phone</td><td>An ADSP crash whose recovery
+			deadlocks takes the root filesystem's I/O with it, and with an encrypted root
+			that means the whole phone. The trigger found on 2026-09-10 is fixed, and a
+			watchdog now reboots instead of freezing, but why the recovery deadlocks is
+			still open.</td></tr>
 			<tr><td>GPS engine lock</td><td>Fixed here, and it is not this phone's fault:
 			postmarketOS ships the engine locked on every Qualcomm device. The fix belongs
 			upstream.</td></tr>
