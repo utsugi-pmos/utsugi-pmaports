@@ -66,7 +66,7 @@
 			problem: the teardown still freezes and why is still unexplained.</td></tr>
 			<tr><th>ADSP crash freezes the phone</th><td>An ADSP crash whose recovery
 			deadlocks takes the root filesystem with it. The 2026-09-10 trigger is fixed
-			and a watchdog now reboots instead of freezing; the deadlock is open.</td></tr>
+			and a watchdog now reboots and saves the log; the deadlock is open.</td></tr>
 			<tr><th>Microphone level</th><td>It records. Whether the gain is right has
 			not been measured.</td></tr>
 			<tr><th>GPS engine lock</th><td>Fixed here, and not this phone's fault:

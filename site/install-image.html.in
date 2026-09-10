@@ -49,7 +49,7 @@
 		<div class="h"><span>02</span><h2>Flash it</h2></div>
 		<div class="sh">
 			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre>sha256sum -c SHA256SUMS                      <b># must say OK</b>
+			<pre>sha256sum -c SHA256SUMS   <b># catches a truncated download before you write it</b>
 xz -d utsugi-surya-*.img.xz
 fastboot flash userdata utsugi-surya-*.img   <b># userdata. never boot.</b>
 fastboot reboot</pre>

@@ -41,13 +41,21 @@
  * that DDR, U-Boot being the obvious suspect, and the black box's premise does
  * not hold as written.
  *
- * So what this watchdog buys today is the phone coming back on its own in ten
- * minutes instead of sitting dead for seven hours, and the dump reaching
- * /dev/kmsg -- readable over ssh for as long as the phone stays up, which
- * during the freeze it did. Getting the dump ACROSS the reboot needs somewhere
- * that survives: a raw partition written with O_DIRECT would, since in that
- * freeze dm-0 was stuck while sda was idle. That is a design decision, not a
- * patch, and it is written up in surya/tasks/021.
+ * SO THE DUMP GOES TO A RAW PARTITION, and this phone happens to ship one for
+ * exactly that: 'logdump', 64 MiB, Qualcomm's own crash-log partition, which
+ * postmarketOS never touches and whose contents are disposable by design.
+ * ('minidump', 128 MiB, is the other candidate.) It is addressed BY LABEL --
+ * /dev/disk/by-partlabel/logdump -- so there is no offset to compute and
+ * nothing else can be hit by an arithmetic slip.
+ *
+ * That works precisely because of what the freeze looked like: dm-0 had 51
+ * requests stuck while the disk underneath sat idle and healthy, so a write
+ * that skips the filesystem, the page cache and dm-crypt still lands. O_DIRECT
+ * with an aligned buffer, straight to the block device.
+ *
+ * What gets written: a magic header, the uptime, and the tail of /dev/kmsg --
+ * which is RAM, so reading it needs no disk. Read it back after the reboot with
+ * 'blackbox --freeze'.
  *
  * SysRq through /proc/sysrq-trigger is NOT gated by kernel.sysrq -- checked on
  * this phone with the mask at 16 (sync only): 'w' still printed "Show Blocked
@@ -61,15 +69,32 @@
  */
 #define _GNU_SOURCE
 #include <fcntl.h>
+#include <errno.h>
+#include <signal.h>
+#include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
 #include <time.h>
 #include <unistd.h>
 
+/* The dump partition, by label. 64 MiB on this phone; we use one. */
+#define DUMP_DEV  "/dev/disk/by-partlabel/logdump"
+#define DUMP_SIZE (1024 * 1024)
+#define DUMP_MAGIC "UTSUGI-FREEZE-DUMP\n"
+
+
 #define CHECK_SECONDS 10
 
-static int fd_psi, fd_kmsg, fd_sysrq;
+static int fd_psi, fd_kmsg, fd_sysrq, fd_dump = -1, fd_kmsg_r = -1;
+static char *dump;   /* aligned, locked, allocated before mlockall */
+static volatile sig_atomic_t asked_for_dump;
+
+/* SIGUSR1 saves the log to the dump partition right now, without waiting for a
+ * freeze. It is how the dump path gets tested on a healthy phone, and how you
+ * grab the log by hand when something interesting is happening. */
+static void on_usr1(int sig) { (void)sig; asked_for_dump = 1; }
 
 static void say(const char *msg)
 {
@@ -137,12 +162,80 @@ static int env_int(const char *name, int fallback)
 	return (int)n;
 }
 
+/* Copy what /dev/kmsg holds into the dump partition. No allocation, no
+ * filesystem, no page cache: the whole point is that this works while the
+ * filesystem does not. */
+static void save_dump(const char *why)
+{
+	size_t used;
+	ssize_t n;
+	char up[64] = "";
+	int fd_up;
+
+	if (fd_dump < 0 || !dump)
+		return;
+
+	memset(dump, 0, DUMP_SIZE);
+	used = 0;
+	used += (size_t)snprintf(dump, 256, "%s%s\n", DUMP_MAGIC, why);
+
+	fd_up = open("/proc/uptime", O_RDONLY | O_CLOEXEC);
+	if (fd_up >= 0) {
+		n = read(fd_up, up, sizeof(up) - 1);
+		close(fd_up);
+		if (n > 0)
+			used += (size_t)snprintf(dump + used, 128, "uptime %s", up);
+	}
+
+	/* From the oldest record the buffer still holds. A short read with
+	 * EPIPE means printk overwrote where we were; skip and carry on. */
+	if (fd_kmsg_r >= 0) {
+		lseek(fd_kmsg_r, 0, SEEK_SET);
+		while (used < DUMP_SIZE - 8192) {
+			n = read(fd_kmsg_r, dump + used, 8192);
+			if (n > 0) {
+				used += (size_t)n;
+				continue;
+			}
+			if (n < 0 && errno == EPIPE)
+				continue;
+			break;
+		}
+	}
+
+	/* O_DIRECT: length and offset have to be block-aligned, so the whole
+	 * buffer goes out. It is zeroed above, so the tail is clean. */
+	if (pwrite(fd_dump, dump, DUMP_SIZE, 0) != DUMP_SIZE)
+		say("could not write the dump partition");
+	else
+		say("dump written to " DUMP_DEV);
+	fsync(fd_dump);
+}
+
 int main(void)
 {
-	int threshold = env_int("FREEZE_THRESHOLD_PERCENT", 90) * 100;
+	int threshold = env_int("FREEZE_THRESHOLD_PERCENT", 90);
+
+	/* A THRESHOLD BELOW 10 IS NOT A TEST, IT IS A REBOOT LOOP. Setting 0 to try
+	 * the dump path on 2026-09-11 made this trip every ten seconds: each trip
+	 * dumps hundreds of task stacks through SysRq to a console at level 7, PID 1
+	 * missed its hardware watchdog ping, and the phone reset -- twice, because
+	 * the setting is on disk and applies again at boot. Use SIGUSR1 to test. */
+	if (threshold < 10) {
+		threshold = 90;
+	}
+	threshold *= 100;
 	int grace = env_int("FREEZE_GRACE_SECONDS", 600);
 	int do_reboot = env_int("FREEZE_REBOOT", 1);
 	int stalled = 0;
+
+	/* Everything opened here, while the filesystem still answers. */
+	fd_dump = open(DUMP_DEV, O_WRONLY | O_DIRECT | O_CLOEXEC);
+	if (fd_dump < 0)
+		fd_dump = open(DUMP_DEV, O_WRONLY | O_CLOEXEC);   /* no O_DIRECT: still better than nothing */
+	fd_kmsg_r = open("/dev/kmsg", O_RDONLY | O_NONBLOCK | O_CLOEXEC);
+	if (posix_memalign((void **)&dump, 4096, DUMP_SIZE) != 0)
+		dump = NULL;
 
 	fd_psi = open("/proc/pressure/io", O_RDONLY | O_CLOEXEC);
 	fd_kmsg = open("/dev/kmsg", O_WRONLY | O_CLOEXEC);
@@ -152,6 +245,8 @@ int main(void)
 
 	/* Locked in memory before anything else: under a full stall, a page fault
 	 * on this program's own text would be the end of it. */
+	signal(SIGUSR1, on_usr1);
+
 	if (mlockall(MCL_CURRENT | MCL_FUTURE) != 0)
 		say("mlockall failed: a page fault could silence this watchdog");
 
@@ -161,6 +256,12 @@ int main(void)
 		int full = full_avg60();
 
 		nap(CHECK_SECONDS);
+
+		if (asked_for_dump) {
+			asked_for_dump = 0;
+			say("SIGUSR1: saving the log to the dump partition");
+			save_dump("asked for by hand (SIGUSR1)");
+		}
 
 		if (full < 0 || full < threshold) {
 			if (stalled >= 60)
@@ -181,18 +282,21 @@ int main(void)
 
 		say("the filesystem has not answered for the whole grace period");
 		if (!do_reboot) {
-			say("FREEZE_REBOOT=0: dumping tasks, not rebooting");
+			say("FREEZE_REBOOT=0: dumping tasks and saving them, not rebooting");
 			sysrq('t');
 			sysrq('w');
+			nap(3);
+			save_dump("freeze-watchdog: FREEZE_REBOOT=0, no reboot");
 			stalled = 0;
 			continue;
 		}
 
-		say("dumping tasks to /dev/kmsg and rebooting; pstore does not survive here");
+		say("dumping tasks and saving them to the dump partition");
 		sysrq('t');
 		sysrq('w');
-		/* Let printk drain into the ramoops console before the reset. */
+		/* Let printk finish before reading /dev/kmsg back. */
 		nap(3);
+		save_dump("freeze-watchdog: full I/O stall over the grace period");
 		sysrq('b');
 		/* If SysRq is masked, at least do not spin silently. */
 		nap(10);
