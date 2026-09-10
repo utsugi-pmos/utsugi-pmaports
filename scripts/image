@@ -21,7 +21,10 @@ while [ $# -gt 0 ]; do
 	esac
 done
 case "$DEVICE" in
-	surya) PMOS_DEVICE=qcom-sm7150; META=utsugi-surya-base ;;
+	# base AND extras: the image is the easy path, and the easy path should not
+	# end with "now install a browser". Anyone who wants the bare phone adds the
+	# repository to a plain postmarketOS instead.
+	surya) PMOS_DEVICE=qcom-sm7150; META="utsugi-surya-base utsugi-surya-extras" ;;
 	vayu)  PMOS_DEVICE=xiaomi-vayu; META=utsugi-vayu-base ;;
 	*) die "--device must be surya or vayu" ;;
 esac
@@ -55,9 +58,9 @@ if [ "$FDE" = 1 ]; then
 	# image cannot be handed out -- whoever built it would hold the master key of
 	# every phone flashed from it, and changing the passphrase afterwards does not
 	# change the master key.
-	pmb install --password 147147 $FDE_FLAG --add "$META"
+	pmb install --password 147147 $FDE_FLAG --add "$(echo $META | tr ' ' ',')"
 else
-	pmb install --password 147147 --add "$META"
+	pmb install --password 147147 --add "$(echo $META | tr ' ' ',')"
 fi
 pmb export "$OUT"
 

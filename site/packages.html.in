@@ -9,12 +9,10 @@
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
-	<a href="index.html">Overview</a>
-	<a href="devices.html">Devices</a>
-	<a href="features.html">Features</a>
-	<a href="packages.html" aria-current="page">Packages</a>
-	<a href="packages.html" aria-current="page">Packages</a>
+	<a href="index.html">Start</a>
 	<a href="install.html">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html" aria-current="page">What is inside</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
 </div></header>
@@ -275,8 +273,8 @@
 		<p>It is published so the investigation is installable by anyone who wants to
 		carry it further. See <a href="devices.html">Devices</a> for where it stands.</p>
 		<div class="next">
-			<a href="install.html"><b>Next</b><span>Installation</span></a>
-			<a href="features.html"><b>Back to</b><span>What you get</span></a>
+			<a href="install-image.html"><b>Next</b><span>Flash the image</span></a>
+			<a href="devices.html"><b>Read</b><span>What does not work</span></a>
 		</div>
 	</div>
 </section>

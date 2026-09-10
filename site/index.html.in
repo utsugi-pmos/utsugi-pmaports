@@ -1,7 +1,7 @@
 <!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>utsugi-pmaports</title>
+<title>utsugi-pmaports &mdash; postmarketOS that works on the POCO X3 NFC</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
@@ -9,113 +9,121 @@
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
-	<a href="index.html" aria-current="page">Overview</a>
-	<a href="devices.html">Devices</a>
-	<a href="features.html">Features</a>
-	<a href="packages.html">Packages</a>
+	<a href="index.html" aria-current="page">Start</a>
 	<a href="install.html">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
 </div></header>
 <section class="panel">
 	<div class="hero">
 		<div class="left">
-			<div class="eyebrow">postmarketOS &middot; Plasma Mobile &middot; aarch64</div>
-			<h1>A POCO X3 that works like a phone.</h1>
-			<p class="lede">A signed apk repository with a patched kernel, ten forked
-			packages and six applications, for two Xiaomi devices running postmarketOS
-			edge. Install it on what you already have, or flash a ready image.</p>
+			<div class="eyebrow">POCO X3 NFC &middot; postmarketOS &middot; Plasma Mobile</div>
+			<h1>Linux on the POCO X3 NFC, with the hardware actually working.</h1>
+			<p class="lede">Three cameras, calls, sensors, GPS, both speakers, 60 and
+			120&nbsp;Hz. Flash one image and the phone works. 78 kernel patches, ten
+			patched packages and six applications, in a signed repository that keeps
+			itself current with <code>apk upgrade</code>.</p>
 			<div class="btns">
-				<a class="btn" href="install.html">Install it</a>
+				<a class="btn" href="install-image.html">Flash the image</a>
 				<a class="btn ghost" href="devices.html">What does not work</a>
 			</div>
 			<div class="grid tight">
-				<div><div class="num">2</div><small>devices</small></div>
+				<div><div class="num">3</div><small>cameras</small></div>
 				<div><div class="num">78</div><small>kernel patches</small></div>
-				<div><div class="num">69</div><small>packages</small></div>
-				<div><div class="num">6</div><small>applications</small></div>
+				<div><div class="num">68</div><small>packages</small></div>
+				<div><div class="num">1</div><small>image, everything in</small></div>
 			</div>
 		</div>
 		<div class="right">
-			<div><b>Repository</b>@URL@/main</div>
-			<div><b>Signing key</b>@KEY@</div>
-			<div><b>Base</b>postmarketOS edge, Plasma Mobile, systemd</div>
-			<div><b>Devices</b>xiaomi-surya (POCO X3 NFC) &middot; xiaomi-vayu (POCO X3 Pro, experimental)</div>
+			<div><b>Works</b>Cameras &middot; calls &middot; LTE &middot; sensors &middot; GPS &middot; audio &middot; 120 Hz &middot; power-off</div>
+			<div><b>Does not</b>Fingerprint &middot; stereo speakers &middot; echo on calls</div>
+			<div><b>Image</b>1 GB download, includes the browser, mail, maps and the six own apps</div>
+			<div><b>Updates</b><code>sudo apk upgrade</code></div>
 		</div>
 	</div>
 </section>
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>Quickstart</h2></div>
-		<p>Three commands on a postmarketOS install that already boots. This is Alpine,
-		so it is <b>apk</b>, not apt.</p>
-		<div class="grid">
-			<div>
-				<div class="cap">STEP 1</div>
-				<div class="t">Trust the key</div>
-				<p>Packages are signed. Without the key apk refuses them, and it is right to.</p>
-				<div class="sh" style="margin-top:14px"><pre>sudo wget -qO /etc/apk/keys/@KEY@ \
-  @URL@/keys/@KEY@</pre></div>
-			</div>
-			<div>
-				<div class="cap">STEP 2</div>
-				<div class="t">Add the repository</div>
-				<p>Untagged, on purpose: a tagged line makes apk prefer upstream for every
-				dependency, quietly.</p>
-				<div class="sh" style="margin-top:14px"><pre>echo @URL@/main | \
-  sudo tee -a /etc/apk/repositories
-sudo apk update</pre></div>
-			</div>
-			<div>
-				<div class="cap">STEP 3</div>
-				<div class="t">Install</div>
-				<p>The kernel comes with it. From here on <code>apk upgrade</code> keeps
-				everything current.</p>
-				<div class="sh" style="margin-top:14px"><pre>sudo apk add utsugi-surya-base</pre></div>
-			</div>
+		<div class="h"><span>01</span><h2>The short way</h2></div>
+		<p>Download, check, flash. The image carries everything: kernel, hardware
+		fixes, the six own applications and the optional ones.</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>sha256sum -c SHA256SUMS
+xz -d utsugi-surya-*.img.xz
+fastboot flash userdata utsugi-surya-*.img   <b># userdata. never boot.</b>
+fastboot reboot</pre>
 		</div>
-		<div class="note" style="margin-top:16px"><i></i><div>
-			<b>Reboot as a separate, deliberate step.</b>
-			On the surya a kernel that does not boot is not a failed install, it is a reboot
-			loop: the watchdog fires 20&nbsp;s after PID&nbsp;1 and there is no screen left to fix
-			it from. <a href="install.html">Read the installation page first.</a>
+		<div class="note"><i></i><div>
+			<b>U-Boot first, and it depends on your panel.</b>
+			A phone that has never run postmarketOS needs U-Boot on <code>boot</code>
+			before this. Wrong panel, black screen.
+			<a href="install-pmos.html">Full first-install steps &rarr;</a>
 		</div></div>
+		<p><a class="btn" href="install-image.html">Download and full instructions</a></p>
 	</div>
 </section>
 
 <section class="panel">
 	<div class="wrap">
-		<div class="h"><span>02</span><h2>What this is</h2></div>
-		<p>Everything that makes these phones work, packaged so it installs and updates
-		like software instead of like an afternoon. It used to be an installer script
-		copying files over ssh; now it is a repository with a signed index.</p>
-		<div class="grid quiet">
-			<div>
-				<div class="t">Add it to what you have</div>
-				<p>A postmarketOS install that boots gets the kernel, the fixes and the
-				applications, and tracks them with <code>apk upgrade</code>.</p>
-			</div>
-			<div>
-				<div class="t">Or flash a whole image</div>
-				<p>Built from exactly what is published, with the repository line and the
-				key already inside. First boot is already current.</p>
-			</div>
-			<div>
-				<div class="t">Encrypted, built by you</div>
-				<p>There is no encrypted image to download, and that is deliberate: the
-				master key would be born on the machine that built it.</p>
-			</div>
+		<div class="h"><span>02</span><h2>Other ways in</h2></div>
+		<div class="grid">
+			<a href="install-image.html">
+				<div class="n">Ready image</div>
+				<p><b>Recommended.</b> One file, everything inside, 5 minutes. Not
+				encrypted.</p></a>
+			<a href="install-repo.html">
+				<div class="n">Already running postmarketOS?</div>
+				<p>Add the repository and one package. Keeps your data.</p></a>
+			<a href="install-pmos.html">
+				<div class="n">From scratch, your own install</div>
+				<p>U-Boot, pmbootstrap, then the repository. For a phone that has never
+				run Linux.</p></a>
+			<a href="install-encrypted.html">
+				<div class="n">Encrypted</div>
+				<p>You build it. A LUKS key born on somebody else's machine is not
+				yours.</p></a>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>What you get</h2></div>
+		<div class="scroll">
+		<table>
+			<tr><th>Cameras</th><td>All three: 64&nbsp;Mpx rear, front and ultra-wide,
+			with autofocus. C-PHY support written for CAMSS and three sensor
+			drivers.</td></tr>
+			<tr><th>Calls</th><td>Voice in both directions over LTE. Echo on the other
+			end is still open.</td></tr>
+			<tr><th>Audio</th><td>Both speakers, earpiece, saved volume. Out of the box
+			the phone booted mute.</td></tr>
+			<tr><th>Sensors</th><td>Accelerometer with rotation, light, compass,
+			proximity.</td></tr>
+			<tr><th>GPS</th><td>Twelve satellites, fix in about 40&nbsp;s cold.
+			postmarketOS ships the engine locked; this unlocks it.</td></tr>
+			<tr><th>Screen</th><td>60 and 120&nbsp;Hz, with a power-saving mode that
+			uses it.</td></tr>
+			<tr><th>Power</th><td>Power-off that powers off, charge screen when plugged
+			in while off, USB-C that can charge instead of feeding your laptop.</td></tr>
+			<tr><th>Apps</th><td>Six written for this phone: navigation, screenshots,
+			always-alive apps, battery per app, smart unlock, find-my-phone.
+			<a href="packages.html">All of them &rarr;</a></td></tr>
+		</table>
 		</div>
 		<div class="next">
+			<a href="install-image.html"><b>Install</b><span>The short way</span></a>
 			<a href="devices.html"><b>First</b><span>What does not work</span></a>
-			<a href="features.html"><b>Then</b><span>What you get</span></a>
-			<a href="install.html"><b>When ready</b><span>Installation</span></a>
+			<a href="contribute.html"><b>Code</b><span>Seven repositories</span></a>
 		</div>
 	</div>
 </section>
 <footer><div>
 	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
 	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
-	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
 </div></footer>

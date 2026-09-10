@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install postmarketOS first &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Route 3 &middot; from scratch</div>
+		<h1>Install postmarketOS yourself</h1>
+		<p class="lede">For a phone that has never run Linux, or if you want to build
+		your own system instead of flashing mine. The POCO X3 NFC has no port of its
+		own: it uses the generic <code>qcom-sm7150</code>, which needs U-Boot and
+		systemd.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Unlock the bootloader</h2></div>
+		<p>Xiaomi's own procedure, with its waiting period. Everything is wiped.</p>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>U-Boot, matched to your panel</h2></div>
+		<p><b>Tianma or Huaxing.</b> Get it wrong and the screen stays black &mdash;
+		the phone is fine, it just draws nothing. Check which one you have before
+		flashing.</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre><i># releases: github.com/sm7150-mainline/u-boot</i>
+fastboot erase dtbo
+fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img</pre>
+		</div>
+		<p>This is the only thing that ever goes to <code>boot</code>. The kernel
+		lives inside the system image on <code>userdata</code>.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>Build a system with pmbootstrap</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>pmbootstrap init            <i># device: qcom-sm7150, UI: plasma-mobile</i>
+pmbootstrap config service_manager systemd   <b># with OpenRC the image comes out broken</b>
+pmbootstrap install
+pmbootstrap flasher flash_rootfs             <b># goes to userdata</b></pre>
+		</div>
+		<p>That gives you a stock postmarketOS: no working cameras, no in-call voice,
+		muted speakers, locked GPS. Which is what the next step is for.</p>
+
+		<div class="h" style="margin-top:34px"><span>04</span><h2>Add this repository</h2></div>
+		<p>Three commands, and the phone becomes the one described on the front page.</p>
+		<p><a class="btn" href="install-repo.html">Route 2 &rarr;</a></p>
+		<div class="next">
+			<a href="install-image.html"><b>Shorter</b><span>Flash the ready image</span></a>
+			<a href="contribute.html"><b>Building packages?</b><span>Contribute</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>
