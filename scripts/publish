@@ -5,7 +5,8 @@
 #   scripts/publish              assemble and sign the site under $WORK/site
 #   scripts/publish --push       ...and force-push it to gh-pages
 #
-# The site is assembled from scratch every time: the live site is downloaded,
+# The site is assembled from scratch every time: what is not built locally is
+# downloaded from the live site,
 # the freshly built packages are added, and only the HIGHEST version of each
 # package survives. Pages has a 1 GB soft limit and the kernel alone is 26 MB per
 # build, so keeping history here is not an option; the history lives in git and
@@ -42,18 +43,35 @@ for a in $EMPTY_ARCHES; do mkdir -p "$SITE/$CHANNEL_DIR/$a"; done
 # (it would catch other packages) and publishing everything in the packages
 # directory would be worse: pmbootstrap also builds upstream dependencies there,
 # and shipping those under their upstream names would shadow real packages.
-n=0; missing=0
+# What is not in $PKGS is pulled from the LIVE site, and that is not an
+# optimisation: CI runs with --from pointing at the artifact of the packages the
+# commit touched, so everything else would be missing. Indexing only what is
+# there would publish an index of three packages and silently drop the other
+# sixty-six -- and phones would find their kernel gone on the next apk update.
+n=0; carried=0; missing=""
 for pkg in $(all_aports); do
 	ver="$(apkbuild_version "$pkg")"
 	subs="$(apkbuild_get "$pkg" subpackages | tr ' \n' '  ')"
 	for name in "$pkg" $(echo "$subs" | tr ' ' '\n' | sed 's/:.*//' | grep -v '^$'); do
 		f="$PKGS/$name-$ver.apk"
-		if [ -f "$f" ]; then cp "$f" "$DIR/"; n=$((n + 1))
-		else grey "  not built: $name-$ver.apk"; missing=$((missing + 1)); fi
+		if [ -f "$f" ]; then
+			cp "$f" "$DIR/"; n=$((n + 1))
+		elif curl -fsSL --retry 2 -o "$DIR/$name-$ver.apk" \
+				"$REPO_URL/$CHANNEL_DIR/$ARCH/$name-$ver.apk"; then
+			carried=$((carried + 1))
+		else
+			rm -f "$DIR/$name-$ver.apk"
+			grey "  not built and not published: $name-$ver.apk"
+			missing="$missing $name-$ver"
+		fi
 	done
 done
-green "  $n packages, $missing not built"
-[ "$n" -gt 0 ] || die "nothing to publish"
+green "  $n built here, $carried carried from the live site"
+[ $((n + carried)) -gt 0 ] || die "nothing to publish"
+# A package that exists nowhere is only a problem if this run was supposed to
+# produce it. Said out loud either way: an index quietly short of a package is
+# the failure mode this whole step exists to avoid.
+[ -z "$missing" ] || red "  MISSING FROM THE INDEX:$missing"
 
 title "Index and signature"
 # apk and abuild come from a throwaway Alpine container: exactly the tools
