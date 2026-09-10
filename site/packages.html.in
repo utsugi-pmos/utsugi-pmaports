@@ -59,10 +59,9 @@
 		<table>
 			<tr><th class="mono">Package</th><th>What it does</th></tr>
 			<tr><td class="mono">utsugi-surya-boot</td><td>The kernel command line as a
-			drop-in: <code>cma=512M</code> for the cameras, uncompressed pstore so a
-			ramoops dump survives bit errors, and <code>reboot=warm</code>, which asks the
-			kernel to keep RAM across a reboot. The firmware here does not honour that;
-			see the black box below.</td></tr>
+			drop-in: <code>cma=512M</code> for the cameras and <code>reboot=warm</code>.
+			The firmware does not keep RAM across a reboot here, so the black box writes
+			to a partition instead.</td></tr>
 			<tr><td class="mono">utsugi-surya-audio</td><td>Both speakers on at boot; out
 			of the box only the bottom one played. The volume you left it at instead of
 			booting mute, the UCM up before PulseAudio, and the <code>q6voiced</code>
@@ -89,10 +88,12 @@
 			<tr><td class="mono">utsugi-surya-blackbox</td><td>So a freeze leaves a trace:
 			the console level raised above what <code>quiet</code> allows, the previous
 			boot's journal archived, and <b>freeze-watchdog</b>, which
-			reboots the phone when its filesystem stops answering, dumping the blocked
-			tasks to the kernel log on the way out. Carrying that dump across the reboot
-			does not work here: the ramoops region is configured and comes back empty,
-			measured both ways on 2026-09-10.</td></tr>
+			reboots the phone when its filesystem stops answering, and writes the kernel
+			log to the <code>logdump</code> partition on the way out, with
+			<code>O_DIRECT</code> so it skips the filesystem that is stuck. Read it back
+			with <code>blackbox --freeze</code>. The ramoops region is configured and
+			comes back empty on this phone, which is why the dump goes to a partition
+			instead.</td></tr>
 		</table>
 		</div>
 

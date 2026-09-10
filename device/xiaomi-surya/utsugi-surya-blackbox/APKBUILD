@@ -7,7 +7,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # enough room not to rotate it away.
 pkgname=utsugi-surya-blackbox
 pkgver=1
-pkgrel=3
+pkgrel=5
 pkgdesc="Keep evidence across the reboots this phone does not survive"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 # Not noarch any more: freeze-watchdog is a C program on purpose. A shell
@@ -71,8 +71,8 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-bf29814c7c27c78d74cdfcccdf09a15c9d475b81182d68e234cc050764782c263b42b69772e735b80636c92fd619b59ea997a6cc87ff16cd9eafc16071ad6a7c  blackbox
-74af64e4f446f48678f2ac5d72cd8ce9088abc976f2373ad13c2a72f2e6f846e34e0fcf5b6fed15f7727266ba48622b84054ae03160a527e1556215472b4dadc  freeze-watchdog.c
+56c120235268d4b6fbfc8abfef0a0c2593996c8e727ede80359c2a84f4d4221fe0aa3e8d9c541fbc11d77dd053ee82d11ef3982c326bb86175be88eec6e169af  blackbox
+c7f067ce1908cd1f8dcc5ba248e84a0950b8bb6d7196bf704bddfa6882a86a345876c911bb50e2e251c9ef1a50db11ea12e718fbe058cd6d4f27a1713fc10ba8  freeze-watchdog.c
 fb527bb940b5208e32ef7274a0f27042d2a90c697677dcfa721476862ece82a6c7d178f6273cebd3d78a2d531bd84cbb65dfef6efcb3e8b9c4244dfee7ad655f  freeze-watchdog.service
 cfeb9accad2f6538e6a1669d0945fa2e28fcdb5273e7a4f9d5a565df547aee2ff910ec8e7d5a936c1138e43d627ac516f1d24432010d80d7f1ea1674ae7f75ff  utsugi-surya-freeze-watchdog.default
 f5f5bd0798d31f727805fda09490aad81516ebb55840233e5b005fc4427c499fa51c95c16158d11ad8cef6dcddb37c53651c519e1c1b742f0ca3bdf61456f354  blackbox-heartbeat

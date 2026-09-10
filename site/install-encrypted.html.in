@@ -52,8 +52,9 @@ scripts/build-your-own-image --encrypted</pre>
 		<div class="note"><i></i><div>
 			<b>A stuck kernel workqueue takes the whole filesystem with it.</b>
 			On 2026-09-10 an ADSP crash whose recovery deadlocked left this phone frozen
-			for seven hours with the root inside dm-crypt. The trigger is fixed and a
-			watchdog now reboots instead of freezing, but the cause is still open.
+			for seven hours with the root inside dm-crypt. The trigger is fixed, and a
+			watchdog now reboots and saves the kernel log to a partition, but the cause
+			is still open.
 		</div></div>
 		<div class="note"><i></i><div>
 			<b>Encrypting an install you already have is not offered.</b>

@@ -5,9 +5,15 @@
 #   blackbox --lista      all saved traces
 #   blackbox --latidos    the raw heartbeats, to inspect by hand
 #   blackbox --estado     what is installed right now
+#   blackbox --freeze     the dump freeze-watchdog left on the dump partition
 #
-# All of this lives in RAM that survives the reboot (ramoops). The files are
-# owned by root, so the script relaunches itself with sudo if needed.
+# The ramoops side lives in RAM that was supposed to survive the reboot. On this
+# phone it does not -- measured 2026-09-10, /sys/fs/pstore comes back empty both
+# after SysRq b and after a normal reboot -- which is why freeze-watchdog writes
+# its dump to a raw partition instead. That one is '--freeze'.
+#
+# The files are owned by root, so the script relaunches itself with sudo if
+# needed.
 set -eu
 
 ARCHIVO=/var/log/blackbox
@@ -34,7 +40,22 @@ campo() {  # campo <line> <name>  ->  the value, or empty
 	printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1
 }
 
+FREEZE_DEV=/dev/disk/by-partlabel/logdump
+FREEZE_MAGIC=UTSUGI-FREEZE-DUMP
+
 case "${1:-}" in
+--freeze)
+	# The partition always holds something; the magic is how we tell our dump
+	# from whatever the stock bootloader left there.
+	[ -e "$FREEZE_DEV" ] || { echo "no hay $FREEZE_DEV en este aparato"; exit 1; }
+	if ! dd if="$FREEZE_DEV" bs=64 count=1 2>/dev/null | grep -q "$FREEZE_MAGIC"; then
+		echo "the dump partition holds no freeze dump."
+		echo "(freeze-watchdog writes one when the filesystem stops answering)"
+		exit 0
+	fi
+	echo "== freeze dump, from $FREEZE_DEV =="
+	dd if="$FREEZE_DEV" bs=1M count=1 2>/dev/null | tr -d '\000' | tail -n +2
+	exit 0 ;;
 --lista)
 	echo "Traces saved in $ARCHIVO:"
 	for d in "$ARCHIVO"/*/; do
