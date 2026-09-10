@@ -237,7 +237,7 @@ known.
  
 -	if (csid->phy.need_vc_update) {
 +	/*
-+	 * DIAGNOSTICO (y probablemente algo mas).
++	 * DIAGNOSTIC (and probably something more).
 +	 *
 +	 * As it stands in mainline, configure_stream() is ONLY called if
 +	 * need_vc_update is set, and the flag is cleared right there. It is set when

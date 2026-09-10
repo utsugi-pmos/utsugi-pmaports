@@ -52,7 +52,7 @@ would give garbage or zero packets, which is perfectly distinguishable.
 +/*
 + * 8191 is 2^13-1, and that thirteen-bit limit is NOT from the capture path: it is
 + * from the CSID PATTERN GENERATOR, which programs the width in a thirteen-bit field
-+ * bits y ya se enmascara solo:
++ * and masks it by itself already:
 + *
 + *   camss-csid-gen2.c:  val |= (input_format->width & 0x1fff) << ...FRAME_WIDTH;
 + *

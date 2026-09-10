@@ -74,7 +74,7 @@ recompiling.
 +	 * On v1.2.1 (lane_regs_sm8250) these terminators are repeated
 +	 * inside the lane table; on v1.2 and v1.2.2 they go a single
 +	 * time in the common block, which is exactly the part mainline writes to
-+	 * mano y donde se quedaron fuera.
++	 * by hand, and where they were left out.
 +	 *
 +	 * Our lane_regs_sm7150 writes 0x0800 = 0x02 five times (one per
 +	 * lane), so that one was already there; 0x0884 does not appear even once.

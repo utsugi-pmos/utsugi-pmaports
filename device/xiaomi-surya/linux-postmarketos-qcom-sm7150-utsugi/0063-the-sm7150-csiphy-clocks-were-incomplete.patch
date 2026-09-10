@@ -63,7 +63,7 @@ this needs no changes outside the driver.
 +		 * with no clock.
 +		 *
 +		 * The SM7150 device tree declares the seven names, so
-+		 * esto no necesita nada mas.
++		 * this needs nothing more.
 +		 */
 +		.clock = { "camnoc_axi", "slow_ahb_src", "cpas_ahb",
 +			   "cphy_rx_src", "csiphy0", "csiphy0_timer_src",

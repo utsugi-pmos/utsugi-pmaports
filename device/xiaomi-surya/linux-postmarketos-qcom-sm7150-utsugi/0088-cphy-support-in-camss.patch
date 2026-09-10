@@ -75,8 +75,8 @@ The front camera carries on down the D-PHY branch without noticing.
 -	 * Most SoCs support both D-PHY and C-PHY standards, but currently only
 -	 * D-PHY is supported in the driver.
 +	 * C-PHY works too. The surya rear camera is three
-+	 * lanes, o sea un trio C-PHY, y se rechazaba aqui mismo antes de
-+	 * llegar a ninguna parte.
++	 * lanes, that is a C-PHY trio, and it was rejected right here before
++	 * getting anywhere at all.
  	 */
 -	if (vep.bus_type != V4L2_MBUS_CSI2_DPHY) {
 +	if (vep.bus_type != V4L2_MBUS_CSI2_DPHY &&

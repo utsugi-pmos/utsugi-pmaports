@@ -66,7 +66,7 @@ This does NOT fix anything: it is for looking.
 +	 * ignores what is written to it show up here and nowhere else.
 +	 *
 +	 * It sits behind a parameter because it is 115 reads per start of
-+	 * transmision y no hace falta tenerlas siempre.
++	 * transmission and they are not needed all the time.
 +	 */
 +	if (!readback_registers)
 +		return;

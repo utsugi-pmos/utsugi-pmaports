@@ -125,7 +125,7 @@ the bus, which is a dependency that can be met: moving focus while capturing.
 +		startup-delay-us = <100>;
 +
 +		/*
-+		 * SIEMPRE ENCENDIDO, y no es pereza.
++		 * ALWAYS ON, and it is not laziness.
 +		 *
 +		 * The actuator driver turns this regulator off on suspend, and
 +		 * to power up again it needs to talk to the chip over i2c.

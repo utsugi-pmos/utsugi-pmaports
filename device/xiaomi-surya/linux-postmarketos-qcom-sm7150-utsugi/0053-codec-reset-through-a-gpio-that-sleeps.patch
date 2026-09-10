@@ -23,7 +23,7 @@ appears in the log:
 
 which is a collision on the SoundWire bus. It is the last thing the phone says
 before freezing in the boots that fail (~25%). See
-surya/docs/ARRANQUE-01-no-es-un-cuelgue.md.
+surya/docs/BOOT-01-not-a-hang.md.
 
 gpiod_set_value_cansleep() is the correct variant for a pin that sleeps, and it
 is what the rest of the drivers in the same situation use.
