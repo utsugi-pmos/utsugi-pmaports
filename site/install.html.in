@@ -121,8 +121,11 @@ scripts/build-your-own-image --encrypted</pre>
 			recovery deadlocked left this phone frozen for seven hours: load 114 with one
 			task running, 96% full I/O stall, and a black screen. The cause is fixed, and
 			<code>utsugi-surya-blackbox</code> now ships a watchdog that turns that state
-			into a reboot with the kernel stacks saved in <code>/sys/fs/pstore</code>
-			instead of a phone that sits dead until someone holds the power button.
+			into a reboot instead of a phone that sits dead until someone holds the
+			power button. It dumps the blocked tasks to the kernel log on the way out;
+			carrying that dump across the reboot does not work on this device &mdash;
+			measured &mdash; because the ramoops region is not preserved by the boot
+			chain, so what you get back is a working phone, not the stacks.
 		</div></div>
 		<div class="note"><i></i><div>
 			<b>Encrypting an existing install is not offered.</b>

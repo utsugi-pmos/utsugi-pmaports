@@ -28,10 +28,26 @@
  *
  * When the full stall stays above the threshold for the whole grace period it
  * asks SysRq for a task dump ('t') and the list of blocked tasks ('w'), waits
- * for printk to drain into the ramoops console, and then reboots with SysRq 'b'
- * -- emergency_restart(), which skips every notifier that would block on the
- * wedged filesystem. The boot line carries reboot=warm, so DDR survives and the
- * next boot finds the dump in /sys/fs/pstore. Read it with 'blackbox'.
+ * for printk to drain, and then reboots with SysRq 'b' -- emergency_restart(),
+ * which skips every notifier that would block on the wedged filesystem.
+ *
+ * WHAT IT DOES NOT DO, MEASURED ON 2026-09-10: leave the dump behind. The
+ * ramoops region is configured and the console is registered in it
+ * (console_size=1MB at 0x9d800000, pstore.compress=none, reboot=warm), and
+ * /sys/fs/pstore comes up EMPTY all the same. Tested both ways on this phone --
+ * SysRq 'b' and a normal systemctl reboot, each with a marker written to
+ * /dev/kmsg and another to /dev/pmsg0 -- and neither the console nor the pmsg
+ * record survived. On this device something in the boot chain does not preserve
+ * that DDR, U-Boot being the obvious suspect, and the black box's premise does
+ * not hold as written.
+ *
+ * So what this watchdog buys today is the phone coming back on its own in ten
+ * minutes instead of sitting dead for seven hours, and the dump reaching
+ * /dev/kmsg -- readable over ssh for as long as the phone stays up, which
+ * during the freeze it did. Getting the dump ACROSS the reboot needs somewhere
+ * that survives: a raw partition written with O_DIRECT would, since in that
+ * freeze dm-0 was stuck while sda was idle. That is a design decision, not a
+ * patch, and it is written up in surya/tasks/021.
  *
  * SysRq through /proc/sysrq-trigger is NOT gated by kernel.sysrq -- checked on
  * this phone with the mask at 16 (sync only): 'w' still printed "Show Blocked
@@ -172,7 +188,7 @@ int main(void)
 			continue;
 		}
 
-		say("dumping tasks and rebooting -- read /sys/fs/pstore next boot");
+		say("dumping tasks to /dev/kmsg and rebooting; pstore does not survive here");
 		sysrq('t');
 		sysrq('w');
 		/* Let printk drain into the ramoops console before the reset. */
