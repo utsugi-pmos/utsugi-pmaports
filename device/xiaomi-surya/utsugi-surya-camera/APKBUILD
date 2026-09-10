@@ -4,7 +4,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # curve.
 pkgname=utsugi-surya-camera
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Rear-camera focus engine for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -28,7 +28,7 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-829169fc76b9a00ee277eeced658ed07c2db0b39ac899608a622589c8ae19d2d924984c764b9a57943a8adf3ac301d6d8aa5fb4fb05c2809c60634f37340b0f8  focus-engine
+be361dc986128ea16244b09c8a33f7204f7f61612523c1529612b7e5146c889f36b8a4d2c3460b046c28de79d6c14ed0e13e83dbc11fdcd684f518a810bdab37  focus-engine
 361bf851272b96946d69eeb40de8d130b5d9ee37bc573b572c62045a17a9c44fd54f754e19dfc2bb2be8aa15c81f36c04cec9d9c1fb3a41f2c41a5f0ca580a28  focus-engine.service
 713a3f7e3f0194eccbd95ae0edb65adbe5940e1f1201e47f2fcd9a6eb094a7d2b7c1734ccbd3c3c37c4396dd396b37c7718dd2c379165f6eaa4694609198060f  80-utsugi-surya-camera.preset
 "

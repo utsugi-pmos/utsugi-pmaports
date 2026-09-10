@@ -88,25 +88,25 @@ def power_state():
         return "?"
 
 
-def quien_mas_lo_tiene_abierto(node):
+def who_else_has_it_open(node):
     """Processes -other than this one- with `node` open. Returns ["1394 wireplumber"...]."""
-    mio = os.getpid()
-    otros = []
+    mine = os.getpid()
+    others = []
     for p in pathlib.Path("/proc").iterdir():
-        if not p.name.isdigit() or int(p.name) == mio:
+        if not p.name.isdigit() or int(p.name) == mine:
             continue
         try:
-            for enlace in (p / "fd").iterdir():
+            for link in (p / "fd").iterdir():
                 try:
-                    if os.readlink(enlace) == node:
-                        quien = (p / "comm").read_text().strip()
-                        otros.append(f"{p.name} {quien}")
+                    if os.readlink(link) == node:
+                        who = (p / "comm").read_text().strip()
+                        others.append(f"{p.name} {who}")
                         break
                 except OSError:
                     continue    # the fd was closed while we were looking
         except OSError:
             continue            # the process died, or it is not ours
-    return otros
+    return others
 
 
 def rebind():
@@ -128,9 +128,9 @@ def rebind():
     """
     node = find_node()
     if node:
-        otros = quien_mas_lo_tiene_abierto(node)
-        if otros:
-            print(f"NOT re-binding {node}: it is held open by {', '.join(otros)}; "
+        others = who_else_has_it_open(node)
+        if others:
+            print(f"NOT re-binding {node}: it is held open by {', '.join(others)}; "
                   "unbinding now would crash the kernel when they close it",
                   file=sys.stderr, flush=True)
             return False
