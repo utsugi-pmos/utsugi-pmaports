@@ -1,0 +1,116 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribute &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Overview</a>
+	<a href="devices.html">Devices</a>
+	<a href="features.html">Features</a>
+	<a href="install.html">Install</a>
+	<a href="contribute.html" aria-current="page">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Seven repositories</div>
+		<h1>Contribute</h1>
+		<p class="lede">Everything is public: the patches, the recipes, the scripts that
+		build and publish, and the write-up behind each decision.</p>
+		<div class="grid">
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports">
+				<div class="n">utsugi-pmaports</div>
+				<p>The packages, the 78 kernel patches, the device metapackages, and the
+				build and publish scripts.</p></a>
+			<a href="https://github.com/utsugi-pmos/poconav">
+				<div class="n">poconav</div>
+				<p>Car navigation with neural-network voice.</p></a>
+			<a href="https://github.com/utsugi-pmos/screenglaze">
+				<div class="n">screenglaze</div>
+				<p>Screenshots with volume-down + power.</p></a>
+			<a href="https://github.com/utsugi-pmos/keepalive">
+				<div class="n">keepalive</div>
+				<p>Apps that minimise instead of closing.</p></a>
+			<a href="https://github.com/utsugi-pmos/app-usage">
+				<div class="n">app-usage</div>
+				<p>Battery use per application.</p></a>
+			<a href="https://github.com/utsugi-pmos/smart-unlock">
+				<div class="n">smart-unlock</div>
+				<p>Skip the PIN when it is safe to.</p></a>
+			<a href="https://github.com/utsugi-pmos/lost-phone">
+				<div class="n">lost-phone</div>
+				<p>Find the phone without Google.</p></a>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Building it</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
+cd utsugi-pmaports
+scripts/setup-workdir   <b># own pmbootstrap work dir, pinned pmaports, a signing key</b>
+scripts/build --all     <b># the kernel takes minutes</b>
+scripts/lint            <b># fork bookkeeping and version bumps</b>
+scripts/check-upstream  <b># says when a fork has fallen behind</b>
+scripts/publish --push  <b># sign and publish</b></pre>
+		</div>
+		<h3>Two rules that will bite otherwise</h3>
+		<div class="grid quiet">
+			<div>
+				<div class="t">Always bump</div>
+				<p>pmbootstrap skips a build whose <code>pkgver-pkgrel</code> already exists
+				in any index it knows, and reports success. A forgotten bump looks like a
+				publish that changed nothing. Use <code>scripts/bump &lt;pkg&gt;</code>.</p>
+			</div>
+			<div>
+				<div class="t">Never move a tag</div>
+				<p>Re-tagging the same version leaves the old tarball in the distfile cache
+				under the same name, and the build silently uses it.</p>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>Where help would land</h2></div>
+		<div class="scroll">
+		<table>
+			<tr><th>Area</th><th>What is needed</th></tr>
+			<tr><td>Fingerprint</td><td>Four routes are documented as dead ends. A fifth
+			would be genuinely new ground.</td></tr>
+			<tr><td>Echo on calls</td><td>The canceller is wired and tunable at runtime. It
+			needs patience and a second phone.</td></tr>
+			<tr><td>Vayu modem</td><td>The fault is pinned to one firmware assertion, and
+			everything measured is written down. Nobody has got past it.</td></tr>
+			<tr><td>Upstreaming</td><td>Several fixes are not device-specific: the GPS engine
+			lock affects every Qualcomm device on postmarketOS, and the dialpad fix belongs
+			in KDE.</td></tr>
+			<tr><td>Stereo audio</td><td>Would need <code>TERT_MI2S_RX</code> transmitting
+			two channels. Kernel work, not configuration.</td></tr>
+		</table>
+		</div>
+		<h3>How the patches are written</h3>
+		<p>Each one carries its own explanation above the diff: what broke, what was
+		measured, what was ruled out and why the change is what it is. That prose is the
+		point &mdash; a patch whose reasoning is lost has to be rediscovered the next time
+		it looks wrong. If you send one, write it the same way.</p>
+		<div class="next">
+			<a href="index.html"><b>Back to</b><span>The start</span></a>
+			<a href="devices.html"><b>Or</b><span>What does not work</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

@@ -1,0 +1,122 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Features &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Overview</a>
+	<a href="devices.html">Devices</a>
+	<a href="features.html" aria-current="page">Features</a>
+	<a href="install.html">Install</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Kernel, packages, applications</div>
+		<h1>What you get</h1>
+		<p class="lede">Seventy-eight kernel patches, ten forked packages, the system work
+		that used to be an installer script, and six applications that did not exist.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Kernel</h2></div>
+		<p>Each patch carries its own write-up above the diff: what broke, what was
+		measured, what was ruled out, and why the change is what it is.</p>
+		<div class="scroll">
+		<table>
+			<tr><th>Area</th><th>What was done</th></tr>
+			<tr><td>Cameras</td><td>All three, including C-PHY support in CAMSS and three
+			sensor drivers written for this phone. Rear autofocus runs as a user-space
+			engine against a measured curve.</td></tr>
+			<tr><td>Voice in call</td><td>Q6VOICE brought up: topologies registered from the
+			stock ACDB, the vocproc modules turned on, the transmit path unmuted.</td></tr>
+			<tr><td>Volume</td><td>The amplifier driver wrote the coefficient
+			least-significant byte first. The chip latches on the low byte, so it stored
+			garbage and the phone booted mute while every normal check passed.</td></tr>
+			<tr><td>Panel</td><td>60&nbsp;Hz as well as 120, which is what makes a
+			power-saving mode worth having.</td></tr>
+			<tr><td>Power</td><td>A power-off that powers off, a charge screen when you plug
+			in a phone that is off, and a watchdog so a hang does not need a person.</td></tr>
+			<tr><td>Sensors</td><td>Four sensors through the ADSP, with the registry the DSP
+			writes into served from a writable copy.</td></tr>
+		</table>
+		</div>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>Packages</h2></div>
+		<p>Where a package needed patches it is forked under its own name and claims
+		upstream's with a versioned <code>provides</code>:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>APKBUILD</span></div>
+			<pre>_orig=hexagonrpcd
+pkgname=$_orig-utsugi
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"</pre>
+		</div>
+		<p>apk then refuses to have both installed, everything that depends on
+		<code>hexagonrpcd</code> is satisfied by ours, and an upstream release cannot
+		quietly take its place. <code>scripts/check-upstream</code> is the alarm for when a
+		fork falls behind.</p>
+
+		<h3>System</h3>
+		<p>What used to be an installer writing into <code>/usr/local</code>,
+		<code>/etc</code> and <code>$HOME</code> over ssh is now packages: helpers in
+		<code>/usr/libexec</code>, units enabled by systemd presets, overrides as drop-ins
+		instead of overwritten files, and Plasma defaults in <code>/etc/xdg</code> &mdash;
+		the layer under <code>$HOME</code>, so anything you change still wins.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>Applications</h2></div>
+		<p>Six, written because Plasma Mobile does not ship them. Each lives in its own
+		repository and is built here from a tagged tarball.</p>
+		<div class="grid">
+			<a href="https://github.com/utsugi-pmos/poconav">
+				<div class="n">poconav</div>
+				<p>Car navigation with neural-network voice, made to be read from a
+				dashboard.</p></a>
+			<a href="https://github.com/utsugi-pmos/screenglaze">
+				<div class="n">screenglaze</div>
+				<p>Screenshots with volume-down + power, like Android, and a sheet to
+				share, save or crop.</p></a>
+			<a href="https://github.com/utsugi-pmos/keepalive">
+				<div class="n">keepalive</div>
+				<p>Apps you mark minimise instead of closing when you swipe their card
+				away, so the next open is instant.</p></a>
+			<a href="https://github.com/utsugi-pmos/app-usage">
+				<div class="n">app-usage</div>
+				<p>Battery use per application &mdash; the screen Plasma Mobile does not
+				have.</p></a>
+			<a href="https://github.com/utsugi-pmos/smart-unlock">
+				<div class="n">smart-unlock</div>
+				<p>Skip the PIN on a trusted wifi, for a while after unlocking, or in
+				chosen time slots.</p></a>
+			<a href="https://github.com/utsugi-pmos/lost-phone">
+				<div class="n">lost-phone</div>
+				<p>Find your phone without Google: SMS, your own network, your own relay,
+				or ntfy.</p></a>
+		</div>
+		<div class="next">
+			<a href="install.html"><b>Next</b><span>Installation</span></a>
+			<a href="devices.html"><b>Back to</b><span>Devices</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

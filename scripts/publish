@@ -94,10 +94,13 @@ touch "$SITE/.nojekyll"                      # without it GitHub runs Jekyll ove
 git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$SITE/VERSION"
 # The landing page is a template in site/, not a heredoc: it is the first thing
 # anyone sees, and a page worth reading does not belong inside a shell script.
-sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
-	"$REPO/site/index.html.in" > "$SITE/index.html"
-# Anything else under site/ is copied as is (the style gallery, for one).
-for extra in "$REPO"/site/*.html; do
+# One page per template, plus whatever else site/ holds (the stylesheet).
+for page in "$REPO"/site/*.html.in; do
+	name="$(basename "$page" .in)"
+	sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
+		"$page" > "$SITE/$name"
+done
+for extra in "$REPO"/site/*.css "$REPO"/site/*.html; do
 	[ -e "$extra" ] && cp "$extra" "$SITE/"
 done
 green "  site ready: $SITE ($(du -sh "$SITE" | cut -f1))"
