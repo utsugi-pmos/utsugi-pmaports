@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=@CSSV@">
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
@@ -21,23 +21,19 @@
 		<div class="eyebrow">Two packages, one decision</div>
 		<h1>What is in each package</h1>
 		<p class="lede"><b>base</b> is the phone: the hardware, the Plasma Mobile fixes
-		and the six applications written for it. Nothing in it is a preference &mdash;
-		all of it is something that did not work. <b>extras</b> is applications anybody
-		could pick for themselves, which is the only real choice here.</p>
+		and the six applications written for it. <b>extras</b> is third-party
+		applications you could pick for yourself.</p>
 		<div class="scroll">
 		<table>
-			<tr><th class="mono">Package</th><th>What you get</th><th>A decision?</th></tr>
+			<tr><th class="mono">Package</th><th>What you get</th></tr>
 			<tr><td class="mono"><a href="#base">utsugi-surya-base</a></td><td>Kernel, audio,
 			sensors, GPS, cameras, power-off, charge mode, black box, the Plasma Mobile
 			fixes, and poconav, screenglaze, keepalive, app-usage, smart-unlock and
-			lost-phone</td><td><b>No.</b> If you want this phone to work, you want all of
-			it</td></tr>
+			lost-phone</td></tr>
 			<tr><td class="mono"><a href="#extras">utsugi-surya-extras</a></td><td>Browser,
-			mail, two-factor, social, photos &mdash; eight third-party packages</td>
-			<td>Yes, and each one installs on its own</td></tr>
+			mail, two-factor, social, photos &mdash; eight third-party packages</td></tr>
 			<tr><td class="mono"><a href="#vayu">utsugi-vayu-base</a></td><td>The
-			experimental POCO X3 Pro set. The modem does not work</td><td>Only if you are
-			carrying the investigation further</td></tr>
+			experimental POCO X3 Pro set. The modem does not work</td></tr>
 		</table>
 		</div>
 		<div class="note"><i></i><div>
@@ -65,17 +61,17 @@
 			<tr><td class="mono">utsugi-surya-boot</td><td>The kernel command line as a
 			drop-in: <code>cma=512M</code> for the cameras, uncompressed pstore so a
 			ramoops dump survives bit errors, and <code>reboot=warm</code>, which asks the
-			kernel to keep RAM across a reboot &mdash; a request the firmware does not
-			honour here, see the black box below.</td></tr>
-			<tr><td class="mono">utsugi-surya-audio</td><td>Both speakers on at boot &mdash;
-			out of the box only the bottom one played &mdash; the volume restored instead of
-			booting mute, the UCM brought up before PulseAudio, and the configuration
-			<code>q6voiced</code> needs for voice in call.</td></tr>
+			kernel to keep RAM across a reboot. The firmware here does not honour that;
+			see the black box below.</td></tr>
+			<tr><td class="mono">utsugi-surya-audio</td><td>Both speakers on at boot; out
+			of the box only the bottom one played. The volume you left it at instead of
+			booting mute, the UCM up before PulseAudio, and the <code>q6voiced</code>
+			configuration for voice in call.</td></tr>
 			<tr><td class="mono">utsugi-surya-sensors</td><td>Accelerometer with rotation,
 			light, compass and proximity, all four through the ADSP. It seeds the writable
 			copy of the sensor registry the DSP writes into, and ties the fastrpc servers to
-			the device so they start when the ADSP appears &mdash; and again when it comes
-			back from a crash.</td></tr>
+			the device, so they start when the ADSP appears and again after it
+			crashes.</td></tr>
 			<tr><td class="mono">utsugi-surya-gps</td><td>Unlocks the GNSS engine that
 			postmarketOS leaves locked on every Qualcomm device. Without it there is only
 			network position, with kilometres of error; with it, twelve satellites and a fix
@@ -84,15 +80,15 @@
 			hands the shutdown to the kernel before the teardown, which is where this phone
 			freezes. Plus the charge screen when you plug in a phone that is off, the
 			hardware watchdog so a hang does not need a person, the USB-C direction switch
-			&mdash; the connector was source-only and the phone fed the laptop &mdash; and
-			the power-saving profile.</td></tr>
+			(the connector was source-only and the phone fed the laptop), and the
+			power-saving profile.</td></tr>
 			<tr><td class="mono">utsugi-surya-camera</td><td>The rear autofocus, as a
 			user-space engine against a measured curve. It has to be a service: the driver
 			returns the lens to origin and powers the chip off the moment the node is
 			closed, so someone must hold that descriptor open.</td></tr>
 			<tr><td class="mono">utsugi-surya-blackbox</td><td>So a freeze leaves a trace:
 			the console level raised above what <code>quiet</code> allows, the previous
-			boot's journal archived &mdash; and <b>freeze-watchdog</b>, which
+			boot's journal archived, and <b>freeze-watchdog</b>, which
 			reboots the phone when its filesystem stops answering, dumping the blocked
 			tasks to the kernel log on the way out. Carrying that dump across the reboot
 			does not work here: the ramoops region is configured and comes back empty,
@@ -140,9 +136,9 @@
 		<table>
 			<tr><th>Piece</th><th>What was wrong</th></tr>
 			<tr><td>The dialpad</td><td>Qt turned the second tap within 400 ms into a double
-			click &mdash; even on another key &mdash; and the button swallowed it: dialling
-			at a normal pace, one digit in six was lost. Ships as
-			<code>plasma-dialer-utsugi</code>, and it types on press.</td></tr>
+			click, even on another key, and the button swallowed it: dialling at a normal
+			pace lost one digit in six. <code>plasma-dialer-utsugi</code> types on
+			press.</td></tr>
 			<tr><td>Three quick settings</td><td>Location, power saving and USB power
 			direction, in the pull-down where you expect them. Plasma Mobile ships none of
 			the three.</td></tr>
@@ -153,7 +149,7 @@
 			<tr><td>Notification popups</td><td>"Connection activated/deactivated" on every
 			wifi-to-data switch, covering what you are reading. Silenced.</td></tr>
 			<tr><td>Sound on notifications</td><td>Plasma Mobile does not play the ones
-			arriving over D-Bus &mdash; mail, messaging &mdash; and assigning a sound to its
+			arriving over D-Bus, such as mail and messaging, and assigning a sound to its
 			generic event does not work either. A watcher listens to the bus and plays
 			it.</td></tr>
 			<tr><td>System dialogs</td><td>The portal prompts were drawn wider than the
@@ -187,7 +183,7 @@
 				<div class="n">keepalive</div>
 				<p><b>Apps that do not die when you tidy up.</b> Mark an application and
 				swiping its card away minimises it instead of closing it, so the next open
-				is instant &mdash; the dialer and messages by default. Costs about 125 MB
+				is instant. The dialer and messages by default, costing about 125 MB
 				of RAM, brings its own settings module, and opens the marked ones on
 				unlock, never before it.</p></a>
 			<a href="https://github.com/utsugi-pmos/app-usage">
@@ -198,11 +194,10 @@
 				rather than assumed.</p></a>
 			<a href="https://github.com/utsugi-pmos/smart-unlock">
 				<div class="n">smart-unlock</div>
-				<p><b>No PIN when it is safe.</b> On a wifi you trust &mdash; identified
-				by BSSID and gateway MAC, not by name, which is the part that makes it
-				worth having &mdash; for a while after you last unlocked, or inside time
-				slots you choose. Never on by default, and it respects a phone locked
-				remotely.</p></a>
+				<p><b>No PIN when it is safe.</b> On a wifi you trust, identified by
+				BSSID and gateway MAC rather than by name. Or for a while after you last
+				unlocked, or inside time slots you choose. Never on by default, and it
+				respects a phone locked remotely.</p></a>
 			<a href="https://github.com/utsugi-pmos/lost-phone">
 				<div class="n">lost-phone</div>
 				<p><b>Find the phone without Google.</b> Four paths, switched on one by
@@ -231,16 +226,16 @@
 		<table>
 			<tr><th class="mono">Package</th><th>What it is</th></tr>
 			<tr><td class="mono">firefox<br>mobile-config-firefox</td><td>Firefox adapted to
-			a phone screen, with uBlock Origin, and painting at a real 120 Hz &mdash; out of
-			the box it ran at 60, half of what this panel gives.</td></tr>
+			a phone screen, with uBlock Origin, and painting at a real 120 Hz. Out of the
+			box it ran at 60.</td></tr>
 			<tr><td class="mono">keysmith</td><td>Two-factor TOTP codes, native
 			Kirigami.</td></tr>
 			<tr><td class="mono">merkuro</td><td>Mail, calendar and contacts in one
 			Kirigami application.</td></tr>
 			<tr><td class="mono">tokodon</td><td>Mastodon, native Kirigami.</td></tr>
 			<tr><td class="mono">neochat</td><td>Matrix, native Kirigami.</td></tr>
-			<tr><td class="mono">alligator</td><td>RSS reader &mdash; which is also how you
-			follow a Bluesky profile, since it serves RSS per account.</td></tr>
+			<tr><td class="mono">alligator</td><td>RSS reader. Also how you follow a
+			Bluesky profile, which serves RSS per account.</td></tr>
 			<tr><td class="mono">koko</td><td>The photo gallery.</td></tr>
 		</table>
 		</div>
@@ -248,15 +243,14 @@
 		came out for the same reason: Pure Maps needs <code>osmscout-server</code> holding
 		the maps and <code>geoclue</code> answering "where am I", plus a download of your
 		own region to be useful at all. That is a decision to make, not a set to
-		preselect &mdash; <code>apk add pure-maps osmscout-server geoclue</code> and
+		preselect. <code>apk add pure-maps osmscout-server geoclue</code> and
 		<code>apk add kasts</code> are one command each.</p>
 		<div class="note"><i></i><div>
 			<b>One thing to know before installing the set.</b>
 			apk cannot leave a metapackage with an unmet dependency, so
 			<code>apk del firefox</code> removes <code>utsugi-surya-extras</code> along with
-			it &mdash; the other eleven stay, but the set stops existing and no upgrade
-			brings it back. If you would rather pick one by one, that is the supported way:
-			these are choices, and metapackages are for what has to stay.
+			it. The other apps stay installed, but the set stops existing and no upgrade
+			brings it back. Picking them one by one is the supported way.
 		</div></div>
 	</div>
 </section>

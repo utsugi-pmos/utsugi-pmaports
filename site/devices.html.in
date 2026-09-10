@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=@CSSV@">
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
@@ -47,9 +47,9 @@
 		<div class="h"><span>01</span><h2>Fingerprint: no route left</h2></div>
 		<p>The sensor is alive and its protocol is published. The bus is not
 		reachable: the driver lives in the TrustZone and the SPI controller is never
-		handed to Linux. Four routes measured, four dead ends &mdash; reading the
-		stock driver, replaying the transfers, the pre-TrustZone window, the vendor
-		blob. It needs a TrustZone exploit, which is a different project.</p>
+		handed to Linux. Four routes tried, four dead ends: reading the stock driver,
+		replaying the transfers, the pre-TrustZone window, the vendor blob. Getting past
+		it needs a TrustZone exploit.</p>
 
 		<div class="h" style="margin-top:34px"><span>02</span><h2>Stereo: kernel work, not configuration</h2></div>
 		<p>Both speakers play, and they play the same thing. The I2S bus to the

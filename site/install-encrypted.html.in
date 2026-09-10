@@ -5,7 +5,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=@CSSV@">
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
@@ -21,17 +21,17 @@
 		<div class="eyebrow">Route 4 &middot; you build it</div>
 		<h1>Encrypted</h1>
 		<p class="lede">Full-disk encryption with an on-screen keyboard at boot. It
-		works on this phone &mdash; tested &mdash; and there is no image to download.</p>
+		works on this phone, and there is no image to download.</p>
 	</div>
 </section>
 
 <section>
 	<div class="wrap">
 		<div class="h"><span>01</span><h2>Why there is no download</h2></div>
-		<p>A LUKS master key is created when the disk is formatted &mdash; for an
-		image, on the machine that builds it. Changing the passphrase later replaces
-		the slot protecting that key, not the key. So a shared encrypted image gives
-		whoever built it the master key of every phone flashed from it, for good.</p>
+		<p>A LUKS master key is created when the disk is formatted, which for an image
+		means on the machine that builds it. Changing the passphrase later replaces the
+		slot protecting that key, not the key. A shared encrypted image would give
+		whoever built it the master key of every phone flashed from it.</p>
 		<p>Yours has to be born on your machine. One command.</p>
 
 		<div class="h" style="margin-top:34px"><span>02</span><h2>Build it</h2></div>
@@ -57,10 +57,9 @@ scripts/build-your-own-image --encrypted</pre>
 		</div></div>
 		<div class="note"><i></i><div>
 			<b>Encrypting an install you already have is not offered.</b>
-			It needs the filesystem shrunk, cannot run on the mounted root &mdash; which
-			here lives inside a loop file &mdash; and ends with initramfs,
-			<code>fstab</code> and <code>crypttab</code> rewritten by hand. Back up,
-			reinstall encrypted, restore.
+			It needs the filesystem shrunk, cannot run on the mounted root, and ends with
+			initramfs, <code>fstab</code> and <code>crypttab</code> rewritten by hand.
+			Back up, reinstall encrypted, restore.
 		</div></div>
 		<div class="next">
 			<a href="install-image.html"><b>Simpler</b><span>The ready image</span></a>
