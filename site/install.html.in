@@ -9,141 +9,46 @@
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
-	<a href="index.html">Overview</a>
-	<a href="devices.html">Devices</a>
-	<a href="features.html">Features</a>
-	<a href="packages.html">Packages</a>
+	<a href="index.html">Start</a>
 	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
 </div></header>
 <section class="panel">
 	<div class="wrap">
-		<div class="eyebrow">Three routes</div>
-		<h1>Installation</h1>
-		<p class="lede">postmarketOS is Alpine-based, so this is <b>apk</b>, not apt.
-		Which route you take depends on how much you want to keep.</p>
+		<div class="eyebrow">Four ways, pick one</div>
+		<h1>Install</h1>
+		<p class="lede">postmarketOS is Alpine, so this is <b>apk</b>, not apt.</p>
+		<div class="grid">
+			<a href="install-image.html">
+				<div class="n">1 &middot; Ready image</div>
+				<p><b>Start here.</b> One download, everything inside, two fastboot
+				commands. Wipes the phone. Not encrypted.</p></a>
+			<a href="install-repo.html">
+				<div class="n">2 &middot; On a phone already running pmOS</div>
+				<p>Three commands. Keeps your data. Brings the kernel, so the reboot is
+				a separate step.</p></a>
+			<a href="install-pmos.html">
+				<div class="n">3 &middot; Install postmarketOS yourself first</div>
+				<p>U-Boot for your panel, pmbootstrap, then route 2. For a phone that
+				has never run Linux.</p></a>
+			<a href="install-encrypted.html">
+				<div class="n">4 &middot; Encrypted</div>
+				<p>Build it yourself, one command. There is no encrypted image to
+				download, and that is deliberate.</p></a>
+		</div>
 		<div class="note"><i></i><div>
-			<b>Read this before the first reboot.</b>
-			The kernel comes with <code>base</code>. On the surya a kernel that does not
-			boot is not a failed install, it is a reboot loop: the watchdog fires
-			20&nbsp;s after PID&nbsp;1 and there is no screen left to fix it from. And the
-			<code>boot</code> partition holds U-Boot, not the kernel &mdash; writing a
-			kernel there leaves the phone unable to boot at all.
-			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/flash/surya.md">flash/surya.md</a>
-			has the way back in.
+			<b>One rule on this phone, whatever route you take.</b>
+			<code>boot</code> holds U-Boot, not the kernel. Flash the system to
+			<code>userdata</code>. <code>fastboot flash boot &lt;kernel&gt;</code> leaves
+			the phone unable to boot at all.
 		</div></div>
-	</div>
-</section>
-
-<section>
-	<div class="wrap">
-		<div class="h"><span>01</span><h2>On an existing install</h2></div>
-		<div class="sh">
-			<div class="bar"><i></i><span>ON THE PHONE</span></div>
-			<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
-echo @URL@/main | sudo tee -a /etc/apk/repositories
-sudo apk update
-sudo apk add utsugi-surya-base
-<b># reboot as a separate, deliberate step</b></pre>
-		</div>
-		<h3>What that installs</h3>
-		<div class="scroll">
-		<table>
-			<tr><th class="mono">Package</th><th>What it brings</th></tr>
-			<tr><td class="mono">utsugi-surya-base</td><td><b>The phone.</b> Patched kernel,
-			audio, sensors, GPS, cameras, power-off, charge mode, black box, the Plasma
-			Mobile fixes and the six own applications. Nothing here is a preference: all of
-			it is something that did not work.</td></tr>
-			<tr><td class="mono">utsugi-surya-extras</td><td>Applications anybody could pick
-			for themselves: browser, mail, two-factor, social, photos. A choice, not a fix,
-			which is why it is separate &mdash; and why each one can be installed on its
-			own.</td></tr>
-			<tr><td class="mono">utsugi-vayu-base</td><td>The experimental POCO X3 Pro set.
-			The modem does not work.</td></tr>
-		</table>
-		</div>
-		<p style="margin-top:20px"><a href="packages.html">Every package described, one by
-		one &rarr;</a></p>
-
-		<p style="margin-top:20px">From then on <code>apk upgrade</code> keeps everything
-		current, kernel included.</p>
-	</div>
-</section>
-
-<section class="panel">
-	<div class="wrap">
-		<div class="h"><span>02</span><h2>Flash a ready image</h2></div>
-		<p>On the <a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases
-		page</a>, with everything already inside. It carries the repository line and the
-		signing key, so updates are tracked from the first boot.</p>
-		<p>Getting a phone that already runs this into fastboot is one command on the
-		phone itself: <code>sudo reboot-to-bootloader</code>.
-		<code>systemctl reboot bootloader</code> does not do it &mdash; systemd drops
-		the reason before anything can hand it to the kernel.</p>
-		<div class="sh">
-			<div class="bar"><i></i><span>ON THE PC</span></div>
-			<pre>sha256sum -c SHA256SUMS
-xz -d utsugi-surya-&lt;tag&gt;.img.xz
-fastboot flash userdata utsugi-surya-&lt;tag&gt;.img   <b># userdata. never boot.</b>
-fastboot reboot</pre>
-		</div>
-		<p>On the surya, U-Boot lives in <code>boot</code> and the system lives inside a
-		disk image written to <code>userdata</code>. Flashing a kernel to <code>boot</code>
-		is how you lose the ability to boot at all.</p>
-	</div>
-</section>
-
-<section>
-	<div class="wrap">
-		<div class="h"><span>03</span><h2>Encrypted &mdash; you build it</h2></div>
-		<p>There is no encrypted image to download, and that is deliberate rather than
-		lazy. A LUKS master key is created when the disk is formatted, which for an image
-		means on the machine that builds it. Changing the passphrase afterwards replaces
-		the slot protecting that key, <b>not the key itself</b>. An encrypted image handed
-		out would therefore give whoever built it the master key of every phone flashed
-		from it, and no passphrase change would take it back.</p>
-		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
-cd utsugi-pmaports
-scripts/setup-workdir
-scripts/build-your-own-image --encrypted</pre>
-		</div>
-		<p>pmbootstrap asks <b>you</b> for the passphrase during the install, and the
-		master key is generated on your machine. Tested end to end on the surya: the
-		initramfs opens a LUKS that lives inside a loop file on <code>userdata</code>, and
-		<code>unl0kr</code> draws its keyboard on this panel.</p>
-		<div class="note"><i></i><div>
-			<b>What encryption costs here, measured.</b>
-			With the root inside dm-crypt, a kernel workqueue that jams takes the whole
-			filesystem with it instead of one subsystem. On 2026-09-10 an ADSP crash whose
-			recovery deadlocked left this phone frozen for seven hours: load 114 with one
-			task running, 96% full I/O stall, and a black screen. The cause is fixed, and
-			<code>utsugi-surya-blackbox</code> now ships a watchdog that turns that state
-			into a reboot instead of a phone that sits dead until someone holds the
-			power button. It dumps the blocked tasks to the kernel log on the way out;
-			carrying that dump across the reboot does not work on this device &mdash;
-			measured &mdash; because the ramoops region is not preserved by the boot
-			chain, so what you get back is a working phone, not the stacks.
-		</div></div>
-		<div class="note"><i></i><div>
-			<b>Encrypting an existing install is not offered.</b>
-			It needs the filesystem shrunk to make room for the header, it cannot run on
-			the mounted root of the running system &mdash; which here lives inside a loop
-			file &mdash; and it ends with the initramfs, <code>fstab</code> and
-			<code>crypttab</code> rewritten by hand. Any of those half done leaves a phone
-			that does not boot, and recovery here means reinstalling, which wipes. Back up,
-			reinstall encrypted, restore.
-		</div></div>
-		<div class="next">
-			<a href="devices.html"><b>Check first</b><span>What does not work</span></a>
-			<a href="contribute.html"><b>Next</b><span>Contribute</span></a>
-		</div>
 	</div>
 </section>
 <footer><div>
 	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
 	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
-	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
 </div></footer>

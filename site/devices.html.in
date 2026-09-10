@@ -9,40 +9,33 @@
 <header><div>
 	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
 	<nav>
-	<a href="index.html">Overview</a>
-	<a href="devices.html" aria-current="page">Devices</a>
-	<a href="features.html">Features</a>
-	<a href="packages.html">Packages</a>
+	<a href="index.html">Start</a>
 	<a href="install.html">Install</a>
+	<a href="devices.html" aria-current="page">Devices</a>
+	<a href="packages.html">What is inside</a>
 	<a href="contribute.html">Contribute</a>
 	</nav>
 </div></header>
 <section class="panel">
 	<div class="wrap">
-		<div class="eyebrow">Status, with nothing rounded up</div>
-		<h1>Devices</h1>
-		<p class="lede">One phone is used every day. The other has no working modem, which
-		means it is not a phone. Both are published; only one is recommended.</p>
+		<div class="eyebrow">Nothing rounded up</div>
+		<h1>What does not work</h1>
+		<p class="lede">Read this before flashing. One phone is a daily driver; the
+		other has no modem, which means it is not a phone.</p>
 		<div class="scroll">
 		<table>
+			<tr><th>Device</th><th>State</th><th>Not supported</th><th>Known issues</th></tr>
 			<tr>
-				<th>Device</th><th>SoC / port</th><th>State</th>
-				<th>Not supported</th><th>Known issues</th>
-			</tr>
-			<tr>
-				<td>POCO X3 NFC<br><span class="mono" style="color:var(--accent);font-size:11.5px">xiaomi-surya</span></td>
-				<td class="mono">SM7150-AC<br><span style="color:var(--mut);font-size:11.5px">qcom-sm7150</span></td>
+				<td>POCO X3 NFC<br><span class="mono" style="font-size:11.5px;color:var(--accent)">xiaomi-surya</span></td>
 				<td><span class="tag ok">daily driver</span></td>
-				<td>Fingerprint reader &middot; stereo playback</td>
-				<td>Echo on calls &middot; shutdown freeze without a root cause &middot;
-				microphone level unconfirmed</td>
+				<td>Fingerprint<br>Stereo speakers</td>
+				<td>Echo on calls<br>Shutdown freeze, cause unknown<br>Mic level unconfirmed</td>
 			</tr>
 			<tr>
-				<td>POCO X3 Pro<br><span class="mono" style="color:var(--accent);font-size:11.5px">xiaomi-vayu</span></td>
-				<td class="mono">SM8150-AC<br><span style="color:var(--mut);font-size:11.5px">own port</span></td>
+				<td>POCO X3 Pro<br><span class="mono" style="font-size:11.5px;color:var(--accent)">xiaomi-vayu</span></td>
 				<td><span class="tag no">experimental</span></td>
-				<td>Modem &middot; IPA firmware not redistributable</td>
-				<td>The modem dies 2&ndash;4&nbsp;s after the RF is switched on</td>
+				<td>Modem<br>IPA firmware not redistributable</td>
+				<td>Modem dies 2&ndash;4&nbsp;s after the RF comes on</td>
 			</tr>
 		</table>
 		</div>
@@ -51,90 +44,52 @@
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>POCO X3 NFC &mdash; xiaomi-surya</h2></div>
-		<p>The supported device. Cameras, in-call voice, sensors, GPS, both speakers, the
-		panel at 60 and 120&nbsp;Hz, a power-off that powers off and a charge screen when
-		it is plugged in while off.</p>
+		<div class="h"><span>01</span><h2>Fingerprint: no route left</h2></div>
+		<p>The sensor is alive and its protocol is published. The bus is not
+		reachable: the driver lives in the TrustZone and the SPI controller is never
+		handed to Linux. Four routes measured, four dead ends &mdash; reading the
+		stock driver, replaying the transfers, the pre-TrustZone window, the vendor
+		blob. It needs a TrustZone exploit, which is a different project.</p>
 
-		<h3>Not supported, and not a matter of time</h3>
-		<div class="grid">
-			<div>
-				<div class="t">Fingerprint reader</div>
-				<p>Four routes were tried and all four end in the same place. The sensor
-				speaks over a SPI bus that the secure world owns: the driver is in the
-				TrustZone, not in Linux, and the SPI controller is not handed over.
-				Reading the stock driver, replaying the transfers, the pre-TZ window and
-				the vendor blob all end there. It needs a TrustZone exploit, which is a
-				different project.</p>
-			</div>
-			<div>
-				<div class="t">Stereo playback</div>
-				<p>Both speakers work, and they play the same thing. The I2S bus to the
-				amplifiers carries one channel. Splitting it is kernel work on
-				<code>TERT_MI2S_RX</code>, not configuration &mdash; nothing in user space
-				can produce a second channel that is not being transmitted.</p>
-			</div>
-		</div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Stereo: kernel work, not configuration</h2></div>
+		<p>Both speakers play, and they play the same thing. The I2S bus to the
+		amplifiers carries one channel. Splitting it means changing
+		<code>TERT_MI2S_RX</code> in the kernel; nothing in user space can produce a
+		channel that is not being transmitted.</p>
 
-		<h3>Known issues</h3>
+		<div class="h" style="margin-top:34px"><span>03</span><h2>Known issues, in order of annoyance</h2></div>
 		<div class="scroll">
 		<table>
-			<tr><th>Issue</th><th>Where it stands</th></tr>
-			<tr><td>Echo on calls</td><td>The other end hears themselves. The canceller is
-			wired and tunable at runtime; finding the values needs patience and a second
-			phone.</td></tr>
-			<tr><td>Shutdown freeze</td><td>Powering off works, and the fix goes around the
-			problem rather than curing it: the teardown still freezes, and why is still not
-			explained.</td></tr>
-			<tr><td>Microphone level</td><td>It records. Whether the gain is right has not
-			been measured against anything.</td></tr>
-			<tr><td>ADSP crash freezes the phone</td><td>An ADSP crash whose recovery
-			deadlocks takes the root filesystem's I/O with it, and with an encrypted root
-			that means the whole phone. The trigger found on 2026-09-10 is fixed, and a
-			watchdog now reboots instead of freezing, but why the recovery deadlocks is
-			still open.</td></tr>
-			<tr><td>GPS engine lock</td><td>Fixed here, and it is not this phone's fault:
-			postmarketOS ships the engine locked on every Qualcomm device. The fix belongs
+			<tr><th>Echo on calls</th><td>The other end hears themselves. The canceller
+			is wired and tunable at runtime; it needs patience and a second phone.</td></tr>
+			<tr><th>Shutdown freeze</th><td>Powering off works. The fix goes around the
+			problem: the teardown still freezes and why is still unexplained.</td></tr>
+			<tr><th>ADSP crash freezes the phone</th><td>An ADSP crash whose recovery
+			deadlocks takes the root filesystem with it. The 2026-09-10 trigger is fixed
+			and a watchdog now reboots instead of freezing; the deadlock is open.</td></tr>
+			<tr><th>Microphone level</th><td>It records. Whether the gain is right has
+			not been measured.</td></tr>
+			<tr><th>GPS engine lock</th><td>Fixed here, and not this phone's fault:
+			postmarketOS ships it locked on every Qualcomm device. Belongs
 			upstream.</td></tr>
 		</table>
 		</div>
-	</div>
-</section>
 
-<section class="panel">
-	<div class="wrap">
-		<div class="h"><span>02</span><h2>POCO X3 Pro &mdash; xiaomi-vayu</h2></div>
-		<p>Published as experimental, and the honest summary is one line: <b>the modem
-		does not work, so it is not a phone.</b> It boots, the screen and the touch work,
-		and that is where the good news stops.</p>
-		<div class="grid">
-			<div>
-				<div class="t">The modem dies 2&ndash;4&nbsp;s after the RF is on</div>
-				<p>The fault is pinned to a single firmware assertion
-				(<code>rflm_qlnk_ls_retry_cnt &lt; 2</code>): the modem asserts and takes
-				itself down. Everything measured on the way there is written up, with the
-				DIAG instruments used to measure it.</p>
-			</div>
-			<div>
-				<div class="t">IPA firmware is not shipped</div>
-				<p>It cannot be redistributed. A helper extracts it from the vendor
-				partition of the phone you already own.</p>
-			</div>
-			<div>
-				<div class="t">Why publish it at all</div>
-				<p>So the research kernel and the patched <code>qcom-diag</code> are
-				installable by anyone who wants to carry the investigation further,
-				instead of living in a folder.</p>
-			</div>
-		</div>
+		<div class="h" style="margin-top:34px"><span>04</span><h2>POCO X3 Pro</h2></div>
+		<p><b>The modem does not work, so it is not a phone.</b> It boots, the screen
+		and touch work. The fault is pinned to one firmware assertion
+		(<code>rflm_qlnk_ls_retry_cnt &lt; 2</code>): the modem asserts and takes
+		itself down 2&ndash;4&nbsp;s after the RF comes on. Published so the research
+		kernel and the patched <code>qcom-diag</code> are installable by anyone who
+		wants to carry it further.</p>
 		<div class="next">
-			<a href="features.html"><b>Next</b><span>What you get</span></a>
-			<a href="install.html"><b>Or</b><span>Installation</span></a>
+			<a href="install-image.html"><b>Still in?</b><span>Flash the image</span></a>
+			<a href="contribute.html"><b>Help</b><span>Where it would land</span></a>
 		</div>
 	</div>
 </section>
 <footer><div>
 	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
 	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
-	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; libcamera LGPL-2.1 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
 </div></footer>

@@ -1,0 +1,72 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Add the repository &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Route 2 &middot; keeps your data</div>
+		<h1>On a phone already running postmarketOS</h1>
+		<p class="lede">Three commands on the phone. Works on a stock
+		<code>qcom-sm7150</code> install with Plasma Mobile and systemd.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Add it</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON THE PHONE</span></div>
+			<pre>sudo wget -qO /etc/apk/keys/@KEY@ @URL@/keys/@KEY@
+echo @URL@/main | sudo tee -a /etc/apk/repositories
+sudo apk update
+sudo apk add utsugi-surya-base</pre>
+		</div>
+		<p>Untagged, on purpose. A tagged line makes apk prefer upstream for every
+		dependency and the patched packages silently lose.</p>
+		<div class="scroll">
+		<table>
+			<tr><th class="mono">utsugi-surya-base</th><td>The phone: kernel, hardware,
+			Plasma fixes, six apps.</td></tr>
+			<tr><th class="mono">utsugi-surya-extras</th><td>Optional: browser, mail,
+			two-factor, social, photos. <a href="packages.html">Listed here</a>.</td></tr>
+		</table>
+		</div>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>Then reboot &mdash; deliberately</h2></div>
+		<div class="note"><i></i><div>
+			<b>The kernel comes with it, and a kernel that does not boot is a reboot
+			loop.</b> The watchdog fires 20&nbsp;s after PID&nbsp;1 and there is no
+			screen left to fix it from. Have a way back in before you reboot:
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/flash/surya.md">flash/surya.md</a>.
+		</div></div>
+		<p>From then on <code>sudo apk upgrade</code> keeps everything current,
+		kernel included.</p>
+		<div class="next">
+			<a href="devices.html"><b>Read</b><span>What does not work</span></a>
+			<a href="install-image.html"><b>Or</b><span>Just flash the image</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="@URL@/main/@ARCH@/APKINDEX.tar.gz">@URL@/main</a></span>
+	<span>key <a href="@URL@/keys/@KEY@">@KEY@</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>
