@@ -20,10 +20,8 @@
 	<div class="wrap">
 		<div class="eyebrow">Route 3 &middot; from scratch</div>
 		<h1>Install postmarketOS yourself</h1>
-		<p class="lede">For a phone that has never run Linux, or if you want to build
-		your own system instead of flashing mine. The POCO X3 NFC has no port of its
-		own: it uses the generic <code>qcom-sm7150</code>, which needs U-Boot and
-		systemd.</p>
+		<p class="lede">Four steps: Xiaomi unlocks the phone, U-Boot goes on it,
+		pmbootstrap builds a system, and this repository fills in the hardware.</p>
 	</div>
 </section>
 

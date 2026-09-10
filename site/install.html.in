@@ -20,7 +20,6 @@
 	<div class="wrap">
 		<div class="eyebrow">Four ways, pick one</div>
 		<h1>Install</h1>
-		<p class="lede">postmarketOS is Alpine, so this is <b>apk</b>, not apt.</p>
 		<div class="grid">
 			<a href="install-image.html">
 				<div class="n">1 &middot; Ready image</div>
