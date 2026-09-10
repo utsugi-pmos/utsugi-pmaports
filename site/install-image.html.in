@@ -77,9 +77,9 @@
 		<div class="sh">
 			<div class="bar"><i></i><span>ON YOUR PC</span></div>
 			<pre>sha256sum -c SHA256SUMS   <b># catches a truncated download before you write it</b>
-xz -d utsugi-surya-*.img.xz
+xz -d @IMG@.xz
 
-sudo fastboot flash userdata utsugi-surya-*.img   <b># userdata. never boot.</b>
+sudo fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
 sudo fastboot reboot</pre>
 		</div>
 		<p>The phone boots to the desktop. First boot takes a minute longer.</p>

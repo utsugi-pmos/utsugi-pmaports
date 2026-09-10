@@ -118,10 +118,18 @@ git -C "$REPO" rev-parse HEAD > "$SITE/VERSION" 2>/dev/null || echo unknown > "$
 # block like a note -- near-white text on a light ground -- and the install
 # command a visitor came for was invisible.
 CSSV="$(sha256sum "$REPO/site/style.css" | cut -c1-8)"
+# @IMG@ is the real name of the image the pages tell people to flash. A "*.img"
+# in the instructions is one more thing for the reader to work out, and it does
+# not even work in PowerShell, which does not expand it in an argument.
+IMG="$(gh release list --limit 20 --json tagName -q '.[].tagName' 2>/dev/null \
+	| grep -m1 -- -surya || true)"
+IMG="utsugi-surya-${IMG%-surya}.img"
+case "$IMG" in utsugi-surya-.img) IMG=utsugi-surya-v2026.09.11.img ;; esac
+green "  image in the instructions: $IMG"
 for page in "$REPO"/site/*.html.in; do
 	name="$(basename "$page" .in)"
 	sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
-		-e "s|@CSSV@|$CSSV|g" "$page" > "$SITE/$name"
+		-e "s|@CSSV@|$CSSV|g" -e "s|@IMG@|$IMG|g" "$page" > "$SITE/$name"
 done
 for extra in "$REPO"/site/*.css "$REPO"/site/*.html; do
 	[ -e "$extra" ] && cp "$extra" "$SITE/"

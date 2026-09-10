@@ -117,7 +117,7 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
 .next span{font-size:15px;font-weight:600}
 
 /* --- hero --------------------------------------------------------------- */
-.hero{display:grid;grid-template-columns:minmax(0,1.2fr) minmax(260px,.8fr);
+.hero{display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,1fr);
 	max-width:var(--wide);margin:0 auto;padding:0 20px}
 .hero .left{padding:52px 40px 52px 0;border-right:1px solid var(--line2)}
 .hero .right{padding:52px 0 52px 40px;display:flex;flex-direction:column;justify-content:center;gap:1px}
@@ -141,6 +141,28 @@ td.mono,th.mono{font-family:"IBM Plex Mono",monospace}
    the command you came for. */
 .hero .right .sh{margin:0}
 .hero .right .sh pre{white-space:pre-wrap;word-break:break-word}
+
+
+/* --- OS tabs, no javascript --------------------------------------------- */
+/* Three radios and sibling selectors: the page stays static and the reader
+   still gets their own operating system's commands. */
+.os{margin:0}
+.os > input{display:none}
+.os .tabs{display:flex;gap:1px;background:var(--line2);border:1px solid var(--line2);
+	border-bottom:0}
+.os .tabs label{flex:1;background:var(--panel2);color:var(--mut);cursor:pointer;
+	font-family:"IBM Plex Mono",monospace;font-size:11.5px;letter-spacing:.06em;
+	padding:9px 8px;text-align:center;text-transform:uppercase}
+.os .tabs label:hover{color:var(--ink)}
+.os .pane{display:none}
+#os-linux:checked ~ .pane-linux,
+#os-win:checked   ~ .pane-win,
+#os-mac:checked   ~ .pane-mac{display:block}
+#os-linux:checked ~ .tabs label[for="os-linux"],
+#os-win:checked   ~ .tabs label[for="os-win"],
+#os-mac:checked   ~ .tabs label[for="os-mac"]{background:var(--shell);color:var(--shell-ink)}
+.hero .right > .os{background:none;padding:0}
+.os .pane .sh{margin:0;border-top:0}
 
 /* --- footer ------------------------------------------------------------- */
 footer{border-top:1px solid var(--line2);background:var(--panel)}
