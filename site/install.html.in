@@ -77,6 +77,10 @@ sudo apk add utsugi-surya-base
 		<p>On the <a href="https://github.com/utsugi-pmos/utsugi-pmaports/releases">releases
 		page</a>, with everything already inside. It carries the repository line and the
 		signing key, so updates are tracked from the first boot.</p>
+		<p>Getting a phone that already runs this into fastboot is one command on the
+		phone itself: <code>sudo reboot-to-bootloader</code>.
+		<code>systemctl reboot bootloader</code> does not do it &mdash; systemd drops
+		the reason before anything can hand it to the kernel.</p>
 		<div class="sh">
 			<div class="bar"><i></i><span>ON THE PC</span></div>
 			<pre>sha256sum -c SHA256SUMS
