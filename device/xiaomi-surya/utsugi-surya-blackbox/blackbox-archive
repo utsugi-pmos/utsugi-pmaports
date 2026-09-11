@@ -117,7 +117,7 @@ fi
 	journalctl --list-boots --no-pager 2>/dev/null | awk '$1 == "-1"' || echo "(not recorded)"
 	echo "#"
 	journalctl -b -1 --no-pager 2>/dev/null
-} > "$dir/diario-del-arranque-anterior.txt" 2>/dev/null || true
+} > "$dir/previous-boot-log.txt" 2>/dev/null || true
 
 # Keep it from growing without end: the last ten are enough.
 ls -1d "$BASE"/*/ 2>/dev/null | sort -r | tail -n +11 | while read -r old; do

@@ -3,8 +3,8 @@
 #
 #   blackbox              the last hang, with a verdict
 #   blackbox --lista      all saved traces
-#   blackbox --latidos    the raw heartbeats, to inspect by hand
-#   blackbox --estado     what is installed right now
+#   blackbox --beats      the raw heartbeats, to inspect by hand
+#   blackbox --state      what is installed right now
 #   blackbox --freeze     the dump freeze-watchdog left on the dump partition
 #
 # The ramoops side lives in RAM that was supposed to survive the reboot. On this
@@ -65,11 +65,11 @@ case "${1:-}" in
 			"$([ -e "${d%/}/dmesg-ramoops-0" ] && echo ', WITH panic dump')"
 	done
 	exit 0 ;;
---latidos)
+--beats|--latidos)
 	d="$(last)" || { echo "No trace saved."; exit 1; }
 	beats_of "$d"
 	exit 0 ;;
---estado)
+--state|--estado)
 	printf 'console awake on suspend        %s\n' \
 		"$(cat /sys/module/printk/parameters/console_suspend 2>/dev/null)  (N = yes, which is what we want)"
 	printf 'console level                   %s\n' "$(cut -f1 /proc/sys/kernel/printk)  (7 = everything)"
@@ -143,4 +143,4 @@ with the exact function.
 FIN
 fi
 echo
-echo "The log of the previous boot: $d/diario-del-arranque-anterior.txt"
+echo "The log of the previous boot: $d/previous-boot-log.txt"

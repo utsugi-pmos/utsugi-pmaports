@@ -16,7 +16,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # The bug is upstream and affects every Qualcomm device on postmarketOS.
 pkgname=utsugi-surya-gps
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Unlock the GPS engine that pmaports leaves unusable"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -40,6 +40,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-c5eb7ce09b33547be19a20b72f167a99ddcc111f0a1d0f946f6acf8cfb8c2a14da626341801805dfdb778a8cbaeced0b940a6d05cfee12589cc96ddd67195646  gnss-ready
+58f1590f672fbf25918c0fe403a1d84bb08223004480432900d8f8e76598b574b34215957d622f248908eb8c4db36065416ed925445752bf4f6a392dfdbb2d6a  gnss-ready
 6e07be9a9bb189c07b84d0cf17aec5303c8730add967a4b85f7b9c1ac6863d5f4ceb9c0337b7434b216b99177e40d11143eb35d6182329dd2a08d3b13a3a5362  10-utsugi-surya.conf
 "

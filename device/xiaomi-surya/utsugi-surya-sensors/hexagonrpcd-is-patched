@@ -7,7 +7,7 @@
 # by hand (surya/pmaports/temp/hexagonrpcd). That clashes with this
 # project's rule -- "everything is installed from repositories" -- and leaves a mine:
 #
-#     surya-setup --actualizar  ->  apk upgrade
+#     surya-setup --upgrade  ->  apk upgrade
 #
 # The day Alpine publishes a hexagonrpcd newer than ours, 'apk
 # upgrade' takes the patched one out WITHOUT SAYING ANYTHING. And since the service
