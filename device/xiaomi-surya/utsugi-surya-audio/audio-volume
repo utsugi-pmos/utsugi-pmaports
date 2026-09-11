@@ -14,4 +14,4 @@ case "$PCT" in
 esac
 [ "$PCT" -le 100 ] || { echo "usage: $(basename "$0") [0-100]"; exit 1; }
 
-exec /usr/bin/audio-output todo "$PCT"
+exec /usr/bin/audio-output all "$PCT"

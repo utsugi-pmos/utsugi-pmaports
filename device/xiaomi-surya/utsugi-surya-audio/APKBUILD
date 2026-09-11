@@ -16,7 +16,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=utsugi-surya-audio
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Audio for the Xiaomi POCO X3 NFC: both speakers, saved volume, UCM ordering"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -36,7 +36,7 @@ source="adsp-audio-init
 	"
 
 package() {
-	# User-facing command: 'audio-output estado' is meant to be typed.
+	# User-facing command: 'audio-output state' is meant to be typed.
 	install -Dm755 "$srcdir"/audio-output -t "$pkgdir"/usr/bin/
 
 	# Unit-only helpers. They used to live in /usr/local/bin, which no package
@@ -66,11 +66,11 @@ systemd() {
 }
 sha512sums="
 921446864342abef0b633b4044fc91309debe8d3ab24f9733f28d0975463720014e38ea89acdc8e3d0a6872d3c171034b611b225cc9babc32b4b799d56eb657a  adsp-audio-init
-abcc5c95216a255252f09f0996735640ce911a20ef5cc206f4b6220dc435a96948753da844c00bbca6f610718d55c9df50fc3ad644a10c6d6866e68e9989bfb7  audio-volume
-8b2ed4a8689422a44c95a5c93e79e325e965054eeb8fb05284b4f0ba608f21a1a0d485840d8cfad4cbfd3a762a64fcaf5ffc3a4134bc43337b4a797c7ecda5d3  audio-output
+f7bed1404573f0d8b3d009cf8bbc710f6d6c3bc7d7fa72d838d1692850663458edbf0d840a93b7d4b2822a9ef459b5f28f58818881d52adfcc50bdbf8a5e120c  audio-volume
+b10ca0d5fbbd82b062c4bc4efb4ac75f8ba31ac33d76c63b25bd8b614a8dbd703d8111fab96e69faf62365be0c424d090f698b06b003b6dc116fd7054481a5fe  audio-output
 afffeded471926e239510730670d10934cc60604b034b75c4c20aeb263b5f429d606e4fadd088702af30daaf3f2099eef1d8c201cd22ebbecd2420f69d6a4030  ucm-before-pulseaudio
 db5b6563bdde81ac0b826c0481f8a8eb3798baa8a6a79f38f0983eb5793c1f96d416001932b141bd45bb4d27ede0aae85c065dd1c69e49363aedf6c999b693e9  adsp-audio-init.service
-c946ef23e8049e390a53b3b3f3549ea89f2a3261d0bf711b7edf2b3681fb5cd00881dc6c0991c98d14dee575da91f0f60a05bfc840b694e80e8af1f7bfb7ee74  audio-volume.service
+45b26fd4d9d1b58d4be20861ebd283c8c69dfe6a283a1160e6dbbae5a7b593e69c19f67e4cb049354d7de63914662fd65fe696a2edd319eef38ee8e594626d8d  audio-volume.service
 dcde039fa6936e36f871b23bba746f393c829df97f18ceeda2dc74af4fc5410bc0e6025f36c753864499fc122aabd6a3473080f3e56e7a089aa171fd8d917068  ucm-before-pulseaudio.service
 1c71788e4b6be4713b2149ccd5920dd27d400b3d61835b5d54bc410dd7c044b23f41215d2b0427816c97c10bcd75f6459db2875825bb413efe1cf68aded874d8  q6voiced.conf
 f6b4b47e6169b3a353543b442d5b4f399f81c2101a782c1644203b53340538a87e83b4ac6cbbad2e5c0de1b17c18942c1ae1a658202d044142505984dc0fc611  80-utsugi-surya-audio.preset
