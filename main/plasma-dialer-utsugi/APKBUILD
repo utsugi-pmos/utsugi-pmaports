@@ -18,7 +18,7 @@ maintainer="team/kde <bribbers@disroot.org>"
 _orig=plasma-dialer
 pkgname=$_orig-utsugi
 pkgver=6.7.5
-pkgrel=1
+pkgrel=2
 # FORK of plasma-dialer. Same files as upstream, so it claims upstream's name with a
 # versioned provides and a replaces: apk then refuses to have both installed and
 # every package that depends on "plasma-dialer" is satisfied by this one.
