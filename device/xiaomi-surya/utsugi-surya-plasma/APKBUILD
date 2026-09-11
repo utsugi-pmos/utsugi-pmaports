@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=5
+pkgrel=6
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -54,6 +54,8 @@ source="location-switch
 	notification-sound.service
 	dialer-warmup.service
 	10-utsugi-scale.conf
+	10-utsugi-pulseaudio-no-x11.conf
+	10-utsugi-vvmd-off.conf
 	powerdevilrc
 	plasmanotifyrc
 	surya-device-preset.conf
@@ -102,6 +104,13 @@ package() {
 	done
 	install -Dm644 "$srcdir"/10-utsugi-scale.conf \
 		-t "$pkgdir"/usr/lib/systemd/user/plasma-xdg-desktop-portal-kde.service.d/
+
+	# Two session units that fail on every boot and can only fail here. A unit
+	# stuck in "failed" spends the one signal that says something did not start.
+	install -Dm644 "$srcdir"/10-utsugi-pulseaudio-no-x11.conf \
+		-t "$pkgdir"/usr/lib/systemd/user/app-pulseaudio@autostart.service.d/
+	install -Dm644 "$srcdir"/10-utsugi-vvmd-off.conf \
+		-t "$pkgdir"/usr/lib/systemd/user/app-vvmd@autostart.service.d/
 	install -Dm644 "$srcdir"/80-utsugi-surya-plasma.preset \
 		-t "$pkgdir"/usr/lib/systemd/user-preset/
 }
@@ -127,6 +136,8 @@ da94e98efbd0780a69b0dfe03972aab47f0d5cd864fed8c9aebc976482b9920599fcdefdd0b7993d
 704b2d02a57275b655dd8e175c66878ed3f9e72b8db66abfa79edc771a5d5b366c8a460e17803d0101ca2171f6c909798086a9c43f9a9dd7d3033f7c02804e3c  notification-sound.service
 89130f20047f3ceac8e72aca6a3591ac8d758230bc95b2a22a037ad09762cc7336ea98fb39e1294b7566d855fb09ab62de588d896cc65eea81186b21679d65a7  dialer-warmup.service
 baa18b5a81b14541dd63e25aee1c229f166232d5ec4f259d6ac53c0c70159f44309a7e61ffadfce5ff090351cf2cb5d42cf174680c305c0b0af2c09c8103f392  10-utsugi-scale.conf
+f266c15e31124891ff2d42482918911738232d672bb9ce206654e78f4340becb13da2de40a17fc53cdc59e74ccafdacae30cfa14c121a4ae5cfa0419eb799d92  10-utsugi-pulseaudio-no-x11.conf
+c97ce22291b3cd6c2e0862c232ece9bed6dcd57dda9a417cc22f766c4c6cd440a3a14800da1d6b23e86c7407af3e0becfd7247e02e7ea74f445df616e4803723  10-utsugi-vvmd-off.conf
 fbe3156ee0b7f6ab9513474ac3338419be1ecf12d6ef5033b55b3cd18f7edeac028d2ede5b98ded1fddf1e87d0da231dcdfd0c3e8c3cbb154d8d8d6cf3267c58  powerdevilrc
 c7dd56d3a8b4a6481b694cf9aa63687b3463ea8f39dded17dd3956c6a1e8ff29c9cead3bdc977d18672103ec2c2c21e2073742e08bc225b2952013f83cdcc480  plasmanotifyrc
 53d1b8d82628baa296babd0432f620055e31246dbe44ded77f471a2e7148247113128463aa581703619a454873d519c7eb1fc906297e3728c24418fe13ec2458  surya-device-preset.conf
