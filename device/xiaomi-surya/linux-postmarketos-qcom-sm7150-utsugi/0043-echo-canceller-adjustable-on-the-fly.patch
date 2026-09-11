@@ -16,7 +16,7 @@ They are now module parameters, changeable on the fly:
 
 WHY THIS MATTERS MORE THAN THE CHANGE ITSELF: each hypothesis cost a build, an
 install, a reboot and ONE CALL from the user. With this, and recreating the
-session in mid-call (see the prueba-topologias script), several configurations
+session in mid-call (see the audio/test-topologies script), several configurations
 are swept in ONE single call. This is what was holding progress back.
 
 Useful values:

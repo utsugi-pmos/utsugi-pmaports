@@ -45,7 +45,7 @@ The DSP was being asked to register **another phone's topologies**. And not
 because of a one-off slip: the file the project packaged *as if it were*
 surya's is also a byte-for-byte copy of the Pixel 4a's. There was no way to get
 it right until the genuine one was pulled out of the factory partition (see
-`docs/REFERENCIA-STOCK.md`).
+`docs/STOCK-REFERENCE.md`).
 
 "Invalid parameter" is exactly the right answer to that.
 
@@ -109,7 +109,7 @@ a call.
 + * (md5 485b0439...) is sunfish's Global_cal.acdb, and the one the project
 + * packaged "from surya" is also a byte for byte copy of the same one. The
 + * real one for this phone (md5 72b7f3fd...) only existed inside the factory
-+ * partition, and was extracted on 2026-08-11 (see docs/REFERENCIA-STOCK.md).
++ * partition, and was extracted on 2026-08-11 (see docs/STOCK-REFERENCE.md).
 + *
 + * That is: the DSP was being asked to register another phone's topologies.
 + * "Bad parameter" is exactly the right answer to that.

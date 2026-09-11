@@ -5,7 +5,7 @@ sets out to test.
 
 ## What this phone's factory Android says
 
-Taken from its `mixer_paths_wcd9375qrd.xml` (see `docs/REFERENCIA-STOCK.md`),
+Taken from its `mixer_paths_wcd9375qrd.xml` (see `docs/STOCK-REFERENCE.md`),
 counting every microphone path:
 
     TX_CDC_DMA_TX_3 Channels = "One"     9 paths   <- one microphone
@@ -43,7 +43,7 @@ A module parameter, adjustable on the fly:
 
 It only affects `TX_CODEC_DMA_TX_3`. **The default stays at 2**, so as not to
 touch normal recording, which works today and is the one thing I do not want to
-break. The `prueba-canales-tx` sweep lowers it to 1 in the phases that need it.
+break. The `audio/test-tx-channels` sweep lowers it to 1 in the phases that need it.
 
 --- a/sound/soc/qcom/sm8250.c
 +++ b/sound/soc/qcom/sm8250.c

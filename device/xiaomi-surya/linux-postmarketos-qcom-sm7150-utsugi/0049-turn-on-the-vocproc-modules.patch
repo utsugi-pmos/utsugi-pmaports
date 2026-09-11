@@ -99,7 +99,7 @@ correctly.
 + * voice path has to be rebuilt.
 + *
 + * The list that comes with the surya factory calibration is obtained with
-+ * surya/audio/acdb-calibracion-vocproc.py.
++ * surya/audio/audio/acdb-vocproc-calibration.py.py.
 + */
 +static char enable_modules[512];
 +module_param_string(enable_modules, enable_modules,

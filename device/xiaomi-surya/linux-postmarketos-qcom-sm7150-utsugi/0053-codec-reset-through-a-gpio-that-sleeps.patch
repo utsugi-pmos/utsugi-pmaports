@@ -29,7 +29,7 @@ gpiod_set_value_cansleep() is the correct variant for a pin that sleeps, and it
 is what the rest of the drivers in the same situation use.
 
 CAREFUL: this is NOT proven to be the cause. It is the candidate that comes out
-of the evidence. It is measured with surya/arranque/bucle-reinicios, 20 cycles
+of the evidence. It is measured with surya/boot/reboot-loop, 20 cycles
 with the audio starting up in full, against the failure rate without the patch.
 
 --- a/sound/soc/codecs/wcd937x.c
