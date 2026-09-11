@@ -560,11 +560,11 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +// Climb the sharpness hill, coarsely and then refining, which is what was
 +// validated by measuring from the PC: five positions spread over the whole
 +// range and two refinements of five around the best. Fourteen measurements
-+// gave 512, the same value as an exhaustive sweep of nine positions per
-+// otro camino.
++// gave 512, the same value as an exhaustive sweep of nine positions reached
++// another way.
 +//
 +// Here it comes out much cheaper than there: in the preview the frames
-+// llegan cada ~50 ms en vez de cada 1,2 s.
++// arrive every ~50 ms instead of every 1.2 s.
 +
 +#pragma once
 +
