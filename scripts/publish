@@ -123,8 +123,12 @@ CSSV="$(sha256sum "$REPO/site/style.css" | cut -c1-8)"
 # not even work in PowerShell, which does not expand it in an argument.
 IMG="$(gh release list --limit 20 --json tagName -q '.[].tagName' 2>/dev/null \
 	| grep -m1 -- -surya || true)"
+# If this cannot be resolved the pages must not be published: a hardcoded name
+# would point "releases/latest/download/..." at a file the latest release does
+# not carry, and GitHub answers that with a 404 -- a dead download button that
+# looks fine in the HTML. It happened once, with the name of the release before.
+[ -n "$IMG" ] || die "could not read the latest -surya release: is 'gh' logged in?"
 IMG="utsugi-surya-${IMG%-surya}.img"
-case "$IMG" in utsugi-surya-.img) IMG=utsugi-surya-v2026.09.11.img ;; esac
 green "  image in the instructions: $IMG"
 for page in "$REPO"/site/*.html.in; do
 	name="$(basename "$page" .in)"
