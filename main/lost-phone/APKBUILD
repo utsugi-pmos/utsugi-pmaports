@@ -1,6 +1,6 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=lost-phone
-pkgver=1.1
+pkgver=1.2
 pkgrel=0
 pkgdesc="Find your phone without Google: SMS, your own network, your own relay or ntfy"
 url="https://github.com/utsugi-pmos/lost-phone"
@@ -55,6 +55,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-7982cc537ebb2a47e9104d40e4b5a3a2669ee27958c34d33784ae6cfce371e4e0aae4d2916f0c83d6ede01fd4e43421e81c7c719db6317cbdfc66018b2f69c04  lost-phone-1.1.tar.gz
+23922d4d5e7a34234d07d31357eb0cdbe019110f23401d0ddd3b749dd91cc831477fded45b8ab5c6443b4dc5af02d951dda00b6df3b1535fcb232a29282be911  lost-phone-1.2.tar.gz
 b0f9eb656292bc109414ee370aad7189691bba7160c676229cfe9f007957920ac9fb3413a9e2e86d8c2819037862bc1fd5a022de7e33d3955c91972b5a693229  80-lost-phone.preset
 "
