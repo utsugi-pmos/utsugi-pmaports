@@ -323,7 +323,7 @@ without rebooting:
 +{
 +	int rc = q6core_load_and_register_topologies(dev);
 +
-+	dev_info(dev, "registro a peticion: %d\n", rc);
++	dev_info(dev, "registration on request: %d\n", rc);
 +	return rc ? rc : count;
 +}
 +static DEVICE_ATTR_WO(register_topologies);

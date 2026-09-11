@@ -60,7 +60,7 @@ sensor have to agree on, and trying 2 against 3 without recompiling separates
 +static int op_sys_div;
 +module_param(op_sys_div, int, 0644);
 +MODULE_PARM_DESC(op_sys_div,
-+	"Divisor de sistema de salida (0x030b). 0 = tabla (2).");
++	"Output system divider (0x030b). 0 = table (2).");
 +
 +static int lanes;
 +module_param(lanes, int, 0644);
@@ -91,7 +91,7 @@ sensor have to agree on, and trying 2 against 3 without recompiling separates
 +
 +	if (op_pre_div || op_pll_mult || op_sys_div || lanes)
 +		dev_info(&s->client->dev,
-+			 "barrido: pre=%d mult=%d div=%d lanes=%d\n",
++			 "sweep: pre=%d mult=%d div=%d lanes=%d\n",
 +			 op_pre_div, op_pll_mult, op_sys_div, lanes);
 +
  	ret = __v4l2_ctrl_handler_setup(&s->ctrls);

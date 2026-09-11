@@ -111,7 +111,7 @@ This does NOT fix anything on its own: it is for measuring.
 +			goto err_rpm_put;
 +		}
 +		dev_info(s5k3t2->dev,
-+			 "PLL de salida forzado: pre=%u mult=%u sys=%u -> %u kHz\n",
++			 "output PLL forced: pre=%u mult=%u sys=%u -> %u kHz\n",
 +			 pre, mult, sys, 19200U * mult / (pre * sys));
 +	}
 +

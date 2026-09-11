@@ -87,7 +87,7 @@ size of the header itself.
 HOW IT IS TRIGGERED
 -------------------
     cp fpctzapp.img /lib/firmware/
-    echo "fpctzapp.img 7260" > /sys/kernel/debug/probe_ta/cargar
+    echo "fpctzapp.img 7260" > /sys/kernel/debug/probe_ta/load
     dmesg | tail
 
 RISK
@@ -492,11 +492,11 @@ conclusions from a second test.
 +{
 +	const size_t req_len = 0x80;
 +	const size_t rsp_len = 0x40;
-+	const size_t datos = 0x40;
-+	u32 *req, *orden;
++	const size_t data_off = 0x40;
++	u32 *req, *command;
 +	int ret;
 +
-+	if (out_len > req_len || len > req_len - datos)
++	if (out_len > req_len || len > req_len - data_off)
 +		return -EINVAL;
 +
 +	/*
@@ -513,16 +513,16 @@ conclusions from a second test.
 +	memset(buf, 0, req_len + rsp_len);
 +
 +	req = buf;
-+	orden = buf + 8;
++	command = buf + 8;
 +
 +	/* Word 0: the address the app dereferences. */
 +	req[0] = lower_32_bits(qcom_tzmem_to_phys(buf));
 +
-+	orden[1] = arg0;		/* base + 0x0c */
-+	orden[6] = cmd;			/* base + 0x20 */
-+	orden[7] = len;			/* base + 0x24 */
++	command[1] = arg0;		/* base + 0x0c */
++	command[6] = cmd;			/* base + 0x20 */
++	command[7] = len;			/* base + 0x24 */
 +	if (data && len)
-+		memcpy((u8 *)buf + datos, data, len);
++		memcpy((u8 *)buf + data_off, data, len);
 +
 +	ret = qcom_scm_qseecom_app_send(app_id, req, req_len,
 +					buf + req_len, rsp_len);
@@ -717,9 +717,9 @@ conclusions from a second test.
  obj-$(CONFIG_QCOM_UBWC_CONFIG) += ubwc_config.o
 +
 +# Temporary fingerprint diagnostic: see task 020. Remove when it is closed.
-+obj-y += sonda-ta.o
++obj-y += probe-ta.o
 --- /dev/null
-+++ b/drivers/soc/qcom/sonda-ta.c
++++ b/drivers/soc/qcom/probe-ta.c
 @@ -0,0 +1,1108 @@
 +// SPDX-License-Identifier: GPL-2.0
 +/*
@@ -739,7 +739,7 @@ conclusions from a second test.
 + *
 + * Reading is harmless: an unknown name just returns an error.
 + *
-+ *      cat /sys/kernel/debug/probe_ta/estado
++ *      cat /sys/kernel/debug/probe_ta/state
 + */
 +
 +#include <linux/debugfs.h>
@@ -768,7 +768,7 @@ conclusions from a second test.
 + * everything, control included, which is a broken probe rather than a result.
 + * Both spellings are tried so the answer cannot be blamed on the prefix.
 + */
-+static const char * const nombres[] = {
++static const char * const names[] = {
 +	/* CONTROL: this one is known to work -- the EFI variables come from it. */
 +	"qcom.tz.uefisecapp",
 +	"uefisecapp",
@@ -786,15 +786,15 @@ conclusions from a second test.
 +{
 +	int i;
 +
-+	for (i = 0; i < ARRAY_SIZE(nombres); i++) {
++	for (i = 0; i < ARRAY_SIZE(names); i++) {
 +		u32 id = 0;
-+		int ret = qcom_scm_qseecom_app_get_id(nombres[i], &id);
++		int ret = qcom_scm_qseecom_app_get_id(names[i], &id);
 +
 +		if (ret)
-+			seq_printf(s, "%-12s no: %d\n", nombres[i], ret);
++			seq_printf(s, "%-12s no: %d\n", names[i], ret);
 +		else
-+			seq_printf(s, "%-12s CARGADO, app_id=%u\n",
-+				   nombres[i], id);
++			seq_printf(s, "%-12s LOADED, app_id=%u\n",
++				   names[i], id);
 +	}
 +
 +	return 0;
@@ -805,9 +805,9 @@ conclusions from a second test.
 + * Asking by name: write a name here and the TrustZone is asked whether it has
 + * an app so called.
 + *
-+ *   echo qcom.tz.keymaster > /sys/kernel/debug/probe_ta/buscar
++ *   echo qcom.tz.keymaster > /sys/kernel/debug/probe_ta/search
 + *
-+ * `estado` above carries a fixed list, which was fine while the question was
++ * `state` above carries a fixed list, which was fine while the question was
 + * "is the fingerprint TA loaded". It stops being fine as soon as the name is
 + * the unknown -- keymaster is loaded by the bootloader under a name nobody
 + * here knows, and finding it by rebuilding the kernel once per guess is not a
@@ -816,7 +816,7 @@ conclusions from a second test.
 +static ssize_t probe_search_write(struct file *f, const char __user *ubuf,
 +				  size_t len, loff_t *off)
 +{
-+	char *buf, *nombre;
++	char *buf, *name;
 +	u32 id = 0;
 +	int ret;
 +
@@ -827,13 +827,13 @@ conclusions from a second test.
 +	if (IS_ERR(buf))
 +		return PTR_ERR(buf);
 +
-+	nombre = strim(buf);
-+	ret = qcom_scm_qseecom_app_get_id(nombre, &id);
++	name = strim(buf);
++	ret = qcom_scm_qseecom_app_get_id(name, &id);
 +	if (ret)
-+		pr_info("probe_ta: buscar '%s' -> no: %d\n", nombre, ret);
++		pr_info("probe_ta: look up '%s' -> no: %d\n", name, ret);
 +	else
-+		pr_info("probe_ta: buscar '%s' -> CARGADO, app_id=%u\n",
-+			nombre, id);
++		pr_info("probe_ta: look up '%s' -> LOADED, app_id=%u\n",
++			name, id);
 +
 +	kfree(buf);
 +	return len;
@@ -852,8 +852,8 @@ conclusions from a second test.
 + * register access is exactly the kind of fault that gets a trustlet killed --
 + * which is what every command that reaches the sensor does here.
 + *
-+ *   echo on  > /sys/kernel/debug/probe_ta/relojes
-+ *   echo off > /sys/kernel/debug/probe_ta/relojes
++ *   echo on  > /sys/kernel/debug/probe_ta/clocks
++ *   echo off > /sys/kernel/debug/probe_ta/clocks
 + *
 + * Only GCC registers are touched, never the controller's own: reading those
 + * from here is what hung the CPU the first time round.
@@ -916,7 +916,7 @@ conclusions from a second test.
 +	}
 +
 +	probe_clocks_set_done = false;
-+	pr_info("probe_ta: relojes de spi6 apagados\n");
++	pr_info("probe_ta: spi6 clocks off\n");
 +}
 +
 +static int probe_clocks_set(void)
@@ -949,7 +949,7 @@ conclusions from a second test.
 +	/* The SE clock (WRAP1_S0) sets the SPI bit rate. QSEE drives the SE from
 +	 * the secure world but cannot set clock rates -- that is HLOS's job. With
 +	 * no rate the bus does not clock and the sensor never answers. Goodix runs
-+	 * the SE around 19.2 MHz. Settable live via `echo "rate <hz>" > relojes`. */
++	 * the SE around 19.2 MHz. Settable live via `echo "rate <hz>" > clocks`. */
 +	if (probe_clocks[ARRAY_SIZE(probe_clocks_spi6) - 1]) {
 +		struct clk *se = probe_clocks[ARRAY_SIZE(probe_clocks_spi6) - 1];
 +		ret = clk_set_rate(se, probe_clocks_rate);
@@ -958,7 +958,7 @@ conclusions from a second test.
 +	}
 +
 +	probe_clocks_set_done = true;
-+	pr_info("probe_ta: relojes de spi6 encendidos\n");
++	pr_info("probe_ta: clocks de spi6 powered_on\n");
 +	return 0;
 +
 +atras:
@@ -1134,8 +1134,8 @@ conclusions from a second test.
 +static ssize_t probe_goodix_write(struct file *f, const char __user *ubuf,
 +				  size_t len, loff_t *off)
 +{
-+	unsigned int app_id, arg0, cmd, largo = 0;
-+	u8 respuesta[128] = {};
++	unsigned int app_id, arg0, cmd, length = 0;
++	u8 answer[128] = {};
 +	char buf[64];
 +	int ret, i, n;
 +
@@ -1146,24 +1146,24 @@ conclusions from a second test.
 +	buf[len] = '\0';
 +
 +	/* "<app> <arg0> <cmd> [len]" -- len is the size of the requested data. */
-+	n = sscanf(buf, "%u %u %u %u", &app_id, &arg0, &cmd, &largo);
++	n = sscanf(buf, "%u %u %u %u", &app_id, &arg0, &cmd, &length);
 +	if (n < 3)
 +		return -EINVAL;
 +
-+	ret = qcom_scm_qseecom_app_goodix(app_id, arg0, cmd, NULL, largo,
-+					  respuesta, sizeof(respuesta));
++	ret = qcom_scm_qseecom_app_goodix(app_id, arg0, cmd, NULL, length,
++					  answer, sizeof(answer));
 +	if (ret < 0) {
 +		pr_err("probe_ta: goodix arg0=%u cmd=%#x -> error %d\n",
 +		       arg0, cmd, ret);
 +		return ret;
 +	}
 +
-+	pr_info("probe_ta: goodix arg0=%u cmd=%#x -> status %d (buffer de comando)\n",
++	pr_info("probe_ta: goodix arg0=%u cmd=%#x -> status %d (command buffer)\n",
 +		arg0, cmd, ret);
-+	for (i = 0; i < sizeof(respuesta); i += 16) {
-+		if (memchr_inv(respuesta + i, 0, 16))
++	for (i = 0; i < sizeof(answer); i += 16) {
++		if (memchr_inv(answer + i, 0, 16))
 +			pr_info("probe_ta:   +%02d: %*ph\n", i, 16,
-+				respuesta + i);
++				answer + i);
 +	}
 +
 +	return len;
@@ -1414,7 +1414,7 @@ conclusions from a second test.
 +
 +	m = ioremap((phys_addr_t)addr, n);
 +	if (!m) {
-+		pr_err("probe_ta: leermem ioremap %#llx fallo\n", addr);
++		pr_err("probe_ta: leermem ioremap %#llx failure\n", addr);
 +		return -ENOMEM;
 +	}
 +	pr_info("probe_ta: leermem %#llx (%u bytes):\n", addr, n);
@@ -1451,7 +1451,7 @@ conclusions from a second test.
 + * than the 64 bytes the fingerprint TA replies with. Dumps skip rows that are
 + * all zero, so asking for the big buffer costs nothing when the reply is small.
 + */
-+#define SONDA_RSP_MAX	1024
++#define PROBE_RSP_MAX	1024
 +
 +/*
 + * Pairing: write "<keymaster_app_id> <fingerprint_app_id>" and the two steps
@@ -1475,8 +1475,8 @@ conclusions from a second test.
 +				     size_t len, loff_t *off)
 +{
 +	unsigned int km_id, fp_id;
-+	u32 peticion[16] = {};
-+	u32 estado, offset, largo;
++	u32 request[16] = {};
++	u32 state, offset, length;
 +	char buf[64];
 +	u8 *rsp;
 +	int ret;
@@ -1490,44 +1490,44 @@ conclusions from a second test.
 +	if (sscanf(buf, "%u %u", &km_id, &fp_id) != 2)
 +		return -EINVAL;
 +
-+	rsp = kzalloc(SONDA_RSP_MAX, GFP_KERNEL);
++	rsp = kzalloc(PROBE_RSP_MAX, GFP_KERNEL);
 +	if (!rsp)
 +		return -ENOMEM;
 +
 +	/* keymaster_cmd_t { cmd_id, ret_val, length } */
-+	peticion[0] = KM_CMD_GET_CERT;
-+	peticion[1] = 0x02;
++	request[0] = KM_CMD_GET_CERT;
++	request[1] = 0x02;
 +
-+	ret = qcom_scm_qseecom_app_raw(km_id, peticion, sizeof(peticion),
-+				       rsp, SONDA_RSP_MAX);
++	ret = qcom_scm_qseecom_app_raw(km_id, request, sizeof(request),
++				       rsp, PROBE_RSP_MAX);
 +	if (ret) {
 +		pr_err("probe_ta: keymaster (app %u) -> error %d\n", km_id, ret);
 +		goto out;
 +	}
 +
 +	/* keymaster_return_t { status, offset, length } */
-+	estado = get_unaligned_le32(rsp);
++	state = get_unaligned_le32(rsp);
 +	offset = get_unaligned_le32(rsp + 4);
-+	largo = get_unaligned_le32(rsp + 8);
++	length = get_unaligned_le32(rsp + 8);
 +
-+	if (estado) {
-+		pr_err("probe_ta: keymaster says no: %#x\n", estado);
++	if (state) {
++		pr_err("probe_ta: keymaster says no: %#x\n", state);
 +		ret = -EIO;
 +		goto out;
 +	}
 +
-+	if (!largo || offset > SONDA_RSP_MAX || largo > SONDA_RSP_MAX - offset) {
-+		pr_err("probe_ta: keymaster contesta fuera de rango: offset=%u largo=%u\n",
-+		       offset, largo);
++	if (!length || offset > PROBE_RSP_MAX || length > PROBE_RSP_MAX - offset) {
++		pr_err("probe_ta: keymaster answers out of range: offset=%u len=%u\n",
++		       offset, length);
 +		ret = -EIO;
 +		goto out;
 +	}
 +
-+	pr_info("probe_ta: keymaster suelta %u bytes de clave\n", largo);
++	pr_info("probe_ta: keymaster suelta %u bytes de clave\n", length);
 +
 +	ret = qcom_scm_qseecom_app_fpc_buf(fp_id, FPC_GROUP_FPCDATA,
 +					   FPC_SET_KEY_DATA, rsp + offset,
-+					   largo, NULL, 0);
++					   length, NULL, 0);
 +	if (ret < 0) {
 +		pr_err("probe_ta: SET_KEY_DATA -> error %d\n", ret);
 +		goto out;
@@ -1556,7 +1556,7 @@ conclusions from a second test.
 + * Loading: write "<firmware-name> <mdt_len>" here and the image is fetched
 + * from /lib/firmware and handed to the TrustZone.
 + *
-+ *   echo "fpctzapp.img 7260" > /sys/kernel/debug/probe_ta/cargar
++ *   echo "fpctzapp.img 7260" > /sys/kernel/debug/probe_ta/load
 + *
 + * The image must be the QSEECom layout -- .mdt followed by every .bNN,
 + * concatenated, no padding -- which is NOT the same as an ELF rebuilt by
@@ -1566,7 +1566,7 @@ conclusions from a second test.
 +				  size_t len, loff_t *off)
 +{
 +	const struct firmware *fw;
-+	char buf[128], nombre[96];
++	char buf[128], name[96];
 +	unsigned int mdt_len;
 +	u32 app_id = 0;
 +	int ret;
@@ -1577,18 +1577,18 @@ conclusions from a second test.
 +		return -EFAULT;
 +	buf[len] = '\0';
 +
-+	if (sscanf(buf, "%95s %u", nombre, &mdt_len) != 2)
++	if (sscanf(buf, "%95s %u", name, &mdt_len) != 2)
 +		return -EINVAL;
 +
-+	ret = request_firmware(&fw, nombre, NULL);
++	ret = request_firmware(&fw, name, NULL);
 +	if (ret) {
-+		pr_err("probe_ta: no encuentro %s en /lib/firmware: %d\n",
-+		       nombre, ret);
++		pr_err("probe_ta: cannot find %s in /lib/firmware: %d\n",
++		       name, ret);
 +		return ret;
 +	}
 +
-+	pr_info("probe_ta: cargando %s, mdt_len=%u img_len=%zu\n",
-+		nombre, mdt_len, fw->size);
++	pr_info("probe_ta: loading %s, mdt_len=%u img_len=%zu\n",
++		name, mdt_len, fw->size);
 +
 +	ret = qcom_scm_qseecom_app_load(fw->data, mdt_len, fw->size, &app_id);
 +	release_firmware(fw);
@@ -1598,7 +1598,7 @@ conclusions from a second test.
 +		return ret;
 +	}
 +
-+	pr_info("probe_ta: CARGADO, app_id=%u\n", app_id);
++	pr_info("probe_ta: LOADED, app_id=%u\n", app_id);
 +
 +	return len;
 +}
@@ -1617,14 +1617,14 @@ conclusions from a second test.
 + * The reply is dumped whole because we do not know the TA's structures yet;
 + * printing it raw is the point.
 + */
-+#define SONDA_REQ_LEN	64
-+#define SONDA_RSP_LEN	64
++#define PROBE_REQ_LEN	64
++#define PROBE_RSP_LEN	64
 +
 +static ssize_t probe_talk_write(struct file *f, const char __user *ubuf,
 +				  size_t len, loff_t *off)
 +{
 +	unsigned int app_id, cmd;
-+	u32 rsp[SONDA_RSP_LEN / 4];
++	u32 rsp[PROBE_RSP_LEN / 4];
 +	char buf[64];
 +	int ret, i;
 +
@@ -1644,7 +1644,7 @@ conclusions from a second test.
 +	}
 +
 +	pr_info("probe_ta: app %u cmd %u -> RESPONDE\n", app_id, cmd);
-+	for (i = 0; i < SONDA_RSP_LEN / 4; i += 4)
++	for (i = 0; i < PROBE_RSP_LEN / 4; i += 4)
 +		pr_info("probe_ta:   +%02d: %08x %08x %08x %08x\n",
 +			i * 4, rsp[i], rsp[i + 1], rsp[i + 2], rsp[i + 3]);
 +
@@ -1660,12 +1660,12 @@ conclusions from a second test.
 + * is dumped whole; without knowing the TA's structures, seeing it raw is the
 + * whole point.
 + */
-+#define SONDA_MAX_REQ	512
++#define PROBE_MAX_REQ	512
 +
 +static ssize_t probe_raw_write(struct file *f, const char __user *ubuf,
 +				 size_t len, loff_t *off)
 +{
-+	u8 req[SONDA_MAX_REQ], *rsp;
++	u8 req[PROBE_MAX_REQ], *rsp;
 +	char *buf, *p, *hex;
 +	unsigned int app_id;
 +	int ret, n = 0, i;
@@ -1677,7 +1677,7 @@ conclusions from a second test.
 +	if (IS_ERR(buf))
 +		return PTR_ERR(buf);
 +
-+	rsp = kzalloc(SONDA_RSP_MAX, GFP_KERNEL);
++	rsp = kzalloc(PROBE_RSP_MAX, GFP_KERNEL);
 +	if (!rsp) {
 +		kfree(buf);
 +		return -ENOMEM;
@@ -1696,7 +1696,7 @@ conclusions from a second test.
 +	}
 +
 +	/* Read hex nibble pairs, skipping any spacing. */
-+	while (*hex && n < SONDA_MAX_REQ) {
++	while (*hex && n < PROBE_MAX_REQ) {
 +		int hi, lo;
 +
 +		while (*hex == ' ' || *hex == '\n')
@@ -1718,14 +1718,14 @@ conclusions from a second test.
 +		goto out;
 +	}
 +
-+	ret = qcom_scm_qseecom_app_raw(app_id, req, n, rsp, SONDA_RSP_MAX);
++	ret = qcom_scm_qseecom_app_raw(app_id, req, n, rsp, PROBE_RSP_MAX);
 +	if (ret) {
 +		pr_err("probe_ta: app %u crudo(%d) -> error %d\n", app_id, n, ret);
 +		goto out;
 +	}
 +
 +	pr_info("probe_ta: app %u crudo(%d bytes) -> RESPONDE\n", app_id, n);
-+	for (i = 0; i < SONDA_RSP_MAX; i += 16) {
++	for (i = 0; i < PROBE_RSP_MAX; i += 16) {
 +		/* Silence the empty tail: a kilobyte of zeros hides the reply. */
 +		if (memchr_inv(rsp + i, 0, 16))
 +			pr_info("probe_ta:   +%04d: %*ph\n", i, 16, rsp + i);
@@ -1742,7 +1742,7 @@ conclusions from a second test.
 + * FPC-style: write "<app_id> <group> <cmd>" and the two-buffer protocol is
 + * used, which is the one its trusted app actually speaks.
 + *
-+ *   echo "3 1 3" > /sys/kernel/debug/probe_ta/fpc     # grupo 1, comando 3
++ *   echo "3 1 3" > /sys/kernel/debug/probe_ta/fpc     # grupo 1, command 3
 + *
 + * Groups, from Sony's open HAL: 1 normal, 2 db, 3 fpcdata, 6 debug, 7 qc,
 + * 8 navigation, 9 info, 0xa sensor, 0xb template. The command ids differ

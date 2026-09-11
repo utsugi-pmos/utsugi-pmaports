@@ -69,7 +69,7 @@ one that emits the SLOWEST (PLL x237), so the minimum came out greater than the
 maximum and the driver did not even register:
 
     imx682 12-001a: IMX682 detectado (0x0682)
-    imx682 12-001a: fallo al crear los controles: -34
+    imx682 12-001a: failure al crear los controles: -34
     imx682 12-001a: probe with driver imx682 failed with error -34
 
 Now the range goes from the slowest link frequency to the fastest, which is what
@@ -84,7 +84,7 @@ one that emits the SLOWEST (PLL x237), so the minimum came out greater than the
 maximum and the driver did not even get as far as registering:
 
     imx682 12-001a: IMX682 detectado (0x0682)
-    imx682 12-001a: fallo al crear los controles: -34
+    imx682 12-001a: failure al crear los controles: -34
     imx682 12-001a: probe with driver imx682 failed with error -34
 
 Now the range goes from the slowest link frequency to the fastest, which is what
@@ -718,7 +718,7 @@ dmesg, which is why it carries that message.
 -				link-frequencies = /bits/ 64 <435200000>;
 +				/*
 +				 * One per mode, because each factory mode carries its
-+				 * propio multiplicador de PLL de salida:
++				 * propio multiplicador de PLL de output:
 +				 *   x237 -> 379,2 MHz   9248x6944
 +				 *   x272 -> 435,2 MHz   3840x2160 y 2312x1304
 +				 *   x298 -> 476,8 MHz   4624x3472

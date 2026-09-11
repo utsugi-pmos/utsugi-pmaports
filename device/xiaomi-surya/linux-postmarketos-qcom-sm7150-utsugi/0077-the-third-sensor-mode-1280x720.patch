@@ -27,7 +27,7 @@ RAM).
 +/*
 + * The third mode of the factory file, which had not been ported. It is the
 + * smoothest operating point of the three: fewer pixels, fewer lines and the PLL
-+ * salida mas lento.
++ * slower output.
 + *
 + *     5184x3880   op_pre=3 mult=140 0x0312=0   ->  896 MHz
 + *     2592x1940   op_pre=3 mult=187 0x0312=2   -> 1196,8 MHz

@@ -51,15 +51,15 @@ This does NOT fix anything on its own: it is for deciding.
 + * and the RDI start command, with the sensor already transmitting. If
 + * packets then start arriving, the bug is one of ordering.
 + */
-+static struct csid_device *diag_csid_guardado;
++static struct csid_device *diag_csid_saved;
 +static int diag_reaplicar_set(const char *val, const struct kernel_param *kp);
 +static const struct kernel_param_ops diag_reaplicar_ops = {
 +	.set = diag_reaplicar_set,
 +	.get = param_get_int,
 +};
-+static int diag_reaplicar;
-+module_param_cb(diag_reaplicar, &diag_reaplicar_ops, &diag_reaplicar, 0644);
-+MODULE_PARM_DESC(diag_reaplicar,
++static int diag_reapply;
++module_param_cb(diag_reapply, &diag_reaplicar_ops, &diag_reapply, 0644);
++MODULE_PARM_DESC(diag_reapply,
 +	"Write 1 to reapply the receiver configuration with the sensor already streaming.");
 +
  static unsigned int diag_pkts;
@@ -69,7 +69,7 @@ This does NOT fix anything on its own: it is for deciding.
  static void __csid_configure_rx(struct csid_device *csid,
  				struct csid_phy_config *phy, int vc)
  {
-+	diag_csid_guardado = csid;
++	diag_csid_saved = csid;
 +
  	u8 lane_cnt = csid->phy.lane_cnt;
  	int val;
@@ -80,11 +80,11 @@ This does NOT fix anything on its own: it is for deciding.
   */
 +static int diag_reaplicar_set(const char *val, const struct kernel_param *kp)
 +{
-+	struct csid_device *csid = diag_csid_guardado;
++	struct csid_device *csid = diag_csid_saved;
 +	int ret, i;
 +
 +	ret = param_set_int(val, kp);
-+	if (ret || !diag_reaplicar || !csid)
++	if (ret || !diag_reapply || !csid)
 +		return ret;
 +
 +	dev_info(csid->camss->dev, "csid%d: reapplying the receiver configuration\n",

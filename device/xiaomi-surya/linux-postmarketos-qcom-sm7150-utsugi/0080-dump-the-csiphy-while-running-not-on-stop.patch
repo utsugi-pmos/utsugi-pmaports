@@ -34,7 +34,7 @@ It is the first measurement that separates those two things.
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:08:57.514907994 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-17 17:09:22.934201082 +0200
 @@ -1060,6 +1060,61 @@
- MODULE_PARM_DESC(pulso_terminacion,
+ MODULE_PARM_DESC(termination_pulse,
  	"Write 0x01 to CTRL33 (0x0884), the termination pulse mainline leaves out. 1 = yes.");
  
 +/*
@@ -46,13 +46,13 @@ It is the first measurement that separates those two things.
 + *
 + * That is why the clock lane register read the same transmitting as silent: it
 + * was being looked at in both cases when there was nothing left. It is a bug in the
-+ * medida, no un dato.
++ * medida, no un datum.
 + *
 + * With this it can be dumped AT ANY MOMENT from userspace,
 + * with the sensor really transmitting, which is the only way to see if the
-+ * carril de reloj llega a entrar en alta velocidad.
++ * carril de clock llega a entrar en alta velocidad.
 + */
-+static struct csiphy_device *phy_guardado;
++static struct csiphy_device *phy_saved;
 +
 +static void dump_phy(struct csiphy_device *csiphy, const char *when)
 +{
@@ -72,24 +72,24 @@ It is the first measurement that separates those two things.
 +			 readl_relaxed(csiphy->base + a + 0x1c));
 +}
 +
-+static int volcar_ahora_set(const char *val, const struct kernel_param *kp)
++static int dump_now_set(const char *val, const struct kernel_param *kp)
 +{
 +	int ret = param_set_int(val, kp);
 +
-+	if (!ret && phy_guardado)
-+		dump_phy(phy_guardado, "EN MARCHA");
++	if (!ret && phy_saved)
++		dump_phy(phy_saved, "EN MARCHA");
 +
 +	return ret;
 +}
 +
-+static const struct kernel_param_ops volcar_ahora_ops = {
-+	.set = volcar_ahora_set,
++static const struct kernel_param_ops dump_now_ops = {
++	.set = dump_now_set,
 +	.get = param_get_int,
 +};
 +
-+static int volcar_ahora;
-+module_param_cb(volcar_ahora, &volcar_ahora_ops, &volcar_ahora, 0644);
-+MODULE_PARM_DESC(volcar_ahora,
++static int dump_now;
++module_param_cb(dump_now, &dump_now_ops, &dump_now, 0644);
++MODULE_PARM_DESC(dump_now,
 +	"Write anything to dump the CSIPHY NOW, with the sensor transmitting.");
 +
  static int csiphy_dump;
@@ -99,7 +99,7 @@ It is the first measurement that separates those two things.
  	u8 val, ctrl5;
  	int i;
  
-+	phy_guardado = csiphy;
++	phy_saved = csiphy;
 +
  	settle_cnt = csiphy_settle_cnt_calc(link_freq, csiphy->timer_clk_rate);
  

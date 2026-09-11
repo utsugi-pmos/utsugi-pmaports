@@ -49,7 +49,7 @@ Useful values:
 +
 +static unsigned int ec_ref_port = VSS_IVOCPROC_PORT_ID_NONE;
 +module_param(ec_ref_port, uint, 0644);
-+MODULE_PARM_DESC(ec_ref_port, "puerto AFE de referencia de eco (0xFFFF = ninguno)");
++MODULE_PARM_DESC(ec_ref_port, "AFE port used as the echo reference (0xFFFF = none)");
 +
  #define VSS_IVOLUME_CMD_MUTE_V2				0x0001138B
  #define VSS_IVOLUME_DIRECTION_RX			0

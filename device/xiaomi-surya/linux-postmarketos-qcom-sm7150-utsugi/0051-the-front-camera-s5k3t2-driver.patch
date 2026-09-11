@@ -424,7 +424,7 @@ module parameters, and are tested with rmmod/insmod:
 +static const char * const s5k3t2_supply_names[] = {
 +	"vdda",		/* analogica */
 +	"vddd",		/* digital */
-+	"vddio",	/* entrada/salida, 1,8 V */
++	"vddio",	/* I/O, 1.8 V */
 +};
 +
 +#define S5K3T2_NUM_SUPPLIES	ARRAY_SIZE(s5k3t2_supply_names)
@@ -1359,7 +1359,7 @@ module parameters, and are tested with rmmod/insmod:
 +		if (s5k3t2_probe_id_at(client, i, &id))
 +			continue;
 +
-+		dev_info(s5k3t2->dev, "contesta 0x%02x, identificacion 0x%04x\n",
++		dev_info(s5k3t2->dev, "answers 0x%02x, id 0x%04x\n",
 +			 i, id);
 +
 +		if (id == S5K3T2_CHIP_ID) {
@@ -1549,13 +1549,13 @@ module parameters, and are tested with rmmod/insmod:
 +
 +	ret = s5k3t2_probe_id_at(client, client->addr, &id);
 +	if (ret || id != S5K3T2_CHIP_ID) {
-+		dev_err(s5k3t2->dev, "identificacion 0x%04x, esperaba 0x%04x\n",
++		dev_err(s5k3t2->dev, "id 0x%04x, expected 0x%04x\n",
 +			id, S5K3T2_CHIP_ID);
 +		ret = -ENODEV;
 +		goto power_off;
 +	}
 +
-+	dev_info(s5k3t2->dev, "ES UN S5K3T2: identificacion 0x%04x en 0x%02x\n",
++	dev_info(s5k3t2->dev, "IT IS AN S5K3T2: id 0x%04x at 0x%02x\n",
 +		 id, client->addr);
 +
 +	s5k3t2->mode = &s5k3t2_supported_modes[0];

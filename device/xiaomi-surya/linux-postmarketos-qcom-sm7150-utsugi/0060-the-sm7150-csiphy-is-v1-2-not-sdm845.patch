@@ -62,14 +62,14 @@ recompiling.
 + * Tunable at runtime so variants of the common block of the
 + * CSIPHY can be tried without recompiling or rebooting. -1 = whatever matches the SoC.
 + */
-+static int ctrl7_valor = -1;
-+module_param(ctrl7_valor, int, 0644);
-+MODULE_PARM_DESC(ctrl7_valor,
++static int ctrl7_value = -1;
++module_param(ctrl7_value, int, 0644);
++MODULE_PARM_DESC(ctrl7_value,
 +	"Value of CSI_COMMON_CTRL7 (0x81C). -1 = 0x52 on SM7150, 0x02 elsewhere.");
 +
-+static int secuencia_ctrl0 = -1;
-+module_param(secuencia_ctrl0, int, 0644);
-+MODULE_PARM_DESC(secuencia_ctrl0,
++static int ctrl0_sequence = -1;
++module_param(ctrl0_sequence, int, 0644);
++MODULE_PARM_DESC(ctrl0_sequence,
 +	"CTRL0 (0x800): 1 = 0x03, wait 1 ms, 0x02 (like Qualcomm v1.2). 0 = 0x00 (mainline). -1 = depending on SoC.");
 +
  static void csiphy_lanes_enable(struct csiphy_device *csiphy,
@@ -108,7 +108,7 @@ recompiling.
 +	 * Both values are module parameters so variants can be tried at
 +	 * runtime: on this phone every reboot is expensive.
 +	 */
-+	val = ctrl7_valor >= 0 ? ctrl7_valor :
++	val = ctrl7_value >= 0 ? ctrl7_value :
 +	      (csiphy->camss->res->version == CAMSS_7150 ? 0x52 : 0x02);
  	writel_relaxed(val, csiphy->base +
  		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 7));
@@ -116,8 +116,8 @@ recompiling.
 -	val = 0x00;
 -	writel_relaxed(val, csiphy->base +
 -		       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
-+	if (secuencia_ctrl0 > 0 ||
-+	    (secuencia_ctrl0 < 0 && csiphy->camss->res->version == CAMSS_7150)) {
++	if (ctrl0_sequence > 0 ||
++	    (ctrl0_sequence < 0 && csiphy->camss->res->version == CAMSS_7150)) {
 +		writel_relaxed(0x03, csiphy->base +
 +			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 0));
 +		usleep_range(1000, 1200);

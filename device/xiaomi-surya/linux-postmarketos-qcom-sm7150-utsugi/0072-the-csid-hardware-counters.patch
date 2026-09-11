@@ -55,9 +55,9 @@ single instrument.
 +module_param(diag_bytes_rdi0, uint, 0644);
 +MODULE_PARM_DESC(diag_bytes_rdi0, "Bytes counted by RDI0 (0x3e0).");
 +
- static int cgc_en_reset = 1;
- module_param(cgc_en_reset, int, 0644);
- MODULE_PARM_DESC(cgc_en_reset,
+ static int cgc_in_reset = 1;
+ module_param(cgc_in_reset, int, 0644);
+ MODULE_PARM_DESC(cgc_in_reset,
 @@ -422,6 +439,36 @@
  				dev_info(csid->camss->dev,
  					 "csid%d at stop: rx=0x%08x rdin%d=0x%08x\n",

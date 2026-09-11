@@ -787,7 +787,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	return container_of(sd, struct imx682, sd);
 +}
 +
-+/* Registro de 16 bits de direccion y 8 de dato. */
++/* Registro de 16 bits de direccion y 8 de datum. */
 +static int imx682_read(struct imx682 *s, u16 reg, u8 *val)
 +{
 +	u8 dir[2] = { reg >> 8, reg & 0xff };
