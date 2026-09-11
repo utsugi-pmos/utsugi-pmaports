@@ -185,7 +185,7 @@ the three combinations can be swept by recreating the session on the fly (see
  	q6dsp_map_channels(cmd.param_data.channel_info.channel_mapping,
  			   cmd.param_data.channel_info.num_channels);
  
-+	dev_info(cvp->dev, "channel info %s: %u canales\n",
++	dev_info(cvp->dev, "channel info %s: %u channels\n",
 +		 is_tx ? "TX" : "RX",
 +		 cmd.param_data.channel_info.num_channels);
 +
@@ -231,7 +231,7 @@ the three combinations can be swept by recreating the session on the fly (see
  	q6dsp_map_channels(cmd.param_data.media_format_info.channel_mapping,
  			   cmd.param_data.media_format_info.num_channels);
  
-+	dev_info(cvp->dev, "media format %s: puerto %#x, %u canales, %u Hz\n",
++	dev_info(cvp->dev, "media format %s: port %#x, %u channels, %u Hz\n",
 +		 is_tx ? "TX" : "RX", port_id,
 +		 cmd.param_data.media_format_info.num_channels,
 +		 cmd.param_data.media_format_info.sample_rate);

@@ -36,7 +36,7 @@ known.
  	int i;
  
 -	printk(KERN_DEBUG "csiphy_isr called\n");
-+	static int veces;
++	static int times;
 +	u8 seen[11];
  
  	for (i = 0; i < 11; i++) {
@@ -55,7 +55,7 @@ known.
  	}
  
 +	/* Bounded: if the link is noisy, this fires nonstop. */
-+	if (veces++ < 20)
++	if (times++ < 20)
 +		dev_info(csiphy->camss->dev,
 +			 "csiphy%d state: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
 +			 csiphy->id, seen[0], seen[1], seen[2], seen[3],
@@ -165,7 +165,7 @@ known.
 +	u32 val, rx_status;
  	u8 reset_done;
  	int i;
-+	static int veces;
++	static int times;
  
  	val = readl_relaxed(csid->base + CSID_TOP_IRQ_STATUS);
  	writel_relaxed(val, csid->base + CSID_TOP_IRQ_CLEAR);
@@ -187,16 +187,16 @@ known.
  		if (csid->phy.en_vc & BIT(i)) {
  			val = readl_relaxed(csid->base + CSID_CSI2_RDIN_IRQ_STATUS(i));
  			writel_relaxed(val, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
-+			if (veces < 25)
++			if (times < 25)
 +				dev_info(csid->camss->dev,
 +					 "csid%d rx=0x%08x rdin%d=0x%08x\n",
 +					 csid->id, rx_status, i, val);
  		}
  
-+	if (veces < 25 && !csid->phy.en_vc)
++	if (times < 25 && !csid->phy.en_vc)
 +		dev_info(csid->camss->dev, "csid%d rx=0x%08x (no channel)\n",
 +			 csid->id, rx_status);
-+	veces++;
++	times++;
 +
  	val = 1 << IRQ_CMD_CLEAR;
  	writel_relaxed(val, csid->base + CSID_IRQ_CMD);

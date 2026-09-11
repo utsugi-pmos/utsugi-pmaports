@@ -71,8 +71,8 @@ but that means relying on a chain of headers that can change.
 +	 * The exposure cannot exceed the frame, that is height plus vertical
 +	 * blanking. The range was only set when changing mode, with the default
 +	 * vts, so lengthening the frame did nothing: measured, with
-+	 * vertical_blanking=6000 aceptado, `exposure` se quedaba en max=1632
-+	 * -1680 de vts_def menos 48 de margen-.
++	 * vertical_blanking=6000 accepted, `exposure` stayed at max=1632
++	 * -1680 of vts_def minus 48 of margin-.
 +	 *
 +	 * In low light that leaves the image as sensor noise, and the noise is NOT
 +	 * blurred because it is added after the optics: autofocus
@@ -85,11 +85,11 @@ but that means relying on a chain of headers that can change.
 +	 * is silently clamped against the old limit.
 +	 */
 +	if (ctrl->id == V4L2_CID_VBLANK) {
-+		int techo = s->mode->height + ctrl->val - IMX682_EXPOSURE_MARGIN;
-+		int valor = clamp_t(int, s->exposure->val, s->mode->exp_min, techo);
++		int ceiling = s->mode->height + ctrl->val - IMX682_EXPOSURE_MARGIN;
++		int value = clamp_t(int, s->exposure->val, s->mode->exp_min, ceiling);
 +
-+		__v4l2_ctrl_modify_range(s->exposure, s->mode->exp_min, techo,
-+					 IMX682_EXPOSURE_STEP, valor);
++		__v4l2_ctrl_modify_range(s->exposure, s->mode->exp_min, ceiling,
++					 IMX682_EXPOSURE_STEP, value);
 +	}
 +
  	/* With no power there is nobody to write to; this is not an error. */

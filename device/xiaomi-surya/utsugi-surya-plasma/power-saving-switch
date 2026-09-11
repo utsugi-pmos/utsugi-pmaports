@@ -27,22 +27,22 @@
 set -u
 
 STATE="${XDG_STATE_HOME:-$HOME/.local/state}/power-saving"
-PREVIO="$STATE/brightness"
+PREVIOUS="$STATE/brightness"
 TIMEOUTS="$STATE/timeouts"
-REFRESCO="$STATE/refresh"
-NAVEGADOR="$STATE/browser-fps"
+REFRESH="$STATE/refresh"
+BROWSER="$STATE/browser-fps"
 
 PD=org.kde.Solid.PowerManagement
-PERFIL_PATH=/org/kde/Solid/PowerManagement/Actions/PowerProfile
-PERFIL_IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
+PROFILE_PATH=/org/kde/Solid/PowerManagement/Actions/PowerProfile
+PROFILE_IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
 
-AHORRO=power-saver
+SAVER=power-saver
 NORMAL=balanced
 
 # Fraction of full brightness to drop to, and the idle timeouts in seconds.
-BRILLO_PCT=30
+BRIGHTNESS_PCT=30
 DIM_SEC=20
-APAGAR_SEC=30
+TURN_OFF_SEC=30
 SUSPENDER_SEC=60
 
 # Refresh rate to drop to. Empty would mean "do not touch it".
@@ -60,42 +60,42 @@ SUSPENDER_SEC=60
 # With the porch method, verified on the phone: mode applies, the DSI bit clock
 # stays at 860427759 exactly as at 120 Hz, no dpu/dsi/drm error is logged, and
 # the picture is clean.
-HZ_AHORRO=60
+HZ_SAVER=60
 
 TAB="$(printf '\t')"
 
 # --- profile ----------------------------------------------------------------
 
-perfil_actual() {
-	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.currentProfile" 2>/dev/null
+profile_now() {
+	qdbus6 "$PD" "$PROFILE_PATH" "$PROFILE_IFACE.currentProfile" 2>/dev/null
 }
 
 set_profile() {
-	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.setProfile" "$1" >/dev/null 2>&1
+	qdbus6 "$PD" "$PROFILE_PATH" "$PROFILE_IFACE.setProfile" "$1" >/dev/null 2>&1
 }
 
 # --- brightness -------------------------------------------------------------
 
 # The object path is looked up rather than hardcoded to display0: it is indexed
 # per display, and this phone grows a second one whenever it is docked.
-brillo_path() {
+brightness_path() {
 	qdbus6 "$PD" 2>/dev/null | grep -m1 '^/org/kde/ScreenBrightness/display'
 }
 
-brillo_get() {
-	p="$(brillo_path)" || return 1
+brightness_get() {
+	p="$(brightness_path)" || return 1
 	[ -n "$p" ] || return 1
 	qdbus6 "$PD" "$p" org.kde.ScreenBrightness.Display.Brightness 2>/dev/null
 }
 
-brillo_max() {
-	p="$(brillo_path)"
+brightness_max() {
+	p="$(brightness_path)"
 	[ -n "$p" ] || return 1
 	qdbus6 "$PD" "$p" org.kde.ScreenBrightness.Display.MaxBrightness 2>/dev/null
 }
 
-brillo_set() {
-	p="$(brillo_path)"
+brightness_set() {
+	p="$(brightness_path)"
 	[ -n "$p" ] || return 1
 	# The second argument is a flags bitfield; 0 means no OSD popup, which is
 	# what we want for a change the user did not make with the slider.
@@ -124,22 +124,22 @@ brillo_set() {
 
 # kscreen-doctor emits ANSI colour even into a pipe, so it has to be stripped
 # before anything can be parsed out of it.
-kd_plano() {
+kd_flat() {
 	kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
 }
 
 output() {
-	kd_plano | awk '/^Output:/ { print $3; exit }'
+	kd_flat | awk '/^Output:/ { print $3; exit }'
 }
 
 # Modes are printed as "1:1080x2400@120.00*!  2:1080x2400@60.00", where '*'
 # marks the one in use and '!' the preferred one.
-modo_en_uso() {
-	kd_plano | tr ' ' '\n' | grep '\*'
+mode_in_use() {
+	kd_flat | tr ' ' '\n' | grep '\*'
 }
 
 hz_actual() {
-	modo_en_uso | sed 's/.*@//; s/\..*//'
+	mode_in_use | sed 's/.*@//; s/\..*//'
 }
 
 set_hz() {
@@ -147,14 +147,14 @@ set_hz() {
 	[ -n "$o" ] || return 1
 	# The resolution is taken from the mode in use rather than hardcoded, so
 	# this does not bake the panel geometry into the switch.
-	res="$(modo_en_uso | sed 's/^[0-9]*://; s/@.*//')"
+	res="$(mode_in_use | sed 's/^[0-9]*://; s/@.*//')"
 	[ -n "$res" ] || return 1
 	kscreen-doctor "output.$o.mode.$res@$1" >/dev/null 2>&1
 }
 
 # --- browser frame rate -----------------------------------------------------
 #
-# The 'navegador' setting pins layout.frame_rate to 120 in Firefox and LibreWolf
+# The 'browser' setting pins layout.frame_rate to 120 in Firefox and LibreWolf
 # because their autodetection does not work here: measured at 59,7 fps on a
 # 120 Hz panel, and setting -1 leaves it at 59,9. Pinning it was right while
 # the panel could ONLY do 120.
@@ -173,11 +173,11 @@ set_hz() {
 #   - The files live in /usr/lib and belong to root, so this needs sudo -n. If
 #     that fails -- no NOPASSWD, no privileges -- it is skipped in silence and
 #     everything else still applies.
-NAVEGADORES="/usr/lib/firefox/browser/defaults/preferences/surya-120hz.js
+BROWSERS="/usr/lib/firefox/browser/defaults/preferences/surya-120hz.js
 /usr/lib/librewolf/browser/defaults/preferences/surya-120hz.js"
 
-navegador_fps_actual() {
-	for f in $NAVEGADORES; do
+browser_fps_now() {
+	for f in $BROWSERS; do
 		[ -f "$f" ] || continue
 		sed -n 's/^pref("layout\.frame_rate", \([0-9]*\));.*/\1/p' "$f" | head -1
 		return
@@ -185,7 +185,7 @@ navegador_fps_actual() {
 }
 
 browser_fps_set() {
-	for f in $NAVEGADORES; do
+	for f in $BROWSERS; do
 		[ -f "$f" ] || continue
 		sudo -n sed -i \
 			"s/^pref(\"layout\.frame_rate\", [0-9]*);/pref(\"layout.frame_rate\", $1);/" \
@@ -199,14 +199,14 @@ browser_fps_set() {
 # or LowBattery depending on what UPower reports, and this phone sits in an
 # awkward spot: plugged into the USB cable it is developed over, battery full,
 # status "Not charging". Rather than guess which group is live, set all three.
-PERFILES_PD="AC Battery LowBattery"
+PD_PROFILES="AC Battery LowBattery"
 
 # Subgroups are nested: [AC][Display] and [AC][SuspendAndShutdown].
 timeouts_set() {
 	: > "$TIMEOUTS"
-	for pf in $PERFILES_PD; do
+	for pf in $PD_PROFILES; do
 		save_and_set "$pf" Display DimDisplayIdleTimeoutSec "$DIM_SEC"
-		save_and_set "$pf" Display TurnOffDisplayIdleTimeoutSec "$APAGAR_SEC"
+		save_and_set "$pf" Display TurnOffDisplayIdleTimeoutSec "$TURN_OFF_SEC"
 		save_and_set "$pf" SuspendAndShutdown \
 			AutoSuspendIdleTimeoutSec "$SUSPENDER_SEC"
 	done
@@ -246,28 +246,28 @@ apply() {
 	# profile. This runs on every plasmashell start, and if it re-saved the
 	# brightness each time it would eventually record the DIMMED value as the
 	# one to go back to -- and "off" would leave the screen dark for good.
-	[ -f "$PREVIO" ] && return 0
+	[ -f "$PREVIOUS" ] && return 0
 
 	mkdir -p "$STATE"
 
-	actual="$(brillo_get)" || actual=""
-	maximo="$(brillo_max)" || maximo=""
+	actual="$(brightness_get)" || actual=""
+	maximo="$(brightness_max)" || maximo=""
 
 	if [ -n "$actual" ] && [ -n "$maximo" ] && [ "$maximo" -gt 0 ]; then
-		echo "$actual" > "$PREVIO"
-		objetivo=$(( maximo * BRILLO_PCT / 100 ))
+		echo "$actual" > "$PREVIOUS"
+		target=$(( maximo * BRIGHTNESS_PCT / 100 ))
 		# Never raise the brightness: if the screen is already below the
 		# target, "saving" must not make it brighter.
-		[ "$objetivo" -lt "$actual" ] && brillo_set "$objetivo"
+		[ "$target" -lt "$actual" ] && brightness_set "$target"
 	fi
 
-	# Skipped while HZ_AHORRO is empty; see the comment on it. Same rule as
+	# Skipped while HZ_SAVER is empty; see the comment on it. Same rule as
 	# brightness when enabled: only ever go down.
-	if [ -n "$HZ_AHORRO" ]; then
+	if [ -n "$HZ_SAVER" ]; then
 		hz="$(hz_actual)"
-		if [ -n "$hz" ] && [ "$hz" -gt "$HZ_AHORRO" ] 2>/dev/null; then
-			echo "$hz" > "$REFRESCO"
-			set_hz "$HZ_AHORRO" || rm -f "$REFRESCO"
+		if [ -n "$hz" ] && [ "$hz" -gt "$HZ_SAVER" ] 2>/dev/null; then
+			echo "$hz" > "$REFRESH"
+			set_hz "$HZ_SAVER" || rm -f "$REFRESH"
 		fi
 
 		# Follow the panel's REAL rate, not the one we asked for. On a
@@ -276,10 +276,10 @@ apply() {
 		# throw away smoothness without saving anything -- worse than
 		# doing nothing. Only ever downwards, as everywhere else.
 		hz_real="$(hz_actual)"
-		bfps="$(navegador_fps_actual)"
+		bfps="$(browser_fps_now)"
 		if [ -n "$bfps" ] && [ -n "$hz_real" ] &&
 		   [ "$bfps" -gt "$hz_real" ] 2>/dev/null; then
-			echo "$bfps" > "$NAVEGADOR"
+			echo "$bfps" > "$BROWSER"
 			browser_fps_set "$hz_real"
 		fi
 	fi
@@ -288,20 +288,20 @@ apply() {
 }
 
 restore() {
-	if [ -f "$PREVIO" ]; then
-		antes="$(cat "$PREVIO")"
-		[ -n "$antes" ] && brillo_set "$antes"
-		rm -f "$PREVIO"
+	if [ -f "$PREVIOUS" ]; then
+		antes="$(cat "$PREVIOUS")"
+		[ -n "$antes" ] && brightness_set "$antes"
+		rm -f "$PREVIOUS"
 	fi
-	if [ -f "$REFRESCO" ]; then
-		hz="$(cat "$REFRESCO")"
+	if [ -f "$REFRESH" ]; then
+		hz="$(cat "$REFRESH")"
 		[ -n "$hz" ] && set_hz "$hz"
-		rm -f "$REFRESCO"
+		rm -f "$REFRESH"
 	fi
-	if [ -f "$NAVEGADOR" ]; then
-		bfps="$(cat "$NAVEGADOR")"
+	if [ -f "$BROWSER" ]; then
+		bfps="$(cat "$BROWSER")"
 		[ -n "$bfps" ] && browser_fps_set "$bfps"
-		rm -f "$NAVEGADOR"
+		rm -f "$BROWSER"
 	fi
 	timeouts_restore
 	rmdir "$STATE" 2>/dev/null || true
@@ -313,9 +313,9 @@ case "${1:-status}" in
 status)
 	# Machine-readable on purpose: the QML side turns these tokens into
 	# translated text. Keep them stable.
-	if [ "$(perfil_actual)" = "$AHORRO" ]; then
-		razon="$(qdbus6 "$PD" "$PERFIL_PATH" \
-			"$PERFIL_IFACE.performanceDegradedReason" 2>/dev/null)"
+	if [ "$(profile_now)" = "$SAVER" ]; then
+		razon="$(qdbus6 "$PD" "$PROFILE_PATH" \
+			"$PROFILE_IFACE.performanceDegradedReason" 2>/dev/null)"
 		[ -n "$razon" ] && echo "on degraded" || echo "on"
 	else
 		echo "off"
@@ -323,7 +323,7 @@ status)
 	;;
 
 on)
-	set_profile "$AHORRO"
+	set_profile "$SAVER"
 	apply
 	;;
 
@@ -333,7 +333,7 @@ off)
 	;;
 
 toggle)
-	if [ "$(perfil_actual)" = "$AHORRO" ]; then "$0" off; else "$0" on; fi
+	if [ "$(profile_now)" = "$SAVER" ]; then "$0" off; else "$0" on; fi
 	;;
 
 apply)

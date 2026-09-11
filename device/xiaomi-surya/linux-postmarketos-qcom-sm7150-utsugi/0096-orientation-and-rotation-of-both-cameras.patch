@@ -124,7 +124,7 @@ Rear 270 and front 90 it is.
 +		 * camera, which is exactly the difference between 90 and 270.
 +		 */
 +		rotation = <270>;
-+		orientation = <1>;	/* trasera */
++		orientation = <1>;	/* rear */
 +
  		reset-gpios = <&tlmm 25 GPIO_ACTIVE_LOW>;
  		pinctrl-names = "default";

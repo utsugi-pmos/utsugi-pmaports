@@ -628,7 +628,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	{ 0xB07C, 0x02 },
 +};
 +
-+/* Modo 8000x6000, RAW10, 2 lanes D-PHY.
++/* Mode 8000x6000, RAW10, 2 D-PHY lanes.
 + *
 + * THE ONLY CHANGE from the source table: the two multipliers of the
 + * PLL drop from 360/416 to 294/340. The source one leaves the link at 1248 MHz,
@@ -639,8 +639,8 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 + *
 + * BOTH are lowered and in the same proportion on purpose. Lowering only the
 + * output one would leave the sensor producing pixels faster than it can
-+ * push them out, and that does not give an error: it gives a corrupt image, which is much worse to
-+ * diagnosticar.
++ * push them out, and that does not give an error: it gives a corrupt image,
++ * which is much harder to diagnose.
 + *
 + * The price is about 4.2 frames per second at 48 megapixels. */
 +static const struct imx682_reg imx682_8000x6000[] = {
@@ -738,8 +738,8 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +struct imx682_mode {
 +	u32 width;
 +	u32 height;
-+	u32 hts;		/* line_length_pck, registro 0x0342 */
-+	u32 vts_def;		/* frame_length_lines, registro 0x0340 */
++	u32 hts;		/* line_length_pck, register 0x0342 */
++	u32 vts_def;		/* frame_length_lines, register 0x0340 */
 +	u32 vts_min;
 +	const struct imx682_reg *regs;
 +	unsigned int num_regs;
@@ -932,7 +932,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	/*
 +	 * LINK_FREQ and PIXEL_RATE are not optional: without them the CSIPHY of
 +	 * CAMSS aborts with "Cannot get CSI2 transmitter's link frequency" and
-+	 * no llega a configurarse nada.
++	 * nothing gets configured at all.
 +	 */
 +	s->link_freq = v4l2_ctrl_new_int_menu(h, NULL, V4L2_CID_LINK_FREQ,
 +					      ARRAY_SIZE(imx682_link_freqs) - 1,
@@ -1114,14 +1114,14 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +		ret = imx682_read(s, IMX682_REG_CHIP_ID + 1, &lo);
 +	if (ret)
 +		return dev_err_probe(&s->client->dev, ret,
-+				     "no contesta en 0x%02x\n", s->client->addr);
++				     "nobody answers at 0x%02x\n", s->client->addr);
 +
 +	if (((hi << 8) | lo) != IMX682_CHIP_ID)
 +		return dev_err_probe(&s->client->dev, -ENODEV,
 +				     "it answers, but says 0x%04x and not 0x%04x\n",
 +				     (hi << 8) | lo, IMX682_CHIP_ID);
 +
-+	dev_info(&s->client->dev, "IMX682 detectado (0x%04x)\n", IMX682_CHIP_ID);
++	dev_info(&s->client->dev, "IMX682 detected (0x%04x)\n", IMX682_CHIP_ID);
 +	return 0;
 +}
 +
@@ -1153,13 +1153,13 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	s->dovdd = devm_regulator_get(dev, "dovdd");
 +	if (IS_ERR(s->dovdd))
-+		return dev_err_probe(dev, PTR_ERR(s->dovdd), "falta dovdd\n");
++		return dev_err_probe(dev, PTR_ERR(s->dovdd), "dovdd missing\n");
 +	s->avdd = devm_regulator_get(dev, "avdd");
 +	if (IS_ERR(s->avdd))
-+		return dev_err_probe(dev, PTR_ERR(s->avdd), "falta avdd\n");
++		return dev_err_probe(dev, PTR_ERR(s->avdd), "avdd missing\n");
 +	s->dvdd = devm_regulator_get(dev, "dvdd");
 +	if (IS_ERR(s->dvdd))
-+		return dev_err_probe(dev, PTR_ERR(s->dvdd), "falta dvdd\n");
++		return dev_err_probe(dev, PTR_ERR(s->dvdd), "dvdd missing\n");
 +
 +	v4l2_i2c_subdev_init(&s->sd, client, &imx682_subdev_ops);
 +	s->sd.internal_ops = &imx682_internal_ops;
@@ -1167,7 +1167,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +
 +	ret = imx682_power_on(dev);
 +	if (ret)
-+		return dev_err_probe(dev, ret, "no enciende\n");
++		return dev_err_probe(dev, ret, "does not power up\n");
 +
 +	ret = imx682_identify(s);
 +	if (ret)
@@ -1372,12 +1372,12 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 + * bit of each LDO is its own index within 0x0E. They are generated with a
 + * macro so that correspondence is written down only once: splitting it into
 + * four hand-written structs is exactly where a typo slips in that powers the
-+ * carril equivocado.
++ * wrong rail.
 + */
-+#define WL2866D_LDO(_id, _nombre, _min, _paso)				\
++#define WL2866D_LDO(_id, _name, _min, _step)				\
 +	[_id] = {							\
-+		.name		= _nombre,				\
-+		.of_match	= of_match_ptr(_nombre),		\
++		.name		= _name,				\
++		.of_match	= of_match_ptr(_name),		\
 +		.regulators_node = of_match_ptr("regulators"),		\
 +		.id		= _id,					\
 +		.type		= REGULATOR_VOLTAGE,			\
@@ -1385,7 +1385,7 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 +		.ops		= &wl2866d_ops,				\
 +		.n_voltages	= WL2866D_N_VOLTAGES,			\
 +		.min_uV		= _min,					\
-+		.uV_step	= _paso,				\
++		.uV_step	= _step,				\
 +		.vsel_reg	= WL2866D_REG_DVDD1 + (_id),		\
 +		.vsel_mask	= 0xff,					\
 +		.enable_reg	= WL2866D_REG_ENABLE,			\
@@ -1441,14 +1441,14 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 +	 * There is no ID register, so the only reliable
 +	 * thing is used: the DVDD1 voltage register reads 0x64 from the factory.
 +	 * It is weak as an ID, but it tells "the chip is not there" from
-+	 * "the chip is there and somebody already touched it" apart, which is what matters at
-+	 * depurar.
++	 * "the chip is there and somebody already touched it" apart, which is what
++	 * matters when debugging.
 +	 */
 +	ret = regmap_read(regmap, WL2866D_REG_DVDD1, &val);
 +	if (ret)
-+		return dev_err_probe(dev, ret, "no contesta en 0x%02x\n", client->addr);
++		return dev_err_probe(dev, ret, "nobody answers at 0x%02x\n", client->addr);
 +
-+	dev_info(dev, "presente, DVDD1 arranca en 0x%02x (%u uV)\n", val,
++	dev_info(dev, "present, DVDD1 starts at 0x%02x (%u uV)\n", val,
 +		 WL2866D_DVDD_MIN_UV + val * WL2866D_DVDD_STEP_UV);
 +
 +	config.dev = dev;

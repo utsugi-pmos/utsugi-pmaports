@@ -16,27 +16,29 @@
 # needed.
 set -eu
 
-ARCHIVO=/var/log/blackbox
+ARCHIVE=/var/log/blackbox
 [ "$(id -u)" = 0 ] || exec sudo "$0" "$@"
 
 # The most recent trace: first the archive itself, and if nothing has been
 # archived yet, whatever systemd-pstore has just left.
 last() {
-	d="$(ls -1d "$ARCHIVO"/*/ 2>/dev/null | sort | tail -1)"
+	d="$(ls -1d "$ARCHIVE"/*/ 2>/dev/null | sort | tail -1)"
 	[ -n "$d" ] && { printf '%s\n' "${d%/}"; return 0; }
 	[ -e /var/lib/systemd/pstore/pmsg-ramoops-0 ] && { echo /var/lib/systemd/pstore; return 0; }
 	return 1
 }
 
-# The DISK heartbeat ('last-latido') is the good source: on this phone it is the
+# The DISK heartbeat ('last-heartbeat') is the good source: on this phone it is the
 # only one that survives. The pmsg one carries the whole history, but it only
 # appears the day ramoops works here -- see the header of blackbox-heartbeat.
 beats_of() {
 	grep -a '^blackbox ' "$1/pmsg-ramoops-0" 2>/dev/null || true
-	grep -a '^blackbox ' "$1/last-latido" 2>/dev/null || true
+	# Archives made before 2026-09-11 carry the file under its old name.
+	grep -a '^blackbox ' "$1/last-heartbeat" 2>/dev/null \
+		|| grep -a '^blackbox ' "$1/last-latido" 2>/dev/null || true
 }
 
-campo() {  # campo <line> <name>  ->  the value, or empty
+field() {  # field <line> <name>  ->  the value, or empty
 	printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1
 }
 
@@ -57,8 +59,8 @@ case "${1:-}" in
 	dd if="$FREEZE_DEV" bs=1M count=1 2>/dev/null | tr -d '\000' | tail -n +2
 	exit 0 ;;
 --lista)
-	echo "Traces saved in $ARCHIVO:"
-	for d in "$ARCHIVO"/*/; do
+	echo "Traces saved in $ARCHIVE:"
+	for d in "$ARCHIVE"/*/; do
 		[ -d "$d" ] || { echo "  (none yet)"; break; }
 		n="$(beats_of "${d%/}" | wc -l)"
 		printf '  %-20s %s heartbeats%s\n' "$(basename "$d")" "$n" \
@@ -80,7 +82,8 @@ case "${1:-}" in
 	# 'Finished', not 'Started': for a oneshot service systemd logs
 	# "Starting"/"Finished", so counting "Started" always gave zero.
 	printf 'sign of life right now          %s\n' \
-		"$(cut -d' ' -f2 /var/log/blackbox/latido 2>/dev/null || echo 'none yet')"
+		"$(cut -d' ' -f2 /var/log/blackbox/heartbeat 2>/dev/null \
+			|| cut -d' ' -f2 /var/log/blackbox/latido 2>/dev/null || echo 'none yet')"
 	printf 'heartbeats in this boot         %s\n' \
 		"$(journalctl -u blackbox-heartbeat.service -b --no-pager 2>/dev/null | grep -c Finished || true)"
 	exit 0 ;;
@@ -105,16 +108,16 @@ if [ -z "$ult" ]; then
 	echo "No heartbeats. Either the black box was not in place on that boot, or the"
 	echo "message area filled up and wrapped around."
 else
-	t="$(campo "$ult" t)"
+	t="$(field "$ult" t)"
 	boot="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
 	# The line is: blackbox <date> t=... up=...  -- the date is the 2nd field.
 	echo "Last heartbeat:  $(printf '%s\n' "$ult" | cut -d' ' -f2)"
-	echo "  the phone had been on for $(campo "$ult" up) s"
-	echo "  screen $(campo "$ult" luz), suspends $(campo "$ult" susp) (good/bad), charge $(campo "$ult" load)"
+	echo "  the phone had been on for $(field "$ult" up) s"
+	echo "  screen $(field "$ult" luz), suspends $(field "$ult" susp) (good/bad), charge $(field "$ult" load)"
 	if [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null; then
-		hueco=$((boot - t))
-		if [ "$hueco" -gt 0 ]; then
-			echo "  and the phone did not boot again until $((hueco / 60)) min later"
+		gap=$((boot - t))
+		if [ "$gap" -gt 0 ]; then
+			echo "  and the phone did not boot again until $((gap / 60)) min later"
 		fi
 	fi
 fi

@@ -45,8 +45,8 @@ be looked for on another bus.
 +		 * -ofilm_dw9800- but scanning the CCI bus with the camera
 +		 * powered only the sensor (0x1a) and the EEPROM (0x50) answer.
 +		 * An unpowered chip does not answer, and this is the only camera
-+		 * 2.8 V rail that was still off: cam_avdd1 and cam_avdd2 are already
-+		 * salen powered_on de fabrica.
++		 * 2.8 V rail that was still off: cam_avdd1 and cam_avdd2 already
++		 * come up powered_on from the factory.
 +		 *
 +		 * It is always enabled because its GPIO is owned by the kernel and there is no
 +		 * way to move it from userspace. It is temporary: if

@@ -57,7 +57,7 @@ physically cannot be disconnected, and here it can.
 
 +/*
 + * camss_first_sensor_of_csiphy - whether this CSIPHY does not yet have any
-+ * sensor enlazado
++ * sensor linked to it
 + *
 + * On phones with more cameras than CSI inputs, two sensors share a CSIPHY
 + * through a MIPI switch. Only the first one is left enabled; the second one is

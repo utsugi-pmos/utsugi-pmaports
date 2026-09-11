@@ -27,11 +27,11 @@ SYS_FB = "/sys/class/graphics/fb0"
 QG = "/sys/class/power_supply/qcom_qg"
 
 BACKGROUND = (0, 0, 0)
-BORDE = (150, 150, 150)
+EDGE = (150, 150, 150)
 CHARGING = (76, 175, 80)     # green
 FULL = (255, 255, 255)
 LOW = (229, 115, 115)       # soft red below 15 %
-RAYO = (20, 20, 20)          # the bolt is cut out over the fill
+BOLT = (20, 20, 20)          # the bolt is cut out over the fill
 
 
 def console_mode(mode):
@@ -54,12 +54,12 @@ def console_mode(mode):
         os.close(fd)
 
 
-def read_value(path, por_defecto=""):
+def read_value(path, fallback=""):
     try:
         with open(path) as f:
             return f.read().strip()
     except OSError:
-        return por_defecto
+        return fallback
 
 
 def geometria():
@@ -96,29 +96,29 @@ class Canvas:
             i = (fy * self.width + x0) * 4
             self.data[i:i + len(row)] = row
 
-    def frame(self, x, y, width, height, grosor, color):
-        self.rect(x, y, width, grosor, color)
-        self.rect(x, y + height - grosor, width, grosor, color)
-        self.rect(x, y, grosor, height, color)
-        self.rect(x + width - grosor, y, grosor, height, color)
+    def frame(self, x, y, width, height, thickness, color):
+        self.rect(x, y, width, thickness, color)
+        self.rect(x, y + height - thickness, width, thickness, color)
+        self.rect(x, y, thickness, height, color)
+        self.rect(x + width - thickness, y, thickness, height, color)
 
-    def poligono(self, puntos, color):
+    def poligono(self, points, color):
         """Scanline fill. Used by the bolt, which is not a rectangle."""
-        if not puntos:
+        if not points:
             return
-        ys = [p[1] for p in puntos]
+        ys = [p[1] for p in points]
         for fy in range(max(0, min(ys)), min(self.height, max(ys) + 1)):
-            cortes = []
-            for i in range(len(puntos)):
-                x1, y1 = puntos[i]
-                x2, y2 = puntos[(i + 1) % len(puntos)]
+            cuts = []
+            for i in range(len(points)):
+                x1, y1 = points[i]
+                x2, y2 = points[(i + 1) % len(points)]
                 if y1 == y2:
                     continue
                 if min(y1, y2) <= fy < max(y1, y2):
-                    cortes.append(x1 + (fy - y1) * (x2 - x1) / (y2 - y1))
-            cortes.sort()
-            for i in range(0, len(cortes) - 1, 2):
-                self.rect(int(cortes[i]), fy, int(cortes[i + 1]) - int(cortes[i]) + 1, 1, color)
+                    cuts.append(x1 + (fy - y1) * (x2 - x1) / (y2 - y1))
+            cuts.sort()
+            for i in range(0, len(cuts) - 1, 2):
+                self.rect(int(cuts[i]), fy, int(cuts[i + 1]) - int(cuts[i]) + 1, 1, color)
 
     def dump(self, fb, stride):
         width = self.width * 4
@@ -129,47 +129,47 @@ class Canvas:
 
 # Seven-segment digits: no fonts to install, and at this size they can be read
 # from across the room, which is how a charging phone is looked at.
-SEGMENTOS = {
+SEGMENTS = {
     "0": "abcdef", "1": "bc", "2": "abged", "3": "abgcd", "4": "fgbc",
     "5": "afgcd", "6": "afgedc", "7": "abc", "8": "abcdefg", "9": "abcdfg",
 }
 
 
-def cifra(canvas, x, y, width, height, grosor, c, color):
-    on = SEGMENTOS.get(c, "")
-    medio = y + (height - grosor) // 2
-    if "a" in on: canvas.rect(x, y, width, grosor, color)
-    if "g" in on: canvas.rect(x, medio, width, grosor, color)
-    if "d" in on: canvas.rect(x, y + height - grosor, width, grosor, color)
-    if "f" in on: canvas.rect(x, y, grosor, height // 2, color)
-    if "b" in on: canvas.rect(x + width - grosor, y, grosor, height // 2, color)
-    if "e" in on: canvas.rect(x, medio, grosor, height - height // 2, color)
-    if "c" in on: canvas.rect(x + width - grosor, medio, grosor, height - height // 2, color)
+def figure(canvas, x, y, width, height, thickness, c, color):
+    on = SEGMENTS.get(c, "")
+    middle = y + (height - thickness) // 2
+    if "a" in on: canvas.rect(x, y, width, thickness, color)
+    if "g" in on: canvas.rect(x, middle, width, thickness, color)
+    if "d" in on: canvas.rect(x, y + height - thickness, width, thickness, color)
+    if "f" in on: canvas.rect(x, y, thickness, height // 2, color)
+    if "b" in on: canvas.rect(x + width - thickness, y, thickness, height // 2, color)
+    if "e" in on: canvas.rect(x, middle, thickness, height - height // 2, color)
+    if "c" in on: canvas.rect(x + width - thickness, middle, thickness, height - height // 2, color)
 
 
-def porciento(canvas, x, y, height, grosor, color):
+def porciento(canvas, x, y, height, thickness, color):
     d = height // 3
-    canvas.frame(x, y, d, d, grosor, color)
-    canvas.frame(x + height - d, y + height - d, d, d, grosor, color)
-    canvas.poligono([(x + height - grosor, y), (x + height, y),
-                     (x + grosor, y + height), (x, y + height)], color)
+    canvas.frame(x, y, d, d, thickness, color)
+    canvas.frame(x + height - d, y + height - d, d, d, thickness, color)
+    canvas.poligono([(x + height - thickness, y), (x + height, y),
+                     (x + thickness, y + height), (x, y + height)], color)
 
 
-def numero(canvas, text, cx, y, height, color):
-    grosor = max(6, height // 9)
+def number(canvas, text, cx, y, height, color):
+    thickness = max(6, height // 9)
     width = int(height * 0.55)
-    hueco = grosor * 2
-    total = len(text) * width + (len(text) - 1) * hueco
+    gap = thickness * 2
+    total = len(text) * width + (len(text) - 1) * gap
     x = cx - total // 2
     for c in text:
         if c == "%":
-            porciento(canvas, x, y + height // 3, height * 2 // 3, grosor, color)
+            porciento(canvas, x, y + height // 3, height * 2 // 3, thickness, color)
         else:
-            cifra(canvas, x, y, width, height, grosor, c, color)
-        x += width + hueco
+            figure(canvas, x, y, width, height, thickness, c, color)
+        x += width + gap
 
 
-def limpiar(fb, height, stride):
+def clean(fb, height, stride):
     negro = bytes(stride)
     fb.seek(0)
     for _ in range(height):
@@ -189,38 +189,38 @@ def main():
     color = CHARGING if status == "Charging" else (LOW if cap < 15 else FULL)
 
     # The drawing box, centered. Outside it the screen stays black.
-    caja_w, caja_h = 480, 1120
-    x0, y0 = (width - caja_w) // 2, (height - caja_h) // 2
-    L = Canvas(x0, y0, caja_w, caja_h)
+    box_w, box_h = 480, 1120
+    x0, y0 = (width - box_w) // 2, (height - box_h) // 2
+    L = Canvas(x0, y0, box_w, box_h)
 
     # Battery: the cap on top and the body below.
-    pico_w, pico_h = 120, 30
-    cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h = 50, pico_h, 380, 760
-    grosor = 8
-    L.rect((caja_w - pico_w) // 2, 0, pico_w, pico_h, BORDE)
-    L.frame(cuerpo_x, cuerpo_y, cuerpo_w, cuerpo_h, grosor, BORDE)
+    spout_w, spout_h = 120, 30
+    body_x, body_y, body_w, body_h = 50, spout_h, 380, 760
+    thickness = 8
+    L.rect((box_w - spout_w) // 2, 0, spout_w, spout_h, EDGE)
+    L.frame(body_x, body_y, body_w, body_h, thickness, EDGE)
 
     # Fill, from bottom to top. A margin is left so it does not touch the
     # frame: flush against it, it reads as a single block and stops looking like a battery.
-    margen = grosor + 12
-    hueco_x = cuerpo_x + margen
-    hueco_y = cuerpo_y + margen
-    hueco_w = cuerpo_w - 2 * margen
-    hueco_h = cuerpo_h - 2 * margen
-    relleno = int(hueco_h * cap / 100)
-    if relleno > 0:
-        L.rect(hueco_x, hueco_y + hueco_h - relleno, hueco_w, relleno, color)
+    margin = thickness + 12
+    gap_x = body_x + margin
+    gap_y = body_y + margin
+    gap_w = body_w - 2 * margin
+    gap_h = body_h - 2 * margin
+    fill = int(gap_h * cap / 100)
+    if fill > 0:
+        L.rect(gap_x, gap_y + gap_h - fill, gap_w, fill, color)
 
     # The bolt, only while charging: it is what tells "plugged in" apart from
     # "powered on with battery". It is drawn in the background color, cut out.
     if status == "Charging":
-        cx = caja_w // 2
-        cy = cuerpo_y + cuerpo_h // 2
+        cx = box_w // 2
+        cy = body_y + body_h // 2
         L.poligono([(cx + 55, cy - 150), (cx - 15, cy + 20), (cx + 20, cy + 20),
                     (cx - 55, cy + 150), (cx + 5, cy - 10), (cx - 30, cy - 10)],
-                   RAYO if relleno > cuerpo_h // 2 else color)
+                   BOLT if fill > body_h // 2 else color)
 
-    numero(L, f"{cap}%", caja_w // 2, cuerpo_y + cuerpo_h + 60, 150, BORDE)
+    number(L, f"{cap}%", box_w // 2, body_y + body_h + 60, 150, EDGE)
 
     if "--console_mode" in sys.argv:
         console_mode(KD_TEXT)
@@ -228,11 +228,11 @@ def main():
     console_mode(KD_GRAPHICS)
 
     with open(FB, "r+b", buffering=0) as fb:
-        if "--solo-limpiar" in sys.argv:
-            limpiar(fb, height, stride)
+        if "--clean-only" in sys.argv or "--solo-limpiar" in sys.argv:
+            clean(fb, height, stride)
             return
-        if "--limpiar" in sys.argv:
-            limpiar(fb, height, stride)
+        if "--clean" in sys.argv or "--limpiar" in sys.argv:
+            clean(fb, height, stride)
         L.dump(fb, stride)
 
 

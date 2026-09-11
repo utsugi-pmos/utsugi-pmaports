@@ -42,10 +42,10 @@ import dbus
 import dbus.mainloop.glib
 from gi.repository import GLib
 
-# NOTICE_SOUND since 2026-09-11; SONIDO_AVISO is the name the unit and whoever
+# NOTICE_SOUND since 2026-09-11; NOTIFICATION_SOUND is the name the unit and whoever
 # set it in their own drop-in still use, so both are read.
 SOUND = os.environ.get("NOTICE_SOUND") or os.environ.get(
-    "SONIDO_AVISO", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"
+    "NOTIFICATION_SOUND", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"
 )
 # Seconds between sounds: a burst of messages must not be a machine gun.
 WAIT = 2.0
@@ -60,7 +60,7 @@ if os.path.getsize(SOUND) < 1024:
 last = 0.0
 
 
-def al_notificar(bus, message):
+def on_notification(bus, message):
     global last
     if message.get_member() != "Notify":
         return
@@ -84,7 +84,7 @@ dbus.mainloop.glib.DBusGMainLoop(set_as_default=True)
 bus = dbus.SessionBus()
 
 # Seeing calls bound for ANOTHER destination requires asking for it explicitly.
-regla = (
+rule = (
     "type='method_call',interface='org.freedesktop.Notifications',member='Notify'"
 )
 bus.call_blocking(
@@ -93,9 +93,9 @@ bus.call_blocking(
     "org.freedesktop.DBus.Monitoring",
     "BecomeMonitor",
     "asu",
-    ([regla], dbus.UInt32(0)),
+    ([rule], dbus.UInt32(0)),
 )
-bus.add_message_filter(al_notificar)
+bus.add_message_filter(on_notification)
 
 print(f"listening for notifications; they will sound with {os.path.basename(SOUND)}", flush=True)
 GLib.MainLoop().run()

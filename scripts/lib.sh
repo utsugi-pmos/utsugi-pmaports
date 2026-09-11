@@ -117,7 +117,7 @@ apkbuild_version() {
 # actually available; otherwise the normal interactive sudo is left alone.
 setup_sudo() {
 	sudo -n true 2>/dev/null && return 0
-	for f in "$REPO/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credenciales.local"; do
+	for f in "$REPO/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credentials.local"; do
 		if [ -f "$f" ] && grep -q '^PMB_PW=' "$f"; then
 			SUDO_ASKPASS="$REPO/scripts/askpass"
 			PMB_SUDO="$REPO/scripts/sudo-wrap"

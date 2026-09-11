@@ -137,7 +137,7 @@ point 3 is for.
 -	dev_info(dev, "registering topologies: %u bytes from %s (adsp %s)\n",
 -		 size, fw_name,
 +
-+	/* Marco ajustable, ver topo_offset / topo_delta. */
++	/* Adjustable frame, see topo_offset / topo_delta. */
 +	if (topo_offset < 0 || (u32)topo_offset > size ||
 +	    (int)size + topo_delta <= 0) {
 +		dev_err(dev, "invalid frame: offset %d delta %d over %u bytes\n",
@@ -148,7 +148,7 @@ point 3 is for.
 +
 +	dev_info(dev, "registering topologies: %u bytes from %s (frame %+d %+d, adsp %s)\n",
 +		 size, fw_name, topo_offset, topo_delta,
- 		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
+ 		 q6core_is_adsp_ready() ? "ready" : "NOT READY YET");
 -	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);
 +	ret = q6core_register_topologies(dev, size + topo_delta,
 +					 fw->data + topo_off + topo_offset);

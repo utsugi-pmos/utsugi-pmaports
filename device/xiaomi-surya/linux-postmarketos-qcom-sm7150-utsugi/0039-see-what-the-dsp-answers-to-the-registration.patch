@@ -44,7 +44,7 @@ Two traces are added:
  	size = *(const u32 *) (fw->data + topo_off);
 +	dev_info(dev, "registering topologies: %u bytes from %s (adsp %s)\n",
 +		 size, fw_name,
-+		 q6core_is_adsp_ready() ? "listo" : "TODAVIA NO LISTO");
++		 q6core_is_adsp_ready() ? "ready" : "NOT READY YET");
  	ret = q6core_register_topologies(dev, size, fw->data + topo_off + 4);
  	if (ret < 0)
  		goto release_fw;

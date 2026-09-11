@@ -229,7 +229,7 @@ caused nor when it was caused.
 +	 * Once we know who is who, this node is replaced by the real
 +	 * sensors and the module is deleted.
 +	 */
-+	buscador@7f {
++	scanner@7f {
 +		compatible = "xiaomi,surya-cam-scan";
 +		reg = <0x7f>;
 +
@@ -344,8 +344,8 @@ caused nor when it was caused.
 +	};
 +
 +	/* MCLK2 lives on gpio15: the SoC pin map puts cam_mclk on
-+	 * gpio 13, 14 and 15, and the first two already belong to the front and the
-+	 * trasera. */
++	 * gpio 13, 14 and 15, and the first two already belong to the front and
++	 * the rear one. */
 +	cam_mclk3_active: cam-mclk3-active-state {
 +		pins = "gpio16";
 +		function = "cam_mclk";
@@ -476,10 +476,10 @@ caused nor when it was caused.
 +/* Output size at full resolution. It serves as a second confirmation: the
 + * Hi-1337 gives 0x1070 x 0x0c30, that is 4208 x 3120, exactly what the
 + * modes extracted from the factory blob say. */
-+#define REG_ANCHO	0x0b12
++#define REG_WIDTH	0x0b12
 +#define REG_ALTO	0x0b14
 +
-+static int leer16(struct i2c_client *cl, u16 addr, u16 reg, u16 *val)
++static int read16(struct i2c_client *cl, u16 addr, u16 reg, u16 *val)
 +{
 +	u8 buf[2] = { reg >> 8, reg & 0xff };
 +	u8 out[2];
@@ -494,7 +494,7 @@ caused nor when it was caused.
 +	return 0;
 +}
 +
-+static bool contesta(struct i2c_client *cl, u16 addr)
++static bool answers(struct i2c_client *cl, u16 addr)
 +{
 +	u8 b;
 +	struct i2c_msg m = { .addr = addr, .flags = I2C_M_RD, .len = 1, .buf = &b };
@@ -521,7 +521,7 @@ caused nor when it was caused.
 + * from userspace you can only get there with i2cget/i2cdump, which are 8
 + * bit. But the sensors on this bus speak with 16-bit registers. That is,
 + * EVERY 16-bit hypothesis cost a kernel rebuild: ten minutes per
-+ * pregunta.
++ * question.
 + *
 + * With this, while `hold_it` holds rails and clocks, you ask from
 + * outside without recompiling anything:
@@ -560,9 +560,9 @@ caused nor when it was caused.
 +		}
 +	}
 +
-+	ret = leer16(cl, addr, reg, &leido);
++	ret = read16(cl, addr, reg, &leido);
 +	if (ret)
-+		dev_info(&cl->dev, "probe: %02x/%04x no contesta\n", addr, reg);
++		dev_info(&cl->dev, "probe: %02x/%04x does not answer\n", addr, reg);
 +	else
 +		dev_info(&cl->dev, "probe: %02x/%04x = %04x\n", addr, reg, leido);
 +	return 0;
@@ -589,17 +589,17 @@ caused nor when it was caused.
 +	for (a = 0x08; a <= 0x77; a++) {
 +		u16 hi1337 = 0, hi846 = 0, smia = 0, width = 0, height = 0;
 +
-+		if (a == cl->addr || !contesta(cl, a))
++		if (a == cl->addr || !answers(cl, a))
 +			continue;
 +
 +		found++;
-+		leer16(cl, a, REG_ID_HI1337, &hi1337);
-+		leer16(cl, a, REG_ID_HI846, &hi846);
-+		leer16(cl, a, REG_ID_SMIA, &smia);
-+		leer16(cl, a, REG_ANCHO, &width);
-+		leer16(cl, a, REG_ALTO, &height);
++		read16(cl, a, REG_ID_HI1337, &hi1337);
++		read16(cl, a, REG_ID_HI846, &hi846);
++		read16(cl, a, REG_ID_SMIA, &smia);
++		read16(cl, a, REG_WIDTH, &width);
++		read16(cl, a, REG_ALTO, &height);
 +		dev_info(&cl->dev,
-+			 "%s: 0x%02x contesta  hi1337(0x0716)=%04x hi846(0x0f16)=%04x smia(0x0000)=%04x  %ux%u\n",
++			 "%s: 0x%02x answers  hi1337(0x0716)=%04x hi846(0x0f16)=%04x smia(0x0000)=%04x  %ux%u\n",
 +			 when, a, hi1337, hi846, smia, width, height);
 +		if (hi1337 == 0x1337)
 +			dev_info(&cl->dev, "%s: 0x%02x IS THE Hi-1337, the wide-angle\n",
@@ -649,13 +649,13 @@ caused nor when it was caused.
 +	 * involved, and it hung the boot. */
 +	/* 19.2 MHz. The generic QRD device tree says 24 MHz, but the
 +	 * factory file of THIS module -powerSetting of
-+	 * com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin- pide
++	 * com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin- asks for
 +	 * 0x0124f800 = 19200000. The module one wins. */
 +	for (i = 0; i < (unsigned int)nclocks; i++) {
 +		ret = clk_set_rate(clocks[i].clk, 19200000);
 +		if (ret)
 +			return dev_err_probe(&cl->dev, ret,
-+					     "%s no acepta 19,2 MHz\n",
++					     "%s does not accept 19.2 MHz\n",
 +					     clocks[i].id);
 +	}
 +
@@ -686,7 +686,7 @@ caused nor when it was caused.
 +
 +	ret = regulator_bulk_enable(ARRAY_SIZE(surya_supplies), supplies);
 +	if (ret)
-+		return dev_err_probe(&cl->dev, ret, "no enciende\n");
++		return dev_err_probe(&cl->dev, ret, "does not power up\n");
 +
 +	ret = clk_bulk_prepare_enable(nclocks, clocks);
 +	if (ret) {
@@ -712,7 +712,7 @@ caused nor when it was caused.
 +	 * The first gpio in the list is the reset, already found (tlmm 24). The
 +	 * rest are standby candidates.
 +	 */
-+	sweep(cl, "en reset, referencia");
++	sweep(cl, "in reset, reference");
 +
 +	reset_pulse(resets[0]);
 +	sweep(cl, "reset pulsed, no standby");

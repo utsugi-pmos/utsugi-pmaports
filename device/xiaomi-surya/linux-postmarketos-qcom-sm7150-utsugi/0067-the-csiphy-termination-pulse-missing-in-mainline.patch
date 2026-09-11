@@ -80,7 +80,7 @@ recompiling.
 +	 * lane), so that one was already there; 0x0884 does not appear even once.
 +	 *
 +	 * Adjustable at runtime to be able to confirm the attribution without
-+	 * recompilar.
++	 * recompiling.
 +	 */
 +	if (termination_pulse)
 +		writel_relaxed(0x01, csiphy->base +

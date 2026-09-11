@@ -45,12 +45,12 @@ It is the first measurement that separates those two things.
 + * STATUS ones -like the clock lane one- reflect the end, not the transmission.
 + *
 + * That is why the clock lane register read the same transmitting as silent: it
-+ * was being looked at in both cases when there was nothing left. It is a bug in the
-+ * a measurement, not a data point.
++ * was being looked at in both cases when there was nothing left. It is a bug in
++ * the measurement, not a data point.
 + *
 + * With this it can be dumped AT ANY MOMENT from userspace,
 + * with the sensor really transmitting, which is the only way to see if the
-+ * carril de clock llega a entrar en alta speed.
++ * clock lane ever gets into high speed.
 + */
 +static struct csiphy_device *phy_saved;
 +

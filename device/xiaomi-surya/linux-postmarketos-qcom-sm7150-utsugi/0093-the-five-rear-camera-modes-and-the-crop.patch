@@ -448,8 +448,8 @@ dmesg, which is why it carries that message.
  struct imx682_mode {
  	u32 width;
  	u32 height;
- 	u32 hts;		/* line_length_pck, registro 0x0342 */
- 	u32 vts_def;		/* frame_length_lines, registro 0x0340 */
+ 	u32 hts;		/* line_length_pck, register 0x0342 */
+ 	u32 vts_def;		/* frame_length_lines, register 0x0340 */
  	u32 vts_min;
 +	/*
 +	 * Window read from the sensor, in PHYSICAL pixels: registers 0x0346 and
@@ -481,7 +481,7 @@ dmesg, which is why it carries that message.
 +		.vts_def = 1680,
  		.vts_min = 1680,
 +		.crop_top = 864,
-+		.crop_height = 5216,	/* agrupado 4x4 -> 1304 */
++		.crop_height = 5216,	/* binned 4x4 -> 1304 */
 +		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
  		.regs = imx682_2312x1304,
  		.num_regs = ARRAY_SIZE(imx682_2312x1304),
@@ -492,7 +492,7 @@ dmesg, which is why it carries that message.
 +		.vts_def = 1148,
 +		.vts_min = 1148,
 +		.crop_top = 1312,
-+		.crop_height = 4320,	/* agrupado 4x4 -> 1080 */
++		.crop_height = 4320,	/* binned 4x4 -> 1080 */
 +		.link_freq_idx = 3,	/* 520 MHz, PLL x325 */
 +		.regs = imx682_1920x1080,
 +		.num_regs = ARRAY_SIZE(imx682_1920x1080),
@@ -503,7 +503,7 @@ dmesg, which is why it carries that message.
 +		.vts_def = 2218,
 +		.vts_min = 2218,
 +		.crop_top = 1312,
-+		.crop_height = 4320,	/* agrupado 2x2 -> 2160 */
++		.crop_height = 4320,	/* binned 2x2 -> 2160 */
 +		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
 +		.regs = imx682_3840x2160,
 +		.num_regs = ARRAY_SIZE(imx682_3840x2160),
@@ -514,7 +514,7 @@ dmesg, which is why it carries that message.
 +		.vts_def = 3528,
 +		.vts_min = 3528,
 +		.crop_top = 0,
-+		.crop_height = 6944,	/* agrupado 2x2 -> 3472 */
++		.crop_height = 6944,	/* binned 2x2 -> 3472 */
 +		.link_freq_idx = 2,	/* 476,8 MHz, PLL x298 */
 +		.regs = imx682_4624x3472,
 +		.num_regs = ARRAY_SIZE(imx682_4624x3472),
@@ -607,16 +607,16 @@ dmesg, which is why it carries that message.
  }
  
 +/* The mode whose area is closest to what was requested. */
-+static const struct imx682_mode *imx682_mode_mas_cercano(u32 w, u32 h)
++static const struct imx682_mode *imx682_mode_nearest(u32 w, u32 h)
 +{
 +	const struct imx682_mode *best = &imx682_modes[0];
-+	u64 pedida = (u64)w * h;
-+	u64 best_dist = abs_diff((u64)best->width * best->height, pedida);
++	u64 asked = (u64)w * h;
++	u64 best_dist = abs_diff((u64)best->width * best->height, asked);
 +	unsigned int i;
 +
 +	for (i = 1; i < ARRAY_SIZE(imx682_modes); i++) {
 +		const struct imx682_mode *m = &imx682_modes[i];
-+		u64 d = abs_diff((u64)m->width * m->height, pedida);
++		u64 d = abs_diff((u64)m->width * m->height, asked);
 +
 +		if (d < best_dist) {
 +			best_dist = d;
@@ -635,7 +635,7 @@ dmesg, which is why it carries that message.
  
 -	/* A single mode: whatever is asked for is accepted and the one that exists is returned. */
 -	imx682_fill_fmt(s->mode, &fmt->format);
-+	m = imx682_mode_mas_cercano(fmt->format.width, fmt->format.height);
++	m = imx682_mode_nearest(fmt->format.width, fmt->format.height);
 +	imx682_fill_fmt(m, &fmt->format);
  	*v4l2_subdev_state_get_format(state, fmt->pad) = fmt->format;
 +
@@ -718,11 +718,11 @@ dmesg, which is why it carries that message.
 -				link-frequencies = /bits/ 64 <435200000>;
 +				/*
 +				 * One per mode, because each factory mode carries its
-+				 * propio multiplicador de PLL de output:
-+				 *   x237 -> 379,2 MHz   9248x6944
-+				 *   x272 -> 435,2 MHz   3840x2160 y 2312x1304
-+				 *   x298 -> 476,8 MHz   4624x3472
-+				 *   x325 -> 520,0 MHz   1920x1080
++				 * own output PLL multiplier:
++				 *   x237 -> 379.2 MHz   9248x6944
++				 *   x272 -> 435.2 MHz   3840x2160 and 2312x1304
++				 *   x298 -> 476.8 MHz   4624x3472
++				 *   x325 -> 520.0 MHz   1920x1080
 +				 */
 +				link-frequencies = /bits/ 64 <379200000 435200000
 +							     476800000 520000000>;

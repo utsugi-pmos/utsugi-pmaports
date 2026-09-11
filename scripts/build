@@ -47,6 +47,18 @@ for pkg in "$@"; do
 	fi
 
 	if ! pmb build "$pkg" --arch "$ARCH" $FORCE; then
+		# Only a CROSS failure is worth retrying under emulation. Everything
+		# else -- a patch that does not apply, a compile error, a missing
+		# dependency -- fails again the same way, and for the kernel that costs
+		# hours in QEMU instead of the nine minutes it takes cross. It happened
+		# on 2026-09-11: five patches stopped applying and the retry spent the
+		# evening emulating the same failure.
+		if grep -qE 'patches failed to apply|prepare failed' \
+		     "$WORK/log.txt" 2>/dev/null; then
+			red "  $pkg FAILED: the patches do not apply. QEMU would not help."
+			red "  (a patch that ADDS a line is CONTEXT for the ones after it)"
+			rc=1; continue
+		fi
 		# crossdirect loses liblto_plugin.so when the host toolchain and the
 		# chroot's disagree. Building the whole thing inside QEMU is slower but
 		# does not depend on the host compiler at all.

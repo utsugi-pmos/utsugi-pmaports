@@ -272,7 +272,7 @@ without rebooting:
 +	rc = q6core_map_memory(core, phys, map_size);
 +	if (rc) {
 +		dev_err(dev, "could not map the DSP memory: %d\n", rc);
-+		goto libera;
++		goto release;
 +	}
 +
 +	pkt_size = APR_HDR_SIZE + sizeof(*cmd);
@@ -307,7 +307,7 @@ without rebooting:
 +
 +desmapea:
 +	q6core_unmap_memory(core);
-+libera:
++release:
 +	dma_free_coherent(dev, map_size, buf, phys);
 +	return rc < 0 ? rc : 0;
  }

@@ -63,8 +63,8 @@ The delay goes as a parameter in 0644 so it can be swept without recompiling.
 +	 * comes out of the lanes cannot be synchronized by anything.
 +	 *
 +	 * Which is exactly what was measured: the CSIPHY sees the five lanes leave
-+	 * idle at the frame rate and does not capture a single sync of
-+	 * inicio.
++	 * idle at the frame rate and does not capture a single start-of-frame
++	 * sync.
 +	 *
 +	 * Tunable at runtime so it can be swept.
 +	 */

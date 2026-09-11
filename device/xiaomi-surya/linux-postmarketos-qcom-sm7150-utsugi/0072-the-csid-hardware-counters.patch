@@ -70,17 +70,17 @@ single instrument.
 +				 * (cam_ife_csid170.h) declares counters that
 +				 * mainline NEVER reads:
 +				 *
-+				 *   0x160  total de packets received
-+				 *   0x168  total de errores de CRC
++				 *   0x160  total packets received
++				 *   0x168  total CRC errors
 +				 *   0x130  header of the last long packet
-+				 *   0x134  idem, segunda palabra
++				 *   0x134  the same, second word
 +				 *   0x3e0  bytes counted by RDI0
 +				 *
 +				 * They are an instrument INDEPENDENT of the
 +				 * interrupt bits: if the packet counter
 +				 * is not zero, then they do arrive and the failure is
 +				 * further down. And if it is zero, it confirms it by a
-+				 * segundo camino.
++				 * second route.
 +				 */
 +				diag_pkts = readl_relaxed(csid->base + 0x160);
 +				diag_crc = readl_relaxed(csid->base + 0x168);
@@ -88,7 +88,7 @@ single instrument.
 +				diag_pkt_hdr1 = readl_relaxed(csid->base + 0x134);
 +				diag_bytes_rdi0 = readl_relaxed(csid->base + 0x3e0);
 +				dev_info(csid->camss->dev,
-+					 "csid%d contadores: packets=%u crc_malo=%u cabecera=0x%08x/0x%08x bytes_rdi0=%u\n",
++					 "csid%d counters: packets=%u crc_bad=%u header=0x%08x/0x%08x bytes_rdi0=%u\n",
 +					 csid->id, diag_pkts, diag_crc,
 +					 diag_pkt_hdr0, diag_pkt_hdr1,
 +					 diag_bytes_rdi0);

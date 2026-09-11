@@ -80,7 +80,7 @@ forever without anything saying so.
 +				 *
 +				 * The sdm845 -same block, and it captures in mainline-
 +				 * asks for 400 MHz for this same clock. The SM7150
-+				 * admite 19,2 / 300 / 384 / 400 MHz.
++				 * accepts 19.2 / 300 / 384 / 400 MHz.
 +				 */
 +				{ 400000000 },
  				{ 300000000, 384000000, 400000000 },
@@ -112,7 +112,7 @@ forever without anything saying so.
 +				 *
 +				 * The sdm845 -same block, and it captures in mainline-
 +				 * asks for 400 MHz for this same clock. The SM7150
-+				 * admite 19,2 / 300 / 384 / 400 MHz.
++				 * accepts 19.2 / 300 / 384 / 400 MHz.
 +				 */
 +				{ 400000000 },
  				{ 300000000, 384000000, 400000000 },
@@ -148,14 +148,14 @@ forever without anything saying so.
 +			 * and this clock had been on the crystal all along without
 +			 * anything saying so.
 +			 */
-+			unsigned long pedida = cphy_rx_rate > 0 ? cphy_rx_rate :
++			unsigned long asked = cphy_rx_rate > 0 ? cphy_rx_rate :
 +					       (clock->nfreqs ? clock->freq[0] : 0);
 +
-+			if (pedida)
-+				clk_set_rate(clock->clk, pedida);
++			if (asked)
++				clk_set_rate(clock->clk, asked);
 +
-+			dev_info(dev, "%s: pedido %lu Hz, queda %lu Hz\n",
-+				 clock->name, pedida, clk_get_rate(clock->clk));
++			dev_info(dev, "%s: asked %lu Hz, left at %lu Hz\n",
++				 clock->name, asked, clk_get_rate(clock->clk));
  		} else if (clock->nfreqs) {
  			clk_set_rate(clock->clk, clock->freq[0]);
  		}

@@ -42,20 +42,20 @@ BIN="${1:-/usr/libexec/iio-sensor-proxy}"
 
 [ -r "$BIN" ] || { echo "I cannot read $BIN" >&2; exit 1; }
 
-faltan=""
+missing=""
 
 # 0001: the settling timer. Without it, a single sample rotates the
 # screen, and a jolt passes through the OPPOSITE landscape for ~80 ms.
 grep -qa 'waiting for it to settle' "$BIN" \
-	|| faltan="$faltan 0001(settling)"
+	|| missing="$missing 0001(settling)"
 
 # 0002: honor the Claims that arrive before finding the sensor. Without it, after
 # restarting the service NOT ONE sample arrives until something makes KWin
 # release and reclaim again -- turning the screen off and on, for example.
 grep -qa 'Honouring' "$BIN" \
-	|| faltan="$faltan 0002(Claim race)"
+	|| missing="$missing 0002(Claim race)"
 
-[ -z "$faltan" ] || {
-	echo "$BIN does NOT carry the surya's rotation patches; missing:$faltan" >&2
+[ -z "$missing" ] || {
+	echo "$BIN does NOT carry the surya's rotation patches; missing:$missing" >&2
 	exit 1
 }

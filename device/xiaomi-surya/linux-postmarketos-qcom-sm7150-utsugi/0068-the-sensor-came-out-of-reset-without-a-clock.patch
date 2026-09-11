@@ -91,13 +91,13 @@ recompiling.
 +	 * itself, in the powerSetting block, in groups of {type, value, delay}:
 +	 *
 +	 *     STANDBY  0            1 ms
-+	 *     VDIG     encender     1 ms
-+	 *     VIO      encender     1 ms
-+	 *     MCLK     19,2 MHz    15 ms   <-- quince milisegundos de clock
-+	 *     RESET    soltar       5 ms
++	 *     VDIG     turn on      1 ms
++	 *     VIO      turn on      1 ms
++	 *     MCLK     19.2 MHz    15 ms   <-- fifteen milliseconds of clock
++	 *     RESET    release      5 ms
 +	 *
-+	 * Fifteen milliseconds at 19.2 MHz are about 288,000 cycles. We give it
-+	 * damos cero.
++	 * Fifteen milliseconds at 19.2 MHz are about 288,000 cycles. We were
++	 * giving it zero.
 +	 *
 +	 * Both delays are module parameters so they can be swept at runtime.
 +	 */

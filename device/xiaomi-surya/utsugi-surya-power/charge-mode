@@ -22,11 +22,11 @@ RUN=/run/charge-mode
 QG=/sys/class/power_supply/qcom_qg
 CHG=/sys/class/power_supply/pm8150b-charger
 SCREEN_OFF=45   # s without touching anything before turning off the screen
-LARGA=2              # s of button to boot the phone
+LONG_PRESS=2              # s of button to boot the phone
 
 BL=$(ls -d /sys/class/backlight/* 2>/dev/null | head -1)
 MAXBL=$(cat "$BL/max_brightness" 2>/dev/null || echo 4095)
-TENUE=$(( MAXBL / 12 ))
+DIM=$(( MAXBL / 12 ))
 
 KEY=
 for d in /sys/class/input/event*; do
@@ -34,14 +34,14 @@ for d in /sys/class/input/event*; do
 		KEY=/dev/input/$(basename "$d")
 done
 
-brillo() { [ -n "$BL" ] && echo "$1" > "$BL/brightness" 2>/dev/null; true; }
+brightness() { [ -n "$BL" ] && echo "$1" > "$BL/brightness" 2>/dev/null; true; }
 
 # Repainted only when the value changes, or every minute in case the console has
 # written something over it. Repainting each loop would mean launching the Python
 # interpreter every few seconds all night long, to draw the same thing.
 last=
 last_t=0
-pintar() {
+paint() {
 	now=$(date +%s)
 	v="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 	if [ "$v" != "$last" ] || [ $(( now - last_t )) -ge 60 ]; then
@@ -54,10 +54,10 @@ pintar() {
 
 boot_the_phone() {
 	rm -f "$RUN"
-	brillo "$TENUE"
+	brightness "$DIM"
 	# Screen to black before releasing it: otherwise, the drawn battery stays
 	# underneath until the compositor paints its first frame.
-	charge-screen --solo-limpiar 2>/dev/null
+	charge-screen --clean-only 2>/dev/null
 	# Plasma was skipped by condition; now that the file is gone, it starts.
 	systemctl reset-failed plasma-mobile.service 2>/dev/null
 	systemctl start plasma-mobile.service
@@ -67,13 +67,13 @@ boot_the_phone() {
 
 # The screen is ours from here: Plymouth goes and the logo is cleared.
 plymouth quit 2>/dev/null
-charge-screen --limpiar 2>/dev/null
+charge-screen --clean 2>/dev/null
 last_t=$(date +%s)
 last="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 
-brillo "$TENUE"
-despierta=$(date +%s)
-pulsada=0
+brightness "$DIM"
+wakes=$(date +%s)
+pressed=0
 sin_cable=0
 
 while :; do
@@ -85,7 +85,7 @@ while :; do
 	else
 		sin_cable=$(( sin_cable + 1 ))
 		if [ "$sin_cable" -ge 2 ]; then
-			charge-screen --solo-limpiar 2>/dev/null
+			charge-screen --clean-only 2>/dev/null
 			exec systemctl poweroff
 		fi
 	fi
@@ -106,25 +106,25 @@ while :; do
 	[ -z "$ev" ] || {
 		# struct input_event: type and code in one u32, value in the next.
 		set -- $ev
-		tipo=$(( $1 & 65535 )); codigo=$(( $1 >> 16 )); valor=$2
-		if [ "$tipo" -eq 1 ] && [ "$codigo" -eq 116 ]; then
+		kind=$(( $1 & 65535 )); codigo=$(( $1 >> 16 )); valor=$2
+		if [ "$kind" -eq 1 ] && [ "$codigo" -eq 116 ]; then
 			if [ "$valor" -eq 1 ]; then
-				pulsada=$(date +%s)
+				pressed=$(date +%s)
 			elif [ "$valor" -eq 0 ]; then
-				[ "$pulsada" -ne 0 ] &&
-					[ $(( $(date +%s) - pulsada )) -ge "$LARGA" ] &&
+				[ "$pressed" -ne 0 ] &&
+					[ $(( $(date +%s) - pressed )) -ge "$LONG_PRESS" ] &&
 					boot_the_phone
-				pulsada=0
-				brillo "$TENUE"
+				pressed=0
+				brightness "$DIM"
 				last=          # on waking, always repaint
-				despierta=$(date +%s)
+				wakes=$(date +%s)
 			fi
 		fi
 	}
 
-	if [ $(( $(date +%s) - despierta )) -ge "$SCREEN_OFF" ]; then
-		brillo 0
+	if [ $(( $(date +%s) - wakes )) -ge "$SCREEN_OFF" ]; then
+		brightness 0
 	else
-		pintar
+		paint
 	fi
 done

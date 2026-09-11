@@ -97,7 +97,7 @@ recompiling.
 +	 * And in the old versions:
 +	 *
 +	 *     csiphy_common_reg_1_0  ->  {0x081C, 0x02}, {0x0800, 0x01}, {0x0800, 0x00}
-+	 *     csiphy_common_reg_1_1  ->  igual
++	 *     csiphy_common_reg_1_1  ->  the same
 +	 *
 +	 * That is, mainline has a lane table of its own for the SM7150
 +	 * (lane_regs_sm7150) but the common block was left with the values of the

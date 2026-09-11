@@ -41,8 +41,8 @@ This does NOT fix anything: it is for looking.
 +	 * second on the block being measured. The instrument
 +	 * was spoiling the measurement.
 +	 *
-+	 * Here it bothers nobody: the transmission has already finished and the state
-+	 * sigue enclavado.
++	 * Here it bothers nobody: the transmission has already finished and the
++	 * state is still latched.
 +	 */
 +	for (i = 0; i < 11; i++)
 +		diag_phy_state[i] =

@@ -27,7 +27,7 @@ of data arrives). The exact pattern is what is missing.
  MODULE_PARM_DESC(readback_registers,
  	"1 = read the CSIPHY registers back after configuring it and report the ones that do not match.");
  
-+static const u8 patron_fabricante[11] = {
++static const u8 vendor_pattern[11] = {
 +	0xFF, 0xFF, 0xFB, 0xFF, 0x7F, 0xFF, 0xFF, 0xEF, 0xFF, 0xFF, 0xFF
 +};
 +
@@ -61,7 +61,7 @@ of data arrives). The exact pattern is what is missing.
 +		u8 v;
 +
 +		if (unmask == 2)
-+			v = patron_fabricante[i - 11];
++			v = vendor_pattern[i - 11];
 +		else if (unmask)
 +			v = 0xff;
 +		else

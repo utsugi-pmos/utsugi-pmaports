@@ -121,14 +121,14 @@ the ultra-wide has its own path.
 +    // exposes neither focal length nor field of view. Of this phone's
 +    // cameras only Model and Location are known, and there are TWO rear ones. The list
 +    // order is no good either: it changes between boots.
-+    readonly property string nodoGranAngular: "camera@21"
-+    readonly property string nodoPrincipal: "camera@1a"
++    readonly property string wideAngleNode: "camera@21"
++    readonly property string mainNode: "camera@1a"
 +
 +    // How much wider the wide angle sees. PROVISIONAL AND UNMEASURED: it is the
 +    // field of view ratio between the two rear cameras and libcamera does not
 +    // expose it. See camera/measure-wide-factor.
-+    readonly property real factorGranAngular: 0.6
-+    readonly property real zoomMaximo: 8.0
++    readonly property real wideAngleFactor: 0.6
++    readonly property real zoomMax: 8.0
 +
 +    // Margin for comparing against 1x.
 +    //
@@ -140,7 +140,7 @@ the ultra-wide has its own path.
 +    // The values the zoom snaps to: the wide angle limit and the
 +    // integers. They are the ones people look for -"give me 2x"- and the ones the ruler
 +    // labels, so the number and the tick always match.
-+    readonly property var topes: [factorGranAngular, 1, 2, 3, 4, 5, 6, 7, 8]
++    readonly property var stops: [wideAngleFactor, 1, 2, 3, 4, 5, 6, 7, 8]
 +
 +    // The magnet is RELATIVE, not absolute.
 +    //
@@ -152,57 +152,57 @@ the ultra-wide has its own path.
 +    // Dead zone: while inside the magnet the value stays PINNED
 +    // at the stop. Without that the number wobbles around 2.0 and never feels
 +    // like it has snapped to anything.
-+    function pegar(z) {
-+        for (const tope of topes) {
-+            if (tope < zoomMinimo - epsilon || tope > zoomMaximo + epsilon) {
++    function snap(z) {
++        for (const stop of stops) {
++            if (stop < zoomMin - epsilon || stop > zoomMax + epsilon) {
 +                continue;
 +            }
-+            if (Math.abs(z - tope) / tope < iman) {
-+                return tope;
++            if (Math.abs(z - stop) / stop < iman) {
++                return stop;
 +            }
 +        }
 +        return z;
 +    }
 +
-+    property real zoomPedido: 1.0
++    property real zoomAsked: 1.0
 +
-+    function idDeNodo(nodo) {
++    function idOfNode(node) {
 +        for (const id of root.camera.cameraDeviceIds) {
-+            if (id.indexOf(nodo) !== -1) {
++            if (id.indexOf(node) !== -1) {
 +                return id;
 +            }
 +        }
 +        return "";
 +    }
 +
-+    readonly property bool hayGranAngular: idDeNodo(nodoGranAngular) !== ""
-+    readonly property bool enTrasera: root.camera.cameraDevice.indexOf(nodoPrincipal) !== -1
-+                                      || root.camera.cameraDevice.indexOf(nodoGranAngular) !== -1
-+    readonly property real zoomMinimo: (enTrasera && hayGranAngular) ? factorGranAngular : 1.0
++    readonly property bool hasWideAngle: idOfNode(wideAngleNode) !== ""
++    readonly property bool onRear: root.camera.cameraDevice.indexOf(mainNode) !== -1
++                                      || root.camera.cameraDevice.indexOf(wideAngleNode) !== -1
++    readonly property real zoomMin: (onRear && hasWideAngle) ? wideAngleFactor : 1.0
 +
 +    function applyZoom() {
-+        if (!enTrasera) {
-+            viewfinder.scale = Math.max(1.0, zoomPedido);
++        if (!onRear) {
++            viewfinder.scale = Math.max(1.0, zoomAsked);
 +            return;
 +        }
-+        const quiereAngular = hayGranAngular && zoomPedido < 1.0 - epsilon;
-+        const destino = idDeNodo(quiereAngular ? nodoGranAngular : nodoPrincipal);
-+        if (destino !== "" && root.camera.cameraDevice !== destino) {
++        const wantsWide = hasWideAngle && zoomAsked < 1.0 - epsilon;
++        const target = idOfNode(wantsWide ? wideAngleNode : mainNode);
++        if (target !== "" && root.camera.cameraDevice !== target) {
 +            if (root.camera.busy) {
 +                // It is retried when it stops being so. Without this, a change
 +                // requested while the camera starts was lost FOREVER, and
 +                // the app stayed on wide angle reading 1.0x.
-+                reintento.running = true;
++                retry.running = true;
 +            } else {
-+                root.camera.cameraDevice = destino;
++                root.camera.cameraDevice = target;
 +            }
 +        }
-+        const base = quiereAngular ? factorGranAngular : 1.0;
-+        viewfinder.scale = Math.max(1.0, zoomPedido / base);
++        const base = wantsWide ? wideAngleFactor : 1.0;
++        viewfinder.scale = Math.max(1.0, zoomAsked / base);
 +    }
 +
 +    Timer {
-+        id: reintento
++        id: retry
 +        interval: 200
 +        repeat: true
 +        onTriggered: {
@@ -213,7 +213,7 @@ the ultra-wide has its own path.
 +        }
 +    }
 +
-+    onZoomPedidoChanged: applyZoom()
++    onZoomAskedChanged: applyZoom()
 +
 +    // And also at startup: the camera may come set to the wide angle from
 +    // a previous session, and then there is no zoom change to trigger
@@ -226,9 +226,9 @@ the ultra-wide has its own path.
 +        function onCameraDeviceChanged() {
 +            // When switching to the front camera with the flip button, zoom returns to 1x:
 +            // inheriting a 4x without knowing why is disconcerting.
-+            if (!root.enTrasera) {
-+                if (root.zoomPedido !== 1.0) {
-+                    root.zoomPedido = 1.0;
++            if (!root.onRear) {
++                if (root.zoomAsked !== 1.0) {
++                    root.zoomAsked = 1.0;
 +                }
 +                return;
 +            }
@@ -274,7 +274,7 @@ the ultra-wide has its own path.
 +    // With no animation in between: an animation on the scale makes the
 +    // image to chase the finger with a lag and gives the feeling that it gets stuck.
 +    PinchHandler {
-+        id: pellizco
++        id: pinch
 +
 +        target: null
 +        enabled: root.camera.available
@@ -283,7 +283,7 @@ the ultra-wide has its own path.
 +
 +        onActiveChanged: {
 +            if (active) {
-+                zoomAtStart = root.zoomPedido;
++                zoomAtStart = root.zoomAsked;
 +            }
 +        }
 +        onActiveScaleChanged: {
@@ -291,8 +291,8 @@ the ultra-wide has its own path.
 +                return;
 +            }
 +            const z = zoomAtStart * activeScale;
-+            const acotado = Math.max(root.zoomMinimo, Math.min(root.zoomMaximo, z));
-+            root.zoomPedido = root.pegar(acotado);
++            const clamped = Math.max(root.zoomMin, Math.min(root.zoomMax, z));
++            root.zoomAsked = root.snap(clamped);
 +        }
 +    }
 +
@@ -313,25 +313,25 @@ the ultra-wide has its own path.
 +        height: Kirigami.Units.gridUnit * 2.5
 +        clip: true
 +
-+        opacity: (pellizco.active || visibleUnRato.running) ? 1 : 0
++        opacity: (pinch.active || visibleForAWhile.running) ? 1 : 0
 +        Behavior on opacity { NumberAnimation { duration: 200 } }
 +
 +        Timer {
-+            id: visibleUnRato
++            id: visibleForAWhile
 +            interval: 1400
 +        }
 +        Connections {
 +            target: root
-+            function onZoomPedidoChanged() { visibleUnRato.restart(); }
++            function onZoomAskedChanged() { visibleForAWhile.restart(); }
 +        }
 +
 +        // How many pixels a doubling of the zoom takes. With this, one screen covers
 +        // a bit more than three doublings, which is comfortable to cover with two fingers.
-+        readonly property real pixelesPorDoble: width / 3.2
++        readonly property real pixelsPerDoubling: width / 3.2
 +
 +        function position(z) {
 +            return width / 2
-+                 + (Math.log(z) - Math.log(root.zoomPedido)) / Math.LN2 * pixelesPorDoble;
++                 + (Math.log(z) - Math.log(root.zoomAsked)) / Math.LN2 * pixelsPerDoubling;
 +        }
 +
 +        Repeater {
@@ -340,8 +340,8 @@ the ultra-wide has its own path.
 +            delegate: Item {
 +                required property real modelData
 +
-+                visible: modelData >= root.zoomMinimo - 0.001
-+                         && modelData <= root.zoomMaximo + 0.001
++                visible: modelData >= root.zoomMin - 0.001
++                         && modelData <= root.zoomMax + 0.001
 +                x: ruler.position(modelData)
 +                y: 0
 +                width: 1
@@ -349,7 +349,7 @@ the ultra-wide has its own path.
 +
 +                // A stop is where the zoom snaps; it is drawn more prominently
 +                // so it can be seen what it will snap to before releasing.
-+                readonly property bool esEntero: root.topes.some(function (tp) {
++                readonly property bool isWhole: root.stops.some(function (tp) {
 +                    return Math.abs(modelData - tp) < 0.001;
 +                })
 +
@@ -357,14 +357,14 @@ the ultra-wide has its own path.
 +                    anchors.horizontalCenter: parent.horizontalCenter
 +                    y: parent.height * 0.45
 +                    width: 2
-+                    height: parent.esEntero ? Kirigami.Units.gridUnit * 0.7
++                    height: parent.isWhole ? Kirigami.Units.gridUnit * 0.7
 +                                            : Kirigami.Units.gridUnit * 0.4
 +                    radius: 1
-+                    color: Qt.rgba(1, 1, 1, parent.esEntero ? 0.85 : 0.45)
++                    color: Qt.rgba(1, 1, 1, parent.isWhole ? 0.85 : 0.45)
 +                }
 +
 +                QQC2.Label {
-+                    visible: parent.esEntero || Math.abs(parent.modelData - 0.6) < 0.001
++                    visible: parent.isWhole || Math.abs(parent.modelData - 0.6) < 0.001
 +                    anchors.horizontalCenter: parent.horizontalCenter
 +                    y: 0
 +                    color: Qt.rgba(1, 1, 1, 0.75)
@@ -403,9 +403,9 @@ the ultra-wide has its own path.
 +        font.bold: true
 +        style: Text.Outline
 +        styleColor: Qt.rgba(0, 0, 0, 0.7)
-+        text: (root.zoomPedido < 1
-+               ? root.zoomPedido.toFixed(1)
-+               : (root.zoomPedido < 10 ? root.zoomPedido.toFixed(1) : root.zoomPedido.toFixed(0))) + "x"
++        text: (root.zoomAsked < 1
++               ? root.zoomAsked.toFixed(1)
++               : (root.zoomAsked < 10 ? root.zoomAsked.toFixed(1) : root.zoomAsked.toFixed(0))) + "x"
      }
 -}
 \ No newline at end of file
@@ -429,12 +429,12 @@ the ultra-wide has its own path.
 +            // The nodes are the same ones Viewfinder.qml uses, and for the same
 +            // reason: libcamera does not expose which camera is which.
 +            onTriggered: {
-+                const frontal = "camera@10";
-+                const principal = "camera@1a";
-+                const enFrontal = root.camera.cameraDevice.indexOf(frontal) !== -1;
-+                const buscado = enFrontal ? principal : frontal;
++                const front = "camera@10";
++                const main = "camera@1a";
++                const onFront = root.camera.cameraDevice.indexOf(front) !== -1;
++                const wanted = onFront ? main : front;
 +                for (const id of root.camera.cameraDeviceIds) {
-+                    if (id.indexOf(buscado) !== -1) {
++                    if (id.indexOf(wanted) !== -1) {
 +                        root.camera.cameraDevice = id;
 +                        return;
 +                    }
