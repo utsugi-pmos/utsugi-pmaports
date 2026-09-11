@@ -71,7 +71,7 @@ The same as q6asm, and nothing more:
 
 Two parameters, both on the fly:
 
-    /sys/module/q6core/parameters/usar_dev_asm   0 = as before (hangs) / 1
+    /sys/module/q6core/parameters/use_asm_dev   0 = as before (hangs) / 1
     /sys/module/q6core/parameters/mem_sid        -1 = from the device tree, or 0..15
 
 ## How it is tested, and what it costs
@@ -203,12 +203,12 @@ includes. It was found by reviewing, not by spending a build.
 + * So this patch does the same as q6asm: it allocates on the device that IS
 + * behind the SMMU, and folds the SID into the high bits.
 + *
-+ *   usar_dev_asm  0 = APR device (the old way, which hangs) / 1 = the q6asm one
++ *   use_asm_dev  0 = APR device (the old way, which hangs) / 1 = the q6asm one
 + *   mem_sid       -1 = read it from the device tree (the correct one), or force 0..15
 + */
-+static int usar_dev_asm = 1;
-+module_param(usar_dev_asm, int, 0644);
-+MODULE_PARM_DESC(usar_dev_asm,
++static int use_asm_dev = 1;
++module_param(use_asm_dev, int, 0644);
++MODULE_PARM_DESC(use_asm_dev,
 +		 "0 = allocate on the APR device (hangs the phone), 1 = on the q6asm-dais one");
 +
 +static int mem_sid = -1;
@@ -230,7 +230,7 @@ includes. It was found by reviewing, not by spending a build.
 +
 +	*sid = 0;
 +
-+	if (!usar_dev_asm)
++	if (!use_asm_dev)
 +		goto sin_smmu;
 +
 +	np = of_find_compatible_node(NULL, NULL, "qcom,q6asm-dais");
@@ -418,11 +418,11 @@ includes. It was found by reviewing, not by spending a build.
  
 -	rc = q6core_map_memory(core, phys, SZ_4K);
 +	rc = q6core_map_memory(core, phys, SZ_4K, sid);
- 	dev_info(dev, "mapeo: rc=%d handle=%#x\n", rc, core->mem_map_handle);
+ 	dev_info(dev, "map: rc=%d handle=%#x\n", rc, core->mem_map_handle);
  
  	if (!rc) {
 @@ -872,7 +1023,8 @@
- 		dev_info(dev, "desmapeo hecho\n");
+ 		dev_info(dev, "unmap done\n");
  	}
  
 -	dma_free_coherent(dev, SZ_4K, p, phys);

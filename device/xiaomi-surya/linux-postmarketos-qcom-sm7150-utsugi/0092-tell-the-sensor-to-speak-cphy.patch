@@ -129,9 +129,9 @@ between always leaves the doubt that something else may have changed.
 -	if (op_pre_div || op_pll_mult || op_sys_div || lanes)
 +	if (op_pre_div || op_pll_mult || op_sys_div || lanes || phy_signal)
  		dev_info(&s->client->dev,
--			 "barrido: pre=%d mult=%d div=%d lanes=%d\n",
+-			 "sweep: pre=%d mult=%d div=%d lanes=%d\n",
 -			 op_pre_div, op_pll_mult, op_sys_div, lanes);
-+			 "barrido: pre=%d mult=%d div=%d lanes=%d senal=%d\n",
++			 "sweep: pre=%d mult=%d div=%d lanes=%d signal=%d\n",
 +			 op_pre_div, op_pll_mult, op_sys_div, lanes,
 +			 phy_signal);
  

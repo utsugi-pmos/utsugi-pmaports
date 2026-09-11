@@ -37,7 +37,7 @@ known.
  
 -	printk(KERN_DEBUG "csiphy_isr called\n");
 +	static int veces;
-+	u8 vistos[11];
++	u8 seen[11];
  
  	for (i = 0; i < 11; i++) {
  		int c = i + 22;
@@ -45,7 +45,7 @@ known.
  			CSIPHY_3PH_CMN_CSI_COMMON_STATUSn(regs->offset,
  							  regs->common_status_offset, i));
  
-+		vistos[i] = val;
++		seen[i] = val;
 +
  		writel_relaxed(val, csiphy->base +
  			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, c));
@@ -57,10 +57,10 @@ known.
 +	/* Bounded: if the link is noisy, this fires nonstop. */
 +	if (veces++ < 20)
 +		dev_info(csiphy->camss->dev,
-+			 "csiphy%d estado: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
-+			 csiphy->id, vistos[0], vistos[1], vistos[2], vistos[3],
-+			 vistos[4], vistos[5], vistos[6], vistos[7], vistos[8],
-+			 vistos[9], vistos[10]);
++			 "csiphy%d state: %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x %02x\n",
++			 csiphy->id, seen[0], seen[1], seen[2], seen[3],
++			 seen[4], seen[5], seen[6], seen[7], seen[8],
++			 seen[9], seen[10]);
 +
  	return IRQ_HANDLED;
  }

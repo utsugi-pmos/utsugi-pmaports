@@ -163,7 +163,7 @@ correctly.
 +{
 +	char lista[sizeof(enable_modules)];
 +	char *p, *tok;
-+	int encendidos = 0, fallos = 0;
++	int powered_on = 0, failures = 0;
 +
 +	if (!enable_modules[0])
 +		return;
@@ -190,15 +190,15 @@ correctly.
 +		if (ret < 0) {
 +			pr_err("q6cvp: module %#x: the DSP rejects it (%d)\n",
 +			       module_id, ret);
-+			fallos++;
++			failures++;
 +		} else {
 +			pr_info("q6cvp: modulo %#x encendido\n", module_id);
-+			encendidos++;
++			powered_on++;
 +		}
 +	}
 +
-+	pr_info("q6cvp: %d modulos encendidos, %d rechazados\n",
-+		encendidos, fallos);
++	pr_info("q6cvp: %d modules on, %d rejected\n",
++		powered_on, failures);
 +}
 +
  int q6cvp_topology_commit(struct q6voice_session *cvp)

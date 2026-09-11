@@ -36,22 +36,22 @@ WHAT IT DOES
 It adds the vendor's two writes before the reset strobe, and leaves a second
 parameter to also try keeping CGC_MODE set during the transmission.
 
-    cgc_en_reset    default 1, as the vendor does
-    cgc_en_marcha   default 0, for sweeping
+    cgc_in_reset    default 1, as the vendor does
+    cgc_running   default 0, for sweeping
 --- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:10:06.918495661 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 12:10:28.842650797 +0200
 @@ -49,6 +49,16 @@
   * interrupts per frame this can turn into a storm, and this
   * phone is sensitive to timing. Enable it by hand when needed.
   */
-+static int cgc_en_reset = 1;
-+module_param(cgc_en_reset, int, 0644);
-+MODULE_PARM_DESC(cgc_en_reset,
++static int cgc_in_reset = 1;
++module_param(cgc_in_reset, int, 0644);
++MODULE_PARM_DESC(cgc_in_reset,
 +	"Write CGC_MODE and RDI_CFG0=2 before the reset strobe, like the vendor.");
 +
-+static int cgc_en_marcha;
-+module_param(cgc_en_marcha, int, 0644);
-+MODULE_PARM_DESC(cgc_en_marcha,
++static int cgc_running;
++module_param(cgc_running, int, 0644);
++MODULE_PARM_DESC(cgc_running,
 +	"Also, leave CGC_MODE set in CSI2_RX_CFG1 during the transmission.");
 +
  static int diag_phy_sel = -1;
@@ -61,7 +61,7 @@ parameter to also try keeping CGC_MODE set during the transmission.
  	if (vc > 3)
  		val |= 1 << CSI2_RX_CFG1_VC_MODE;
  	val |= 1 << CSI2_RX_CFG1_MISR_EN;
-+	if (cgc_en_marcha)
++	if (cgc_running)
 +		val |= 1 << CSI2_RX_CFG1_CGC_MODE;
  	writel_relaxed(val, csid->base + CSID_CSI2_RX_CFG1);
  
@@ -90,13 +90,13 @@ parameter to also try keeping CGC_MODE set during the transmission.
 +	 * CGC_MODE is the clock gating control of the CSI-2 receiver. A
 +	 * block with the clock gated behaves EXACTLY like ours:
 +	 * its registers answer -the register bus goes separately- and the
-+	 * datos no procesa nada nunca.
++	 * data never processes anything at all.
 +	 *
 +	 * And it fits the bisection: two different sensors, on two different
 +	 * CSIPHYs, with two different drivers, none delivers a single
 +	 * symbol to the CSID. If it were the sensor or the PHY it would not be both.
 +	 */
-+	if (cgc_en_reset) {
++	if (cgc_in_reset) {
 +		writel_relaxed(1 << CSI2_RX_CFG1_CGC_MODE,
 +			       csid->base + CSID_CSI2_RX_CFG1);
 +		for (i = 0; i < MSM_CSID_MAX_SRC_STREAMS; i++)

@@ -164,10 +164,10 @@ without recompiling.
 +		 * camss supports this: camss_parse_ports() walks ALL the
 +		 * endpoints of ALL the ports with
 +		 * fwnode_graph_for_each_endpoint(), and the CSIPHY is chosen by the
-+		 * numero de PUERTO -csd->interface.csiphy_id = vep.base.port-,
++		 * PORT number -csd->interface.csiphy_id = vep.base.port-,
 +		 * not by the endpoint. So both show up in the topology,
 +		 * both go through CSIPHY1, and each one carries its own
-+		 * configuracion de lanes.
++		 * lane configuration.
 +		 *
 +		 * Which one streams is decided at runtime by enabling its link. The
 +		 * switch is moved by the sensor driver when it powers on and is
@@ -254,7 +254,7 @@ without recompiling.
 +		 * From the factory this sensor only gets VIO from the SoC: its
 +		 * powerSetting asks for neither VDIG nor VANA. The two digital
 +		 * channels of the wl2866d are taken by the two cameras that
-+		 * ya funcionan.
++		 * already work.
 +		 */
 +		vddio-supply = <&vreg_l13a_1p8>;
 +		vdda-supply = <&wl_avdd1>;
@@ -351,8 +351,8 @@ without recompiling.
 + * WHAT IS MEASURED ON THE CHIP, not inferred
 + * ------------------------------------------
 + *   0x0716 = 0x1337    the ID
-+ *   0x0b12 = 4208      width de salida
-+ *   0x0b14 = 3120      height de salida
++ *   0x0b12 = 4208      width de output
++ *   0x0b14 = 3120      height de output
 + *
 + * The last two match what the factory table says, which is the
 + * cross-check that the tables belong to this sensor.
@@ -454,7 +454,7 @@ without recompiling.
 +/*
 + * THE EXPOSURE AND GAIN ADDRESSES GO AS PARAMETERS
 + *
-+ * libcamera EXIGE cuatro controles -exposicion, ganancia analogica, HBLANK y
++ * libcamera DEMANDS four controls -exposure, analogue gain, HBLANK and
 + * VBLANK- and without them it rejects the whole sensor: "The sensor kernel driver needs
 + * to be fixed". So they are not decoration.
 + *
@@ -470,7 +470,7 @@ without recompiling.
 + *     both modes, which is what one expects from a default exposure and frame
 + *     length;
 + *   - 0x0234..0x023a do change between modes (1111 -> 3311/2222): those are the
-+ *     registros de combinacion de pixeles, no de ganancia.
++ *     the pixel-binning registers, not gain ones.
 + *
 + * Of the analog gain there is no clue, and the 0x0204 that was tried as such is
 + * DISPROVED: the binned mode table sets it to 0x0200 and writing a 0 to it leaves
@@ -506,7 +506,7 @@ without recompiling.
 + *
 + * And these four, measured per Bayer channel by writing only 0x0214:
 + *
-+ *     canal   senal a 512   senal a 2048   factor
++ *     canal   signal a 512   signal a 2048   factor
 + *       Gr           4,76           4,74     1,00
 + *        R           3,45           8,97     2,60
 + *        B           4,41           4,40     1,00
@@ -520,8 +520,8 @@ without recompiling.
 +MODULE_PARM_DESC(reg_again,
 +	"First gain register (default 0x0214); four are written; 0 = none.");
 +
-+/* Cuantos registros consecutivos de ganancia se escriben, de dos en dos. */
-+#define HI1337_CANALES_GANANCIA	4
++/* How many consecutive gain registers are written, two bytes at a time. */
++#define HI1337_GAIN_CHANNELS	4
 +
 +static int reg_vts = 0x020a;
 +module_param(reg_vts, int, 0444);
@@ -559,7 +559,7 @@ without recompiling.
 +static const char * const hi1337_supply_names[] = {
 +	"vdda",		/* analogica */
 +	"vddd",		/* digital */
-+	"vddio",	/* entrada/salida, 1,8 V */
++	"vddio",	/* I/O, 1.8 V */
 +};
 +
 +#define HI1337_NUM_SUPPLIES	ARRAY_SIZE(hi1337_supply_names)
@@ -2373,7 +2373,7 @@ without recompiling.
 +		if (reg_again) {
 +			unsigned int i;
 +
-+			for (i = 0; i < HI1337_CANALES_GANANCIA; i++) {
++			for (i = 0; i < HI1337_GAIN_CHANNELS; i++) {
 +				ret = cci_write(hi1337->regmap,
 +						CCI_REG16(reg_again + i * 2),
 +						ctrl->val, NULL);
@@ -2738,15 +2738,15 @@ without recompiling.
 + * the 1544 writes go in without error and that the sensor starts the stream- without
 + * touching anything that already works:
 + *
-+ *     echo 1 > /sys/module/hi1337/parameters/transmitir
-+ *     echo 0 > /sys/module/hi1337/parameters/transmitir
++ *     echo 1 > /sys/module/hi1337/parameters/transmit
++ *     echo 0 > /sys/module/hi1337/parameters/transmit
 + *
 + * It is the same trick as the scanner's probe, and for the same reason: to separate
 + * the expensive question -recompiling, risking the boot- from the cheap one.
 + */
 +static struct hi1337 *hi1337_vivo;
 +
-+static int transmitir_set(const char *val, const struct kernel_param *kp)
++static int transmit_set(const char *val, const struct kernel_param *kp)
 +{
 +	struct hi1337 *h = READ_ONCE(hi1337_vivo);
 +	unsigned int on;
@@ -2777,7 +2777,7 @@ without recompiling.
 +		dev_info(h->dev, "the initialization failed on i2c: %d\n", ret);
 +		goto suelta;
 +	}
-+	dev_info(h->dev, "inicializacion escrita: %u registros\n",
++	dev_info(h->dev, "init written: %u registers\n",
 +		 (unsigned int)ARRAY_SIZE(hi1337_init));
 +
 +	ret = cci_multi_reg_write(h->regmap, h->mode->reg_list.regs,
@@ -2791,7 +2791,7 @@ without recompiling.
 +
 +	ret = cci_write(h->regmap, HI1337_REG_CTRL_MODE,
 +			HI1337_MODE_STREAMING, NULL);
-+	dev_info(h->dev, "TRANSMITIENDO (%d), MCLK a %lu Hz\n",
++	dev_info(h->dev, "STREAMING (%d), MCLK at %lu Hz\n",
 +		 ret, clk_get_rate(h->mclk));
 +	return 0;
 +
@@ -2812,23 +2812,23 @@ without recompiling.
 + *
 + * I fell into it myself: I took for granted that the sensor "was streaming" by looking at
 + * a fingerprint taken with i2cdump, when that fingerprint can be an artifact of
-+ * mis propias escrituras.
++ * my own writes.
 + *
-+ *     echo "0b00"      > /sys/module/hi1337/parameters/sonda   # leer
-+ *     echo "0b00 0100" > /sys/module/hi1337/parameters/sonda   # escribir y releer
++ *     echo "0b00"      > /sys/module/hi1337/parameters/probe   # read
++ *     echo "0b00 0100" > /sys/module/hi1337/parameters/probe   # write and re-read
 + */
 +static int probe_set(const char *val, const struct kernel_param *kp)
 +{
 +	struct hi1337 *h = READ_ONCE(hi1337_vivo);
-+	unsigned int reg, dato = 0;
++	unsigned int reg, datum = 0;
 +	u64 leido = 0;
 +	int n, ret;
 +
 +	if (!h)
 +		return -ENODEV;
 +
-+	n = sscanf(val, "%x %x", &reg, &dato);
-+	if (n < 1 || reg > 0xffff || (n >= 2 && dato > 0xffff))
++	n = sscanf(val, "%x %x", &reg, &datum);
++	if (n < 1 || reg > 0xffff || (n >= 2 && datum > 0xffff))
 +		return -EINVAL;
 +
 +	ret = pm_runtime_resume_and_get(h->dev);
@@ -2838,17 +2838,17 @@ without recompiling.
 +	}
 +
 +	if (n >= 2) {
-+		ret = cci_write(h->regmap, CCI_REG16(reg), dato, NULL);
++		ret = cci_write(h->regmap, CCI_REG16(reg), datum, NULL);
 +		if (ret)
-+			dev_info(h->dev, "sonda: escribir %04x=%04x fallo\n",
-+				 reg, dato);
++			dev_info(h->dev, "probe: escribir %04x=%04x failure\n",
++				 reg, datum);
 +	}
 +
 +	ret = cci_read(h->regmap, CCI_REG16(reg), &leido, NULL);
 +	if (ret)
-+		dev_info(h->dev, "sonda: %04x no contesta\n", reg);
++		dev_info(h->dev, "probe: %04x no contesta\n", reg);
 +	else
-+		dev_info(h->dev, "sonda: %04x = %04llx\n", reg, leido);
++		dev_info(h->dev, "probe: %04x = %04llx\n", reg, leido);
 +
 +	pm_runtime_mark_last_busy(h->dev);
 +	pm_runtime_put_autosuspend(h->dev);
@@ -2857,13 +2857,13 @@ without recompiling.
 +}
 +
 +static const struct kernel_param_ops probe_ops = { .set = probe_set };
-+module_param_cb(sonda, &probe_ops, NULL, 0200);
-+MODULE_PARM_DESC(sonda,
++module_param_cb(probe, &probe_ops, NULL, 0200);
++MODULE_PARM_DESC(probe,
 +		 "\"reg\" reads 16 bits, \"reg data\" writes and reads back; output goes to dmesg");
 +
-+static const struct kernel_param_ops transmitir_ops = { .set = transmitir_set };
-+module_param_cb(transmitir, &transmitir_ops, NULL, 0200);
-+MODULE_PARM_DESC(transmitir,
++static const struct kernel_param_ops transmit_ops = { .set = transmit_set };
++module_param_cb(transmit, &transmit_ops, NULL, 0200);
++MODULE_PARM_DESC(transmit,
 +		 "1 writes the tables and starts the stream, 0 stops it; the answer goes to dmesg");
 +
 +static void hi1337_update_pad_format(const struct hi1337_mode *mode,
@@ -3030,7 +3030,7 @@ without recompiling.
 + * the Samsung the ID lives there. When porting it the constants were
 + * renamed but this one stayed, and the driver read 0x0000 -which on the Hi-1337
 + * reads 0- and concluded "cannot find the sensor" with the sensor right there,
-+ * contestando.
++ * answering.
 + *
 + * It is the same mistake that already blocked the whole investigation when the scanner
 + * read 0x0f16 because it was copied from hi846. A constant inherited from a sibling
@@ -3089,7 +3089,7 @@ without recompiling.
 +		if (hi1337_probe_id_at(client, i, &id))
 +			continue;
 +
-+		dev_info(hi1337->dev, "contesta 0x%02x, identificacion 0x%04x\n",
++		dev_info(hi1337->dev, "answers 0x%02x, id 0x%04x\n",
 +			 i, id);
 +
 +		if (id == HI1337_CHIP_ID) {
@@ -3343,7 +3343,7 @@ without recompiling.
 +
 +	ret = hi1337_probe_id_at(client, client->addr, &id);
 +	if (ret || id != HI1337_CHIP_ID) {
-+		dev_err(hi1337->dev, "identificacion 0x%04x, esperaba 0x%04x\n",
++		dev_err(hi1337->dev, "id 0x%04x, expected 0x%04x\n",
 +			id, HI1337_CHIP_ID);
 +		ret = -ENODEV;
 +		goto power_off;

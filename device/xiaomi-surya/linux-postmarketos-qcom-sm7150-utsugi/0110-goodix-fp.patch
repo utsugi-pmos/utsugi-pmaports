@@ -312,7 +312,7 @@ The header measurement work behind this is in tasks/020.
 @@ -42,3 +42,4 @@
  
  # Temporary fingerprint diagnostic: see task 020. Remove when it is closed.
- obj-y += sonda-ta.o
+ obj-y += probe-ta.o
 +obj-y += goodix-fp.o
 --- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
 +++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi

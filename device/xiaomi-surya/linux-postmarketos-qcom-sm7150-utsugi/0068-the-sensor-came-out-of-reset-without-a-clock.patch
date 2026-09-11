@@ -59,9 +59,9 @@ recompiling.
 +MODULE_PARM_DESC(clock_delay_us,
 +	"Microseconds of clock before releasing reset. The vendor waits 15000.");
 +
-+static int retardo_reset_us = 5000;
-+module_param(retardo_reset_us, int, 0644);
-+MODULE_PARM_DESC(retardo_reset_us,
++static int reset_delay_us = 5000;
++module_param(reset_delay_us, int, 0644);
++MODULE_PARM_DESC(reset_delay_us,
 +	"Microseconds after releasing reset. The vendor waits 5000.");
 +
  static int mipi_switch = -1;
@@ -93,7 +93,7 @@ recompiling.
 +	 *     STANDBY  0            1 ms
 +	 *     VDIG     encender     1 ms
 +	 *     VIO      encender     1 ms
-+	 *     MCLK     19,2 MHz    15 ms   <-- quince milisegundos de reloj
++	 *     MCLK     19,2 MHz    15 ms   <-- quince milisegundos de clock
 +	 *     RESET    soltar       5 ms
 +	 *
 +	 * Fifteen milliseconds at 19.2 MHz are about 288,000 cycles. We give it
@@ -105,7 +105,7 @@ recompiling.
 +
  	gpiod_set_value_cansleep(s5k3t2->reset_gpio, 0);
 -	usleep_range(10 * USEC_PER_MSEC, 15 * USEC_PER_MSEC);
-+	usleep_range(retardo_reset_us, retardo_reset_us + 1000);
++	usleep_range(reset_delay_us, reset_delay_us + 1000);
  
  	return 0;
  

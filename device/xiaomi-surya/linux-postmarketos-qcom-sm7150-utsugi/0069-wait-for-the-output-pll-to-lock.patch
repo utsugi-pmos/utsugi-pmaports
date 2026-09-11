@@ -38,9 +38,9 @@ The delay goes as a parameter in 0644 so it can be swept without recompiling.
  MODULE_PARM_DESC(i2c_addr,
  	"7-bit I2C address of the sensor. -1 (default) = search for it.");
  
-+static int retardo_pll_us = 10000;
-+module_param(retardo_pll_us, int, 0644);
-+MODULE_PARM_DESC(retardo_pll_us,
++static int pll_delay_us = 10000;
++module_param(pll_delay_us, int, 0644);
++MODULE_PARM_DESC(pll_delay_us,
 +	"Microseconds to wait after programming the output PLL and before streaming.");
 +
  static int clock_delay_us = 15000;
@@ -68,8 +68,8 @@ The delay goes as a parameter in 0644 so it can be swept without recompiling.
 +	 *
 +	 * Tunable at runtime so it can be swept.
 +	 */
-+	if (retardo_pll_us > 0)
-+		usleep_range(retardo_pll_us, retardo_pll_us + 1000);
++	if (pll_delay_us > 0)
++		usleep_range(pll_delay_us, pll_delay_us + 1000);
 +
 +	/*
  	 * Both flips are set, as the factory Android does: the

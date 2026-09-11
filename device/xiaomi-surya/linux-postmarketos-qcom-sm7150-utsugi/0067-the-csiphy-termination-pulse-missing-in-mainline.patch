@@ -43,9 +43,9 @@ recompiling.
   * reboot, which is expensive on this phone: one boot in four hangs
   * arranques.
   */
-+static int pulso_terminacion = 1;
-+module_param(pulso_terminacion, int, 0644);
-+MODULE_PARM_DESC(pulso_terminacion,
++static int termination_pulse = 1;
++module_param(termination_pulse, int, 0644);
++MODULE_PARM_DESC(termination_pulse,
 +	"Write 0x01 to CTRL33 (0x0884), the termination pulse mainline leaves out. 1 = yes.");
 +
  static int readback_registers;
@@ -82,7 +82,7 @@ recompiling.
 +	 * Adjustable at runtime to be able to confirm the attribution without
 +	 * recompilar.
 +	 */
-+	if (pulso_terminacion)
++	if (termination_pulse)
 +		writel_relaxed(0x01, csiphy->base +
 +			       CSIPHY_3PH_CMN_CSI_COMMON_CTRLn(regs->offset, 33));
 +

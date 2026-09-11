@@ -47,7 +47,7 @@ case "${1:-}" in
 --freeze)
 	# The partition always holds something; the magic is how we tell our dump
 	# from whatever the stock bootloader left there.
-	[ -e "$FREEZE_DEV" ] || { echo "no hay $FREEZE_DEV en este aparato"; exit 1; }
+	[ -e "$FREEZE_DEV" ] || { echo "there is no $FREEZE_DEV on this device"; exit 1; }
 	if ! dd if="$FREEZE_DEV" bs=64 count=1 2>/dev/null | grep -q "$FREEZE_MAGIC"; then
 		echo "the dump partition holds no freeze dump."
 		echo "(freeze-watchdog writes one when the filesystem stops answering)"

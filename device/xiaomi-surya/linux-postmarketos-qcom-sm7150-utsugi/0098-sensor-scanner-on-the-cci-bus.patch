@@ -380,7 +380,7 @@ caused nor when it was caused.
 + * powered, on that bus 0x51, 0x54, 0x59 and 0x5c answer, but none of them
 + * responds to the SK Hynix id register (0x0f16, which on the
 + * mainline hi846 returns 46 08). That is, they are not sensors: the sensors
-+ * siguen apagados.
++ * are still powered off.
 + *
 + * And turning rails on by hand is not enough, because a sensor also needs its
 + * MCLK -which only a driver brings up- and its reset released.
@@ -421,11 +421,11 @@ caused nor when it was caused.
 +#define SURYA_MAX_RESETS 48
 +
 +/* What has to be turned off when the module is unloaded, and it is only filled in on the
-+ * `mantener` path, which is the only one that leaves probe bound. */
-+struct surya_encendido {
++ * `hold_it` path, which is the only one that leaves probe bound. */
++struct surya_powered {
 +	struct regulator_bulk_data *supplies;
-+	struct clk_bulk_data *relojes;
-+	int nrelojes;
++	struct clk_bulk_data *clocks;
++	int nclocks;
 +	struct gpio_desc *reset;
 +	struct gpio_desc *standby;	/* NULL if left without standby */
 +};
@@ -448,13 +448,13 @@ caused nor when it was caused.
 + * cam_avdd1 -the vdda of this node- already shows use 1 and open 0 right after boot,
 + * so that value on its own says nothing. What gave the leak away is that it
 + * went up to 2 on load and STAYED at 2 after the rmmod. Now it goes back to 1. */
-+static int mantener = -1;
-+module_param(mantener, int, 0644);
-+MODULE_PARM_DESC(mantener,
++static int hold_it = -1;
++module_param(hold_it, int, 0644);
++MODULE_PARM_DESC(hold_it,
 +		 "index of the candidate gpio left released with everything on; -1 powers off and exits");
 +
 +/*
-+ * Registros de identificacion.
++ * Identification registers.
 + *
 + * THE BUG THAT COST THE WHOLE INVESTIGATION: 0x0f16 was copied from the driver
 + * mainline hi846 -where HI846_REG_CHIP_ID_L is 0x0f16 and returns 46 08- and
@@ -505,7 +505,7 @@ caused nor when it was caused.
 +/* The reset is PULSED, not just released: the factory sequence drives it low, lets
 + * it settle, and drives it high. If standby changes while reset is released, the
 + * sensor does not notice. */
-+static int escribir16(struct i2c_client *cl, u16 addr, u16 reg, u8 val)
++static int write16(struct i2c_client *cl, u16 addr, u16 reg, u8 val)
 +{
 +	u8 buf[3] = { reg >> 8, reg & 0xff, val };
 +	struct i2c_msg m = { .addr = addr, .flags = 0, .len = 3, .buf = buf };
@@ -523,11 +523,11 @@ caused nor when it was caused.
 + * EVERY 16-bit hypothesis cost a kernel rebuild: ten minutes per
 + * pregunta.
 + *
-+ * With this, while `mantener` holds rails and clocks, you ask from
++ * With this, while `hold_it` holds rails and clocks, you ask from
 + * outside without recompiling anything:
 + *
-+ *     echo "21 0f16"      > /sys/module/surya_cam_scan/parameters/sonda
-+ *     echo "21 0a00 01"   > /sys/module/surya_cam_scan/parameters/sonda
++ *     echo "21 0f16"      > /sys/module/surya_cam_scan/parameters/probe
++ *     echo "21 0a00 01"   > /sys/module/surya_cam_scan/parameters/probe
 + *     dmesg | tail -1
 + *
 + * Two fields read two bytes (the register and the next one); three write one byte
@@ -539,41 +539,41 @@ caused nor when it was caused.
 +static int probe_set(const char *val, const struct kernel_param *kp)
 +{
 +	struct i2c_client *cl = READ_ONCE(probe_client);
-+	unsigned int addr, reg, dato = 0;
++	unsigned int addr, reg, data = 0;
 +	u16 leido;
 +	int n, ret;
 +
-+	/* There is a bus only if probe stayed bound, that is with `mantener`. */
++	/* There is a bus only if probe stayed bound, that is with `hold_it`. */
 +	if (!cl)
 +		return -ENODEV;
 +
-+	n = sscanf(val, "%x %x %x", &addr, &reg, &dato);
-+	if (n < 2 || addr > 0x7f || reg > 0xffff || (n >= 3 && dato > 0xff))
++	n = sscanf(val, "%x %x %x", &addr, &reg, &data);
++	if (n < 2 || addr > 0x7f || reg > 0xffff || (n >= 3 && data > 0xff))
 +		return -EINVAL;
 +
 +	if (n >= 3) {
-+		ret = escribir16(cl, addr, reg, dato);
++		ret = write16(cl, addr, reg, data);
 +		if (ret) {
-+			dev_info(&cl->dev, "sonda: escribir %02x/%04x=%02x fallo\n",
-+				 addr, reg, dato);
++			dev_info(&cl->dev, "probe: write %02x/%04x=%02x failed\n",
++				 addr, reg, data);
 +			return 0;
 +		}
 +	}
 +
 +	ret = leer16(cl, addr, reg, &leido);
 +	if (ret)
-+		dev_info(&cl->dev, "sonda: %02x/%04x no contesta\n", addr, reg);
++		dev_info(&cl->dev, "probe: %02x/%04x no contesta\n", addr, reg);
 +	else
-+		dev_info(&cl->dev, "sonda: %02x/%04x = %04x\n", addr, reg, leido);
++		dev_info(&cl->dev, "probe: %02x/%04x = %04x\n", addr, reg, leido);
 +	return 0;
 +}
 +
 +static const struct kernel_param_ops probe_ops = { .set = probe_set };
-+module_param_cb(sonda, &probe_ops, NULL, 0200);
-+MODULE_PARM_DESC(sonda,
++module_param_cb(probe, &probe_ops, NULL, 0200);
++MODULE_PARM_DESC(probe,
 +		 "\"addr reg\" reads 16 bits, \"addr reg data\" writes 8 and reads back; the answer comes out on dmesg");
 +
-+static void pulso_reset(struct gpio_desc *rst)
++static void reset_pulse(struct gpio_desc *rst)
 +{
 +	gpiod_set_value_cansleep(rst, 0);
 +	usleep_range(5000, 6000);
@@ -584,7 +584,7 @@ caused nor when it was caused.
 +static void sweep(struct i2c_client *cl, const char *when)
 +{
 +	unsigned int a;
-+	int hallados = 0;
++	int found = 0;
 +
 +	for (a = 0x08; a <= 0x77; a++) {
 +		u16 hi1337 = 0, hi846 = 0, smia = 0, width = 0, height = 0;
@@ -592,7 +592,7 @@ caused nor when it was caused.
 +		if (a == cl->addr || !contesta(cl, a))
 +			continue;
 +
-+		hallados++;
++		found++;
 +		leer16(cl, a, REG_ID_HI1337, &hi1337);
 +		leer16(cl, a, REG_ID_HI846, &hi846);
 +		leer16(cl, a, REG_ID_SMIA, &smia);
@@ -605,7 +605,7 @@ caused nor when it was caused.
 +			dev_info(&cl->dev, "%s: 0x%02x IS THE Hi-1337, the wide-angle\n",
 +				 when, a);
 +	}
-+	if (!hallados)
++	if (!found)
 +		dev_info(&cl->dev, "%s: nobody answers\n", when);
 +}
 +
@@ -616,8 +616,8 @@ caused nor when it was caused.
 +	unsigned int pin[SURYA_MAX_RESETS];
 +	unsigned int nresets = 0;
 +	int ncand;
-+	struct clk_bulk_data *relojes;
-+	int nrelojes;
++	struct clk_bulk_data *clocks;
++	int nclocks;
 +	unsigned int i;
 +	int ret;
 +
@@ -640,9 +640,9 @@ caused nor when it was caused.
 +	if (ret)
 +		return dev_err_probe(&cl->dev, ret, "no supplies\n");
 +
-+	nrelojes = devm_clk_bulk_get_all(&cl->dev, &relojes);
-+	if (nrelojes < 0)
-+		return dev_err_probe(&cl->dev, nrelojes, "no clocks\n");
++	nclocks = devm_clk_bulk_get_all(&cl->dev, &clocks);
++	if (nclocks < 0)
++		return dev_err_probe(&cl->dev, nclocks, "no clocks\n");
 +
 +	/* The frequency is set HERE and not with assigned-clocks in the device
 +	 * tree: that is applied by the kernel when the node is registered, with no driver
@@ -651,12 +651,12 @@ caused nor when it was caused.
 +	 * factory file of THIS module -powerSetting of
 +	 * com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin- pide
 +	 * 0x0124f800 = 19200000. The module one wins. */
-+	for (i = 0; i < (unsigned int)nrelojes; i++) {
-+		ret = clk_set_rate(relojes[i].clk, 19200000);
++	for (i = 0; i < (unsigned int)nclocks; i++) {
++		ret = clk_set_rate(clocks[i].clk, 19200000);
 +		if (ret)
 +			return dev_err_probe(&cl->dev, ret,
 +					     "%s no acepta 19,2 MHz\n",
-+					     relojes[i].id);
++					     clocks[i].id);
 +	}
 +
 +	/* The reset candidates, as outputs at rest -active low, that is the
@@ -677,7 +677,7 @@ caused nor when it was caused.
 +		struct gpio_desc *g = devm_gpiod_get_index(&cl->dev, "probe", i,
 +							   GPIOD_OUT_LOW);
 +		if (IS_ERR(g)) {
-+			dev_info(&cl->dev, "candidato %u descartado: %pe\n", i, g);
++			dev_info(&cl->dev, "candidate %u dropped: %pe\n", i, g);
 +			continue;
 +		}
 +		pin[nresets] = i;
@@ -688,14 +688,14 @@ caused nor when it was caused.
 +	if (ret)
 +		return dev_err_probe(&cl->dev, ret, "no enciende\n");
 +
-+	ret = clk_bulk_prepare_enable(nrelojes, relojes);
++	ret = clk_bulk_prepare_enable(nclocks, clocks);
 +	if (ret) {
 +		regulator_bulk_disable(ARRAY_SIZE(surya_supplies), supplies);
 +		return dev_err_probe(&cl->dev, ret, "clock does not start\n");
 +	}
 +
-+	dev_info(&cl->dev, "alimentado, %d relojes a %lu Hz, %u gpios utiles de %d\n",
-+		 nrelojes, nrelojes ? clk_get_rate(relojes[0].clk) : 0,
++	dev_info(&cl->dev, "powered, %d clocks at %lu Hz, %u usable gpios of %d\n",
++		 nclocks, nclocks ? clk_get_rate(clocks[0].clk) : 0,
 +		 nresets, ncand);
 +	usleep_range(10000, 12000);
 +
@@ -714,65 +714,65 @@ caused nor when it was caused.
 +	 */
 +	sweep(cl, "en reset, referencia");
 +
-+	pulso_reset(resets[0]);
++	reset_pulse(resets[0]);
 +	sweep(cl, "reset pulsed, no standby");
 +
 +	for (i = 1; i < nresets; i++) {
-+		char etq[64];
++		char label[64];
 +
 +		gpiod_set_value_cansleep(resets[i], 1);
 +		usleep_range(5000, 6000);
-+		pulso_reset(resets[0]);
-+		snprintf(etq, sizeof(etq), "standby en candidato #%u", pin[i]);
-+		sweep(cl, etq);
++		reset_pulse(resets[0]);
++		snprintf(label, sizeof(label), "standby on candidate #%u", pin[i]);
++		sweep(cl, label);
 +		gpiod_set_value_cansleep(resets[i], 0);
 +		gpiod_set_value_cansleep(resets[0], 0);
 +		usleep_range(5000, 6000);
 +	}
 +
-+	if (mantener >= 0 && (unsigned int)mantener < nresets) {
-+		struct surya_encendido *e;
++	if (hold_it >= 0 && (unsigned int)hold_it < nresets) {
++		struct surya_powered *e;
 +
-+		if (mantener > 0)
-+			gpiod_set_value_cansleep(resets[mantener], 1);
-+		pulso_reset(resets[0]);
++		if (hold_it > 0)
++			gpiod_set_value_cansleep(resets[hold_it], 1);
++		reset_pulse(resets[0]);
 +
 +		/* It stays bound, so we have to note down that there are
 +		 * things powered on and who turns them off. */
 +		e = devm_kzalloc(&cl->dev, sizeof(*e), GFP_KERNEL);
 +		if (!e) {
-+			clk_bulk_disable_unprepare(nrelojes, relojes);
++			clk_bulk_disable_unprepare(nclocks, clocks);
 +			regulator_bulk_disable(ARRAY_SIZE(surya_supplies), supplies);
 +			return -ENOMEM;
 +		}
 +		e->supplies = supplies;
-+		e->relojes = relojes;
-+		e->nrelojes = nrelojes;
++		e->clocks = clocks;
++		e->nclocks = nclocks;
 +		e->reset = resets[0];
-+		e->standby = mantener ? resets[mantener] : NULL;
++		e->standby = hold_it ? resets[hold_it] : NULL;
 +		i2c_set_clientdata(cl, e);
 +		WRITE_ONCE(probe_client, cl);
 +
 +		dev_info(&cl->dev,
 +			 "STAYING AWAKE: reset (candidate #%u) pulsed, standby on candidate #%u, everything on\n",
-+			 pin[0], mantener ? pin[mantener] : pin[0]);
++			 pin[0], hold_it ? pin[hold_it] : pin[0]);
 +		return 0;
 +	}
 +
-+	clk_bulk_disable_unprepare(nrelojes, relojes);
++	clk_bulk_disable_unprepare(nclocks, clocks);
 +	regulator_bulk_disable(ARRAY_SIZE(surya_supplies), supplies);
 +
 +	/* Never stays bound: it is a measuring instrument, not a driver. */
-+	dev_info(&cl->dev, "barrido terminado\n");
++	dev_info(&cl->dev, "sweep finished\n");
 +	return -ENODEV;
 +}
 +
 +/* Only called when probe stayed bound, that is on the
-+ * `mantener` path. When the sweep ends normally probe returns -ENODEV, there is no
++ * `hold_it` path. When the sweep ends normally probe returns -ENODEV, there is no
 + * bind, and this does not run: that is why no flag is needed. */
 +static void surya_cam_scan_remove(struct i2c_client *cl)
 +{
-+	struct surya_encendido *e = i2c_get_clientdata(cl);
++	struct surya_powered *e = i2c_get_clientdata(cl);
 +
 +	/* First of all, make the probe stop holding a client that is going away. */
 +	WRITE_ONCE(probe_client, NULL);
@@ -788,11 +788,11 @@ caused nor when it was caused.
 +	 * descriptor is released the pin stays as it was, that is asserted, and that
 +	 * poisons the next measurement without showing anywhere. */
 +	gpiod_set_value_cansleep(e->reset, 0);
-+	clk_bulk_disable_unprepare(e->nrelojes, e->relojes);
++	clk_bulk_disable_unprepare(e->nclocks, e->clocks);
 +	regulator_bulk_disable(ARRAY_SIZE(surya_supplies), e->supplies);
 +	if (e->standby)
 +		gpiod_set_value_cansleep(e->standby, 0);
-+	dev_info(&cl->dev, "apagado: reset y standby abajo, relojes y rieles fuera\n");
++	dev_info(&cl->dev, "apagado: reset y standby abajo, clocks y rieles fuera\n");
 +}
 +
 +static const struct of_device_id surya_cam_scan_of[] = {

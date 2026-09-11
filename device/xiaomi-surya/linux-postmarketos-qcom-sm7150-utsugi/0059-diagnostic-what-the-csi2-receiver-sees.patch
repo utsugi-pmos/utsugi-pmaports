@@ -215,7 +215,7 @@ known.
 @@ -980,6 +1002,7 @@
  							  regs->common_status_offset, i));
  
- 		vistos[i] = val;
+ 		seen[i] = val;
 +		diag_phy_state[i] |= val;
  
  		writel_relaxed(val, csiphy->base +

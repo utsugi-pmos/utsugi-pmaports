@@ -92,7 +92,7 @@ the three combinations can be swept by recreating the session on the fly (see
  #include "q6dsp-common.h"
 @@ -45,6 +47,44 @@
  module_param(ec_ref_port, uint, 0644);
- MODULE_PARM_DESC(ec_ref_port, "puerto AFE de referencia de eco (0xFFFF = ninguno)");
+ MODULE_PARM_DESC(ec_ref_port, "AFE port used as the echo reference (0xFFFF = none)");
  
 +/*
 + * TX channels, also tunable at runtime. They are TWO different

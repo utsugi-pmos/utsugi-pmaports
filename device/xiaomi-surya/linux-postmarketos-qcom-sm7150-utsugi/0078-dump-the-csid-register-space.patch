@@ -33,7 +33,7 @@ guessing which register to read.
 --- a/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 14:24:31.197685972 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid-gen2.c	2026-08-17 14:24:31.216609922 +0200
 @@ -74,6 +74,11 @@
- MODULE_PARM_DESC(diag_reaplicar,
+ MODULE_PARM_DESC(diag_reapply,
  	"Write 1 to reapply the receiver configuration with the sensor already streaming.");
  
 +static int csid_dump;
@@ -60,7 +60,7 @@ guessing which register to read.
 +				 * So the entire CSID space is dumped
 +				 * on stop. Of most interest are the ones
 +				 * mainline never reads: the RDI status at
-+				 * 0x350, sus firmas de datos MISR en
++				 * 0x350, its MISR data signatures at
 +				 * 0x354..0x360 -which would be non-zero
 +				 * if a SINGLE datum had gone through- and the
 +				 * timestamps of the sync signals.

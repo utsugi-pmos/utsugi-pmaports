@@ -194,11 +194,11 @@ point 3 is for.
 +		 &phys, mapping_token);
 +
 +	rc = q6core_map_memory(core, phys, SZ_4K);
-+	dev_info(dev, "mapeo: rc=%d handle=%#x\n", rc, core->mem_map_handle);
++	dev_info(dev, "map: rc=%d handle=%#x\n", rc, core->mem_map_handle);
 +
 +	if (!rc) {
 +		q6core_unmap_memory(core);
-+		dev_info(dev, "desmapeo hecho\n");
++		dev_info(dev, "unmap done\n");
 +	}
 +
 +	dma_free_coherent(dev, SZ_4K, p, phys);
