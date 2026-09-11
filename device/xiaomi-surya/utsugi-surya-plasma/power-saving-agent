@@ -10,7 +10,7 @@
 # because no QML was alive to notice.
 #
 #     perfil=power-saver  max0=1324800  max6=1324800  gpu=430000000
-#     brillo=5476  (sin cambiar)   estado=(vacio)
+#     brillo=5476  (sin cambiar)   state=(vacio)
 #
 # Anything that must happen WHENEVER the profile changes therefore cannot live
 # in the tile. It belongs to the session, which is what this is: the same
@@ -28,7 +28,7 @@ IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
 
 AHORRO=power-saver
 
-aplicar_segun() {
+apply_for() {
 	if [ "$1" = "$AHORRO" ]; then
 		"$SWITCH" apply
 	else
@@ -47,7 +47,7 @@ while [ $espera -lt 30 ]; do
 	espera=$((espera + 1))
 	sleep 1
 done
-[ -n "${actual:-}" ] && aplicar_segun "$actual"
+[ -n "${actual:-}" ] && apply_for "$actual"
 
 # gdbus rather than dbus-monitor: it prints one line per signal with the
 # argument inline, so no multi-line parsing is needed. A line looks like
@@ -57,12 +57,12 @@ done
 # This survives PowerDevil restarting, because the match is on the bus, not on
 # a connection to a particular process.
 gdbus monitor --session --dest "$PD" --object-path "$PP" 2>/dev/null |
-while IFS= read -r linea; do
-	case "$linea" in
+while IFS= read -r line; do
+	case "$line" in
 	*currentProfileChanged*)
-		case "$linea" in
-		*"'$AHORRO'"*) aplicar_segun "$AHORRO" ;;
-		*)             aplicar_segun other ;;
+		case "$line" in
+		*"'$AHORRO'"*) apply_for "$AHORRO" ;;
+		*)             apply_for other ;;
 		esac
 		;;
 	esac

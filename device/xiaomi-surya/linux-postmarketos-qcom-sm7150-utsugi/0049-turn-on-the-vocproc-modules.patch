@@ -59,7 +59,7 @@ The modules are read when the session is SET UP, so the voice path has to be
 rebuilt for them to take effect -just as with vocproc_mode and ec_ref_port-:
 
     echo <list> > /sys/module/q6cvp/parameters/enable_modules
-    systemctl restart voz-en-llamada
+    systemctl restart in-call-voice
 
 With that the 26 modules can be tried in one or two calls instead of one per
 call, which is what was holding progress back.

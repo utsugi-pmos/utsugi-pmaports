@@ -21,7 +21,7 @@ set -u
 RUN=/run/charge-mode
 QG=/sys/class/power_supply/qcom_qg
 CHG=/sys/class/power_supply/pm8150b-charger
-APAGAR_PANTALLA=45   # s without touching anything before turning off the screen
+SCREEN_OFF=45   # s without touching anything before turning off the screen
 LARGA=2              # s of button to boot the phone
 
 BL=$(ls -d /sys/class/backlight/* 2>/dev/null | head -1)
@@ -39,20 +39,20 @@ brillo() { [ -n "$BL" ] && echo "$1" > "$BL/brightness" 2>/dev/null; true; }
 # Repainted only when the value changes, or every minute in case the console has
 # written something over it. Repainting each loop would mean launching the Python
 # interpreter every few seconds all night long, to draw the same thing.
-ultimo=
-ultimo_t=0
+last=
+last_t=0
 pintar() {
-	ahora=$(date +%s)
+	now=$(date +%s)
 	v="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
-	if [ "$v" != "$ultimo" ] || [ $(( ahora - ultimo_t )) -ge 60 ]; then
+	if [ "$v" != "$last" ] || [ $(( now - last_t )) -ge 60 ]; then
 		charge-screen 2>/dev/null
-		ultimo="$v"
-		ultimo_t="$ahora"
+		last="$v"
+		last_t="$now"
 	fi
 	true
 }
 
-arrancar_el_movil() {
+boot_the_phone() {
 	rm -f "$RUN"
 	brillo "$TENUE"
 	# Screen to black before releasing it: otherwise, the drawn battery stays
@@ -68,8 +68,8 @@ arrancar_el_movil() {
 # The screen is ours from here: Plymouth goes and the logo is cleared.
 plymouth quit 2>/dev/null
 charge-screen --limpiar 2>/dev/null
-ultimo_t=$(date +%s)
-ultimo="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
+last_t=$(date +%s)
+last="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 
 brillo "$TENUE"
 despierta=$(date +%s)
@@ -113,16 +113,16 @@ while :; do
 			elif [ "$valor" -eq 0 ]; then
 				[ "$pulsada" -ne 0 ] &&
 					[ $(( $(date +%s) - pulsada )) -ge "$LARGA" ] &&
-					arrancar_el_movil
+					boot_the_phone
 				pulsada=0
 				brillo "$TENUE"
-				ultimo=          # on waking, always repaint
+				last=          # on waking, always repaint
 				despierta=$(date +%s)
 			fi
 		fi
 	}
 
-	if [ $(( $(date +%s) - despierta )) -ge "$APAGAR_PANTALLA" ]; then
+	if [ $(( $(date +%s) - despierta )) -ge "$SCREEN_OFF" ]; then
 		brillo 0
 	else
 		pintar

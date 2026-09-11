@@ -26,11 +26,11 @@
 # restarts, and a phone reboots with saving still on.
 set -u
 
-ESTADO="${XDG_STATE_HOME:-$HOME/.local/state}/power-saving"
-PREVIO="$ESTADO/brightness"
-TIEMPOS="$ESTADO/timeouts"
-REFRESCO="$ESTADO/refresh"
-NAVEGADOR="$ESTADO/browser-fps"
+STATE="${XDG_STATE_HOME:-$HOME/.local/state}/power-saving"
+PREVIO="$STATE/brightness"
+TIMEOUTS="$STATE/timeouts"
+REFRESCO="$STATE/refresh"
+NAVEGADOR="$STATE/browser-fps"
 
 PD=org.kde.Solid.PowerManagement
 PERFIL_PATH=/org/kde/Solid/PowerManagement/Actions/PowerProfile
@@ -70,7 +70,7 @@ perfil_actual() {
 	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.currentProfile" 2>/dev/null
 }
 
-poner_perfil() {
+set_profile() {
 	qdbus6 "$PD" "$PERFIL_PATH" "$PERFIL_IFACE.setProfile" "$1" >/dev/null 2>&1
 }
 
@@ -128,7 +128,7 @@ kd_plano() {
 	kscreen-doctor -o 2>/dev/null | sed 's/\x1b\[[0-9;]*m//g'
 }
 
-salida() {
+output() {
 	kd_plano | awk '/^Output:/ { print $3; exit }'
 }
 
@@ -142,8 +142,8 @@ hz_actual() {
 	modo_en_uso | sed 's/.*@//; s/\..*//'
 }
 
-poner_hz() {
-	o="$(salida)"
+set_hz() {
+	o="$(output)"
 	[ -n "$o" ] || return 1
 	# The resolution is taken from the mode in use rather than hardcoded, so
 	# this does not bake the panel geometry into the switch.
@@ -154,7 +154,7 @@ poner_hz() {
 
 # --- browser frame rate -----------------------------------------------------
 #
-# The 'navegador' ajuste pins layout.frame_rate to 120 in Firefox and LibreWolf
+# The 'navegador' setting pins layout.frame_rate to 120 in Firefox and LibreWolf
 # because their autodetection does not work here: measured at 59,7 fps on a
 # 120 Hz panel, and setting -1 leaves it at 59,9. Pinning it was right while
 # the panel could ONLY do 120.
@@ -184,7 +184,7 @@ navegador_fps_actual() {
 	done
 }
 
-navegador_fps_poner() {
+browser_fps_set() {
 	for f in $NAVEGADORES; do
 		[ -f "$f" ] || continue
 		sudo -n sed -i \
@@ -202,27 +202,27 @@ navegador_fps_poner() {
 PERFILES_PD="AC Battery LowBattery"
 
 # Subgroups are nested: [AC][Display] and [AC][SuspendAndShutdown].
-tiempos_poner() {
-	: > "$TIEMPOS"
+timeouts_set() {
+	: > "$TIMEOUTS"
 	for pf in $PERFILES_PD; do
-		guardar_y_poner "$pf" Display DimDisplayIdleTimeoutSec "$DIM_SEC"
-		guardar_y_poner "$pf" Display TurnOffDisplayIdleTimeoutSec "$APAGAR_SEC"
-		guardar_y_poner "$pf" SuspendAndShutdown \
+		save_and_set "$pf" Display DimDisplayIdleTimeoutSec "$DIM_SEC"
+		save_and_set "$pf" Display TurnOffDisplayIdleTimeoutSec "$APAGAR_SEC"
+		save_and_set "$pf" SuspendAndShutdown \
 			AutoSuspendIdleTimeoutSec "$SUSPENDER_SEC"
 	done
 }
 
-guardar_y_poner() {
+save_and_set() {
 	pf="$1"; gr="$2"; cl="$3"; val="$4"
 	antes="$(kreadconfig6 --file powerdevilrc --group "$pf" --group "$gr" \
 		--key "$cl" 2>/dev/null)"
-	printf '%s\t%s\t%s\t%s\n' "$pf" "$gr" "$cl" "$antes" >> "$TIEMPOS"
+	printf '%s\t%s\t%s\t%s\n' "$pf" "$gr" "$cl" "$antes" >> "$TIMEOUTS"
 	kwriteconfig6 --notify --file powerdevilrc --group "$pf" --group "$gr" \
 		--key "$cl" "$val"
 }
 
-tiempos_restaurar() {
-	[ -f "$TIEMPOS" ] || return 0
+timeouts_restore() {
+	[ -f "$TIMEOUTS" ] || return 0
 	while IFS="$TAB" read -r pf gr cl antes; do
 		[ -n "$pf" ] || continue
 		if [ -z "$antes" ]; then
@@ -235,8 +235,8 @@ tiempos_restaurar() {
 			kwriteconfig6 --notify --file powerdevilrc --group "$pf" \
 				--group "$gr" --key "$cl" "$antes"
 		fi
-	done < "$TIEMPOS"
-	rm -f "$TIEMPOS"
+	done < "$TIMEOUTS"
+	rm -f "$TIMEOUTS"
 }
 
 # --- apply / restore --------------------------------------------------------
@@ -248,7 +248,7 @@ apply() {
 	# one to go back to -- and "off" would leave the screen dark for good.
 	[ -f "$PREVIO" ] && return 0
 
-	mkdir -p "$ESTADO"
+	mkdir -p "$STATE"
 
 	actual="$(brillo_get)" || actual=""
 	maximo="$(brillo_max)" || maximo=""
@@ -267,7 +267,7 @@ apply() {
 		hz="$(hz_actual)"
 		if [ -n "$hz" ] && [ "$hz" -gt "$HZ_AHORRO" ] 2>/dev/null; then
 			echo "$hz" > "$REFRESCO"
-			poner_hz "$HZ_AHORRO" || rm -f "$REFRESCO"
+			set_hz "$HZ_AHORRO" || rm -f "$REFRESCO"
 		fi
 
 		# Follow the panel's REAL rate, not the one we asked for. On a
@@ -280,11 +280,11 @@ apply() {
 		if [ -n "$bfps" ] && [ -n "$hz_real" ] &&
 		   [ "$bfps" -gt "$hz_real" ] 2>/dev/null; then
 			echo "$bfps" > "$NAVEGADOR"
-			navegador_fps_poner "$hz_real"
+			browser_fps_set "$hz_real"
 		fi
 	fi
 
-	tiempos_poner
+	timeouts_set
 }
 
 restore() {
@@ -295,16 +295,16 @@ restore() {
 	fi
 	if [ -f "$REFRESCO" ]; then
 		hz="$(cat "$REFRESCO")"
-		[ -n "$hz" ] && poner_hz "$hz"
+		[ -n "$hz" ] && set_hz "$hz"
 		rm -f "$REFRESCO"
 	fi
 	if [ -f "$NAVEGADOR" ]; then
 		bfps="$(cat "$NAVEGADOR")"
-		[ -n "$bfps" ] && navegador_fps_poner "$bfps"
+		[ -n "$bfps" ] && browser_fps_set "$bfps"
 		rm -f "$NAVEGADOR"
 	fi
-	tiempos_restaurar
-	rmdir "$ESTADO" 2>/dev/null || true
+	timeouts_restore
+	rmdir "$STATE" 2>/dev/null || true
 }
 
 # --- interface --------------------------------------------------------------
@@ -323,12 +323,12 @@ status)
 	;;
 
 on)
-	poner_perfil "$AHORRO"
+	set_profile "$AHORRO"
 	apply
 	;;
 
 off)
-	poner_perfil "$NORMAL"
+	set_profile "$NORMAL"
 	restore
 	;;
 

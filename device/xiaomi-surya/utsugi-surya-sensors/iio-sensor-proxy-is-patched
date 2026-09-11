@@ -1,7 +1,7 @@
 #!/bin/sh
 # Does /usr/libexec/iio-sensor-proxy carry the surya's two rotation patches?
 #
-#   iio-sensor-proxy-is-patched [RUTA]
+#   iio-sensor-proxy-is-patched [PATH]
 #
 # With no argument it looks at the installed binary. With one, it looks at that file, which is
 # how 'compilar-e-instalar' checks the freshly compiled .apk BEFORE touching

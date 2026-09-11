@@ -54,9 +54,9 @@ def console_mode(mode):
         os.close(fd)
 
 
-def read_value(ruta, por_defecto=""):
+def read_value(path, por_defecto=""):
     try:
-        with open(ruta) as f:
+        with open(path) as f:
             return f.read().strip()
     except OSError:
         return por_defecto
@@ -71,7 +71,7 @@ def geometria():
     return width, height, paso
 
 
-class Lienzo:
+class Canvas:
     """A rectangle in memory that is then flushed row by row to the framebuffer.
 
     Only the box the drawing occupies is painted and not the whole screen: that is
@@ -120,7 +120,7 @@ class Lienzo:
             for i in range(0, len(cortes) - 1, 2):
                 self.rect(int(cortes[i]), fy, int(cortes[i + 1]) - int(cortes[i]) + 1, 1, color)
 
-    def volcar(self, fb, paso):
+    def dump(self, fb, paso):
         width = self.width * 4
         for fila in range(self.height):
             fb.seek((self.y + fila) * paso + self.x * 4)
@@ -135,27 +135,27 @@ SEGMENTOS = {
 }
 
 
-def cifra(lienzo, x, y, width, height, grosor, c, color):
+def cifra(canvas, x, y, width, height, grosor, c, color):
     on = SEGMENTOS.get(c, "")
     medio = y + (height - grosor) // 2
-    if "a" in on: lienzo.rect(x, y, width, grosor, color)
-    if "g" in on: lienzo.rect(x, medio, width, grosor, color)
-    if "d" in on: lienzo.rect(x, y + height - grosor, width, grosor, color)
-    if "f" in on: lienzo.rect(x, y, grosor, height // 2, color)
-    if "b" in on: lienzo.rect(x + width - grosor, y, grosor, height // 2, color)
-    if "e" in on: lienzo.rect(x, medio, grosor, height - height // 2, color)
-    if "c" in on: lienzo.rect(x + width - grosor, medio, grosor, height - height // 2, color)
+    if "a" in on: canvas.rect(x, y, width, grosor, color)
+    if "g" in on: canvas.rect(x, medio, width, grosor, color)
+    if "d" in on: canvas.rect(x, y + height - grosor, width, grosor, color)
+    if "f" in on: canvas.rect(x, y, grosor, height // 2, color)
+    if "b" in on: canvas.rect(x + width - grosor, y, grosor, height // 2, color)
+    if "e" in on: canvas.rect(x, medio, grosor, height - height // 2, color)
+    if "c" in on: canvas.rect(x + width - grosor, medio, grosor, height - height // 2, color)
 
 
-def porciento(lienzo, x, y, height, grosor, color):
+def porciento(canvas, x, y, height, grosor, color):
     d = height // 3
-    lienzo.frame(x, y, d, d, grosor, color)
-    lienzo.frame(x + height - d, y + height - d, d, d, grosor, color)
-    lienzo.poligono([(x + height - grosor, y), (x + height, y),
+    canvas.frame(x, y, d, d, grosor, color)
+    canvas.frame(x + height - d, y + height - d, d, d, grosor, color)
+    canvas.poligono([(x + height - grosor, y), (x + height, y),
                      (x + grosor, y + height), (x, y + height)], color)
 
 
-def numero(lienzo, text, cx, y, height, color):
+def numero(canvas, text, cx, y, height, color):
     grosor = max(6, height // 9)
     width = int(height * 0.55)
     hueco = grosor * 2
@@ -163,9 +163,9 @@ def numero(lienzo, text, cx, y, height, color):
     x = cx - total // 2
     for c in text:
         if c == "%":
-            porciento(lienzo, x, y + height // 3, height * 2 // 3, grosor, color)
+            porciento(canvas, x, y + height // 3, height * 2 // 3, grosor, color)
         else:
-            cifra(lienzo, x, y, width, height, grosor, c, color)
+            cifra(canvas, x, y, width, height, grosor, c, color)
         x += width + hueco
 
 
@@ -191,7 +191,7 @@ def main():
     # The drawing box, centered. Outside it the screen stays black.
     caja_w, caja_h = 480, 1120
     x0, y0 = (width - caja_w) // 2, (height - caja_h) // 2
-    L = Lienzo(x0, y0, caja_w, caja_h)
+    L = Canvas(x0, y0, caja_w, caja_h)
 
     # Battery: the cap on top and the body below.
     pico_w, pico_h = 120, 30
