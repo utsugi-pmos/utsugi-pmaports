@@ -181,11 +181,11 @@ fi
 
 if [ "$bajar" = 1 ]; then
 	mkdir -p "$(dirname "$XTRA")"
-	if wget -q -T 45 -O "$XTRA.nuevo" "$XTRA_URL" && [ -s "$XTRA.nuevo" ]; then
-		mv "$XTRA.nuevo" "$XTRA"
+	if wget -q -T 45 -O "$XTRA.new" "$XTRA_URL" && [ -s "$XTRA.new" ]; then
+		mv "$XTRA.new" "$XTRA"
 		decir "XTRA ephemeris downloaded ($(stat -c%s "$XTRA") bytes)"
 	else
-		rm -f "$XTRA.nuevo"
+		rm -f "$XTRA.new"
 		decir "could not download XTRA (no network?); the cold fix will be slow"
 	fi
 fi

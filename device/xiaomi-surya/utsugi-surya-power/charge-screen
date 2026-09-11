@@ -64,11 +64,11 @@ def read_value(path, por_defecto=""):
 
 def geometria():
     width, height = (int(v) for v in read_value(f"{SYS_FB}/virtual_size", "1080,2400").split(","))
-    paso = int(read_value(f"{SYS_FB}/stride", str(width * 4)))
+    stride = int(read_value(f"{SYS_FB}/stride", str(width * 4)))
     bpp = int(read_value(f"{SYS_FB}/bits_per_pixel", "32"))
     if bpp != 32:
         raise SystemExit(f"only 32-bit drawing is supported, and this screen uses {bpp}")
-    return width, height, paso
+    return width, height, stride
 
 
 class Canvas:
@@ -81,7 +81,7 @@ class Canvas:
 
     def __init__(self, x, y, width, height):
         self.x, self.y, self.width, self.height = x, y, width, height
-        self.datos = bytearray(width * height * 4)
+        self.data = bytearray(width * height * 4)
 
     def rect(self, x, y, width, height, color):
         r, g, b = color
@@ -91,10 +91,10 @@ class Canvas:
         x1, y1 = min(self.width, x + width), min(self.height, y + height)
         if x1 <= x0 or y1 <= y0:
             return
-        fila = pixel * (x1 - x0)
+        row = pixel * (x1 - x0)
         for fy in range(y0, y1):
             i = (fy * self.width + x0) * 4
-            self.datos[i:i + len(fila)] = fila
+            self.data[i:i + len(row)] = row
 
     def frame(self, x, y, width, height, grosor, color):
         self.rect(x, y, width, grosor, color)
@@ -120,11 +120,11 @@ class Canvas:
             for i in range(0, len(cortes) - 1, 2):
                 self.rect(int(cortes[i]), fy, int(cortes[i + 1]) - int(cortes[i]) + 1, 1, color)
 
-    def dump(self, fb, paso):
+    def dump(self, fb, stride):
         width = self.width * 4
-        for fila in range(self.height):
-            fb.seek((self.y + fila) * paso + self.x * 4)
-            fb.write(self.datos[fila * width:(fila + 1) * width])
+        for row in range(self.height):
+            fb.seek((self.y + row) * stride + self.x * 4)
+            fb.write(self.data[row * width:(row + 1) * width])
 
 
 # Seven-segment digits: no fonts to install, and at this size they can be read
@@ -169,15 +169,15 @@ def numero(canvas, text, cx, y, height, color):
         x += width + hueco
 
 
-def limpiar(fb, height, paso):
-    negro = bytes(paso)
+def limpiar(fb, height, stride):
+    negro = bytes(stride)
     fb.seek(0)
     for _ in range(height):
         fb.write(negro)
 
 
 def main():
-    width, height, paso = geometria()
+    width, height, stride = geometria()
 
     try:
         cap = int(read_value(f"{QG}/capacity", "0"))
@@ -229,11 +229,11 @@ def main():
 
     with open(FB, "r+b", buffering=0) as fb:
         if "--solo-limpiar" in sys.argv:
-            limpiar(fb, height, paso)
+            limpiar(fb, height, stride)
             return
         if "--limpiar" in sys.argv:
-            limpiar(fb, height, paso)
-        L.volcar(fb, paso)
+            limpiar(fb, height, stride)
+        L.dump(fb, stride)
 
 
 if __name__ == "__main__":

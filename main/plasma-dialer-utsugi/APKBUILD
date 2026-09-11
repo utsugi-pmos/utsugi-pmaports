@@ -9,8 +9,8 @@
 # pkgrel is one above Alpine's on purpose, so this build wins. It only wins
 # until Alpine publishes a higher one: after that 'apk upgrade' puts the
 # unpatched dialer back WITHOUT SAYING ANYTHING. That is what
-# ajustes/marcador.d/marcador-esta-parcheado is for -- it makes
-# 'surya-setup --estado' notice.
+# settings/dialer.d/dialer-is-patched was for -- it makes
+# 'surya-setup --state' notice.
 #
 # The group tag is just to easily find this APKBUILD by some scripts for automation
 # group=kde-plasma
