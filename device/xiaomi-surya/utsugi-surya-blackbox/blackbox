@@ -21,19 +21,19 @@ ARCHIVO=/var/log/blackbox
 
 # The most recent trace: first the archive itself, and if nothing has been
 # archived yet, whatever systemd-pstore has just left.
-ultimo() {
+last() {
 	d="$(ls -1d "$ARCHIVO"/*/ 2>/dev/null | sort | tail -1)"
 	[ -n "$d" ] && { printf '%s\n' "${d%/}"; return 0; }
 	[ -e /var/lib/systemd/pstore/pmsg-ramoops-0 ] && { echo /var/lib/systemd/pstore; return 0; }
 	return 1
 }
 
-# The DISK heartbeat ('ultimo-latido') is the good source: on this phone it is the
+# The DISK heartbeat ('last-latido') is the good source: on this phone it is the
 # only one that survives. The pmsg one carries the whole history, but it only
 # appears the day ramoops works here -- see the header of blackbox-heartbeat.
-latidos_de() {
+beats_of() {
 	grep -a '^blackbox ' "$1/pmsg-ramoops-0" 2>/dev/null || true
-	grep -a '^blackbox ' "$1/ultimo-latido" 2>/dev/null || true
+	grep -a '^blackbox ' "$1/last-latido" 2>/dev/null || true
 }
 
 campo() {  # campo <line> <name>  ->  the value, or empty
@@ -60,14 +60,14 @@ case "${1:-}" in
 	echo "Traces saved in $ARCHIVO:"
 	for d in "$ARCHIVO"/*/; do
 		[ -d "$d" ] || { echo "  (none yet)"; break; }
-		n="$(latidos_de "${d%/}" | wc -l)"
+		n="$(beats_of "${d%/}" | wc -l)"
 		printf '  %-20s %s heartbeats%s\n' "$(basename "$d")" "$n" \
 			"$([ -e "${d%/}/dmesg-ramoops-0" ] && echo ', WITH panic dump')"
 	done
 	exit 0 ;;
 --latidos)
-	d="$(ultimo)" || { echo "No trace saved."; exit 1; }
-	latidos_de "$d"
+	d="$(last)" || { echo "No trace saved."; exit 1; }
+	beats_of "$d"
 	exit 0 ;;
 --estado)
 	printf 'console awake on suspend        %s\n' \
@@ -86,7 +86,7 @@ case "${1:-}" in
 	exit 0 ;;
 esac
 
-d="$(ultimo)" || {
+d="$(last)" || {
 	cat <<'FIN'
 No trace saved yet.
 
@@ -100,19 +100,19 @@ echo "=== Trace of $(basename "$d") ==="
 echo
 
 # --- 1. how long it stayed alive -------------------------------------------
-ult="$(latidos_de "$d" | tail -1)"
+ult="$(beats_of "$d" | tail -1)"
 if [ -z "$ult" ]; then
 	echo "No heartbeats. Either the black box was not in place on that boot, or the"
 	echo "message area filled up and wrapped around."
 else
 	t="$(campo "$ult" t)"
-	arranque="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
+	boot="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
 	# The line is: blackbox <date> t=... up=...  -- the date is the 2nd field.
 	echo "Last heartbeat:  $(printf '%s\n' "$ult" | cut -d' ' -f2)"
 	echo "  the phone had been on for $(campo "$ult" up) s"
-	echo "  screen $(campo "$ult" luz), suspends $(campo "$ult" susp) (good/bad), charge $(campo "$ult" carga)"
+	echo "  screen $(campo "$ult" luz), suspends $(campo "$ult" susp) (good/bad), charge $(campo "$ult" load)"
 	if [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null; then
-		hueco=$((arranque - t))
+		hueco=$((boot - t))
 		if [ "$hueco" -gt 0 ]; then
 			echo "  and the phone did not boot again until $((hueco / 60)) min later"
 		fi

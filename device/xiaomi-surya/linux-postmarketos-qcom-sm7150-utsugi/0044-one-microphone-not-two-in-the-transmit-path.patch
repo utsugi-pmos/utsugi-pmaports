@@ -71,7 +71,7 @@ back over old ground, it is trying it for the first time.
 
 ## How to test it
 
-With the `voz-puertos` trigger it can be checked without spending a call that
+With the `voice-ports` trigger it can be checked without spending a call that
 the DSP still accepts the session and that the trace says `channel info TX: 1
 canales`. To know whether it is heard a call is needed, and in that same call
 the three combinations can be swept by recreating the session on the fly (see

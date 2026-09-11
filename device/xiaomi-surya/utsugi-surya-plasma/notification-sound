@@ -42,37 +42,39 @@ import dbus
 import dbus.mainloop.glib
 from gi.repository import GLib
 
-SONIDO = os.environ.get(
+# NOTICE_SOUND since 2026-09-11; SONIDO_AVISO is the name the unit and whoever
+# set it in their own drop-in still use, so both are read.
+SOUND = os.environ.get("NOTICE_SOUND") or os.environ.get(
     "SONIDO_AVISO", "/usr/share/sounds/freedesktop/stereo/message-new-instant.oga"
 )
 # Seconds between sounds: a burst of messages must not be a machine gun.
-ESPERA = 2.0
+WAIT = 2.0
 
 # The size, not the existence: the system's 50 'Oxygen-*.ogg' weigh 36 bytes
 # and are empty markers. Choosing them would be choosing silence, and with no error.
-if not os.path.isfile(SONIDO):
-    sys.exit(f"{SONIDO} does not exist")
-if os.path.getsize(SONIDO) < 1024:
-    sys.exit(f"{SONIDO} is empty (marker of {os.path.getsize(SONIDO)} bytes)")
+if not os.path.isfile(SOUND):
+    sys.exit(f"{SOUND} does not exist")
+if os.path.getsize(SOUND) < 1024:
+    sys.exit(f"{SOUND} is empty (marker of {os.path.getsize(SOUND)} bytes)")
 
-ultimo = 0.0
+last = 0.0
 
 
-def al_notificar(bus, mensaje):
-    global ultimo
-    if mensaje.get_member() != "Notify":
+def al_notificar(bus, message):
+    global last
+    if message.get_member() != "Notify":
         return
-    if mensaje.get_interface() != "org.freedesktop.Notifications":
+    if message.get_interface() != "org.freedesktop.Notifications":
         return
 
-    ahora = time.monotonic()
-    if ahora - ultimo < ESPERA:
+    now = time.monotonic()
+    if now - last < WAIT:
         return
-    ultimo = ahora
+    last = now
 
     # Without waiting: a notification must not wait for the sound to finish.
     subprocess.Popen(
-        ["paplay", SONIDO],
+        ["paplay", SOUND],
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
@@ -95,5 +97,5 @@ bus.call_blocking(
 )
 bus.add_message_filter(al_notificar)
 
-print(f"listening for notifications; they will sound with {os.path.basename(SONIDO)}", flush=True)
+print(f"listening for notifications; they will sound with {os.path.basename(SOUND)}", flush=True)
 GLib.MainLoop().run()

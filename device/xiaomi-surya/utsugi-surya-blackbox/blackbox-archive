@@ -37,12 +37,12 @@ mkdir -p "$BASE"
 hay_latido=0
 if [ -s "$LATIDO" ]; then
 	t="$(tr ' ' '\n' < "$LATIDO" | sed -n 's/^t=//p' | head -1 | tr -dc 0-9)"
-	arranque=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
+	boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
 	if [ -z "$t" ]; then
 		# Without 't=' it cannot be dated: it is archived, which is the prudent side --
 		# losing a freeze's mark is worse than archiving one too many.
 		hay_latido=1
-	elif [ "$t" -lt "$arranque" ]; then
+	elif [ "$t" -lt "$boot" ]; then
 		hay_latido=1
 	fi
 fi
@@ -53,19 +53,19 @@ fi
 # dump" showing the oops from September 1st.
 #
 # The boundary is the date of the most recent one already archived, kept aside.
-ESTADO="$BASE/.ramoops-archivado"
+STATE="$BASE/.ramoops-archivado"
 visto=0
-[ -f "$ESTADO" ] && visto="$(cat "$ESTADO" 2>/dev/null | tr -dc 0-9)"
+[ -f "$STATE" ] && visto="$(cat "$STATE" 2>/dev/null | tr -dc 0-9)"
 [ -n "$visto" ] || visto=0
 
 hay_ramoops=0
-nuevo_visto="$visto"
+new_seen="$visto"
 for f in "$ORIGEN"/*-ramoops-*; do
 	[ -e "$f" ] || continue
 	m="$(date -r "$f" +%s 2>/dev/null || echo 0)"
 	[ "$m" -gt "$visto" ] || continue
 	hay_ramoops=1
-	[ "$m" -gt "$nuevo_visto" ] && nuevo_visto="$m"
+	[ "$m" -gt "$new_seen" ] && new_seen="$m"
 done
 [ "$hay_latido" = 1 ] || [ "$hay_ramoops" = 1 ] || exit 0
 
@@ -88,7 +88,7 @@ mkdir -p "$dir"
 # 1. The sign of life. It is MOVED, not copied: this way this boot's heartbeat
 #    starts from zero and no old copy is left confusing things.
 if [ "$hay_latido" = 1 ]; then
-	mv "$LATIDO" "$dir/ultimo-latido"
+	mv "$LATIDO" "$dir/last-latido"
 fi
 
 # 2. The ramoops trace, and ONLY the one not already archived (see above).
@@ -99,7 +99,7 @@ if [ "$hay_ramoops" = 1 ]; then
 		[ "$m" -gt "$visto" ] || continue
 		cp -a "$f" "$dir"/ 2>/dev/null || true
 	done
-	printf '%s\n' "$nuevo_visto" > "$ESTADO"
+	printf '%s\n' "$new_seen" > "$STATE"
 fi
 
 # 3. The previous boot's journal, alongside the rest. Without this you have to remember
@@ -120,6 +120,6 @@ fi
 } > "$dir/diario-del-arranque-anterior.txt" 2>/dev/null || true
 
 # Keep it from growing without end: the last ten are enough.
-ls -1d "$BASE"/*/ 2>/dev/null | sort -r | tail -n +11 | while read -r viejo; do
-	rm -rf "$viejo"
+ls -1d "$BASE"/*/ 2>/dev/null | sort -r | tail -n +11 | while read -r old; do
+	rm -rf "$old"
 done
