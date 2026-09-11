@@ -1,18 +1,23 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=utsugi-surya-boot
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Kernel command line for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
-source="60-utsugi-surya.conf"
+source="60-utsugi-surya.conf
+	10-utsugi-no-ab-slots.conf
+	"
 
 package() {
 	install -Dm644 "$srcdir"/60-utsugi-surya.conf \
 		-t "$pkgdir"/usr/lib/kernel-cmdline.d/
+	install -Dm644 "$srcdir"/10-utsugi-no-ab-slots.conf \
+		-t "$pkgdir"/usr/lib/systemd/system/qbootctl.service.d/
 }
 sha512sums="
 b7726091ec66fa19363990b134815d637b6d384296be70b2f0f18b646f6f7410ab4b164829f5f6a7b8c0764e32af81d5a0bb5184ba2f46d1a091fd0ef50f5281  60-utsugi-surya.conf
+aca4b10cd9f720a377e81fa85bbd7822e857f158b18109c8fd44c87319acb84f9e256f2de29e62122619aa0b469a453b5743c32a9ba2bc5d249aff155f1a7631  10-utsugi-no-ab-slots.conf
 "
