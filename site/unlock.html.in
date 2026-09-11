@@ -43,48 +43,81 @@
 			do shortens it.</li>
 		</ol>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>A week later, from Linux</h2></div>
-		<p><b>MiUnlockTool</b> does from Linux what Xiaomi's Windows program does:
-		it logs into your Mi account, asks their server for the unlock token and
-		hands it to the phone. It is a pip package, <code>miunlock</code>
-		(<a href="https://github.com/offici5l/MiUnlockTool">offici5l/MiUnlockTool</a>).</p>
-		<div class="sh">
-			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
-			<pre>pipx install miunlock        <i># or: pip install --user miunlock</i>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>A week later, on your computer</h2></div>
+		<p>The unlock is a request to Xiaomi's server with your account's token,
+		which is why <b>Windows is not required</b>. <b>MiUnlockTool</b> makes that
+		request from any of the three systems &mdash; it is a pip package,
+		<code>miunlock</code>
+		(<a href="https://github.com/offici5l/MiUnlockTool">offici5l/MiUnlockTool</a>),
+		and it downloads <code>fastboot</code> itself if you do not have it.</p>
+		<p>Put the phone in fastboot first: turn it off, hold <b>volume-down +
+		power</b> until it says <i>fastboot</i>, then plug the USB cable in.</p>
+		<div class="os">
+			<input type="radio" name="unlock-os" id="unlock-linux" checked>
+			<input type="radio" name="unlock-os" id="unlock-win">
+			<input type="radio" name="unlock-os" id="unlock-mac">
+			<div class="tabs">
+				<label for="unlock-linux">Linux</label>
+				<label for="unlock-win">Windows</label>
+				<label for="unlock-mac">macOS</label>
+			</div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>pipx install miunlock     <i># or: pip install --user miunlock</i>
 
-<i># phone OFF, hold volume-down + power until it says "fastboot",</i>
-<i># then plug the USB cable in</i>
-sudo fastboot devices        <b># must print your phone</b>
-
+sudo fastboot devices     <b># must print your phone</b>
 miunlock</pre>
+			</div>
+			<p>If <code>miunlock</code> says it cannot see the phone while
+			<code>sudo fastboot devices</code> can, it is the udev rules: run it as
+			<code>sudo env PATH=$PATH miunlock</code>, or install
+			<code>android-udev-rules</code> for your distro.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN POWERSHELL</span></div>
+				<pre>pip install miunlock
+
+.\fastboot devices        <i># or let miunlock fetch platform-tools</i>
+miunlock</pre>
+			</div>
+			<p>Windows needs the phone's fastboot driver: the <b>Google USB
+			Driver</b>, or Xiaomi's own installer. Xiaomi's
+			<a href="https://en.miui.com/unlock/">Mi Unlock</a> is the official
+			route here and it works the same way &mdash; log in, phone in fastboot,
+			press Unlock.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>pipx install miunlock     <i># or: pip install --user miunlock</i>
+
+fastboot devices          <b># no sudo needed on macOS</b>
+miunlock</pre>
+			</div>
+			<p>Xiaomi ships no macOS tool, so this is the only route. MiUnlockTool
+			downloads the macOS platform-tools by itself the first time.</p></div>
 		</div>
+		<p>Then, whichever system you used, it walks you through the same four
+		things:</p>
 		<ol>
-			<li>It asks you to sign in with the <b>same Mi account</b> you bound the
-			phone to.</li>
-			<li>It picks your account's region and shows it. Enter to accept.</li>
+			<li>Sign in with the <b>same Mi account</b> you bound the phone to.</li>
+			<li>It shows your account's region. Enter to accept.</li>
 			<li>It warns that unlocking <b>erases the phone</b>. That is Xiaomi's
 			behaviour, not the tool's.</li>
 			<li>It gets the token and runs <code>fastboot stage</code> +
-			<code>fastboot oem unlock</code> for you. The phone wipes and reboots
-			into MIUI.</li>
+			<code>fastboot oem unlock</code>. The phone wipes and reboots into
+			MIUI.</li>
 		</ol>
-		<p>If it refuses, the message comes from Xiaomi's server and says why &mdash;
-		usually the week is not up, or the account is not the one bound to the
-		phone.</p>
-		<div class="note"><i></i><div>
-			<b>Windows is not needed.</b>
-			Xiaomi's own <a href="https://en.miui.com/unlock/">Mi Unlock</a> is a
-			Windows program and works too, but the unlock is only a request to their
-			server. This phone was unlocked from Linux with the tool above.
-		</div></div>
+		<p>If it refuses, the message comes from Xiaomi's server and says why
+		&mdash; usually the week is not up, or the account is not the one bound to
+		the phone.</p>
 
 		<div class="h" style="margin-top:34px"><span>03</span><h2>Check it worked</h2></div>
 		<p>Turn the phone off, hold <b>volume-down + power</b> to get back into
 		fastboot, and from your PC:</p>
 		<div class="sh">
-			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<div class="bar"><i></i><span>IN A TERMINAL</span></div>
 			<pre>sudo fastboot devices              <b># must print your phone</b>
-sudo fastboot getvar unlocked      <i># unlocked: yes</i></pre>
+sudo fastboot getvar unlocked      <i># unlocked: yes</i>
+
+<i># Windows: .\fastboot, no sudo. macOS: fastboot, no sudo.</i></pre>
 		</div>
 		<p>With that <code>yes</code>, every route on this site is open to you.</p>
 		<div class="next">
