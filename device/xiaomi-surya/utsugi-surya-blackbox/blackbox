@@ -146,4 +146,9 @@ with the exact function.
 FIN
 fi
 echo
-echo "The log of the previous boot: $d/previous-boot-log.txt"
+# Archives made before 2026-09-11 carry the Spanish file name; name the one
+# that is actually there, so this line never points at nothing.
+log="$d/previous-boot-log.txt"
+[ -f "$log" ] || [ ! -f "$d/diario-del-arranque-anterior.txt" ] \
+	|| log="$d/diario-del-arranque-anterior.txt"
+echo "The log of the previous boot: $log"

@@ -58,6 +58,11 @@ fi
 #
 # The boundary is the date of the most recent one already archived, kept aside.
 STATE="$BASE/.ramoops-archived"
+# The marker was ".ramoops-archivado" until 2026-09-11. Reading only the new name
+# on a phone that has the old one loses the boundary, and the next run archives a
+# dump that was already archived -- which is the exact failure the boundary is
+# here to prevent.
+[ -f "$STATE" ] || [ ! -f "$BASE/.ramoops-archivado" ] || STATE="$BASE/.ramoops-archivado"
 seen=0
 [ -f "$STATE" ] && seen="$(cat "$STATE" 2>/dev/null | tr -dc 0-9)"
 [ -n "$seen" ] || seen=0
