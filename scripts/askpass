@@ -6,7 +6,7 @@
 # The password lives in .local/credentials (gitignored), never in this file.
 [ -n "${PMB_PW:-}" ] || {
 	D="$(cd "$(dirname "$0")/.." && pwd)"
-	for f in "$D/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credenciales.local"; do
+	for f in "$D/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credentials.local"; do
 		[ -f "$f" ] && . "$f" && break
 	done
 }

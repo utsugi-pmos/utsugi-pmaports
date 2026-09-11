@@ -63,7 +63,7 @@ guard, because a full disk produces data that looks good.
 @@ -752,6 +759,7 @@
  		.vts_min = 1680,
  		.crop_top = 864,
- 		.crop_height = 5216,	/* agrupado 4x4 -> 1304 */
+ 		.crop_height = 5216,	/* binned 4x4 -> 1304 */
 +		.exp_min = 6,		/* measured: with 4 or 5 it comes out flat */
  		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
  		.regs = imx682_2312x1304,
@@ -71,7 +71,7 @@ guard, because a full disk produces data that looks good.
 @@ -763,6 +771,7 @@
  		.vts_min = 1148,
  		.crop_top = 1312,
- 		.crop_height = 4320,	/* agrupado 4x4 -> 1080 */
+ 		.crop_height = 4320,	/* binned 4x4 -> 1080 */
 +		.exp_min = 6,		/* measured: with 4 or 5 it comes out flat */
  		.link_freq_idx = 3,	/* 520 MHz, PLL x325 */
  		.regs = imx682_1920x1080,
@@ -79,7 +79,7 @@ guard, because a full disk produces data that looks good.
 @@ -774,6 +783,7 @@
  		.vts_min = 2218,
  		.crop_top = 1312,
- 		.crop_height = 4320,	/* agrupado 2x2 -> 2160 */
+ 		.crop_height = 4320,	/* binned 2x2 -> 2160 */
 +		.exp_min = 4,
  		.link_freq_idx = 1,	/* 435,2 MHz, PLL x272 */
  		.regs = imx682_3840x2160,
@@ -87,7 +87,7 @@ guard, because a full disk produces data that looks good.
 @@ -785,6 +795,7 @@
  		.vts_min = 3528,
  		.crop_top = 0,
- 		.crop_height = 6944,	/* agrupado 2x2 -> 3472 */
+ 		.crop_height = 6944,	/* binned 2x2 -> 3472 */
 +		.exp_min = 4,
  		.link_freq_idx = 2,	/* 476,8 MHz, PLL x298 */
  		.regs = imx682_4624x3472,

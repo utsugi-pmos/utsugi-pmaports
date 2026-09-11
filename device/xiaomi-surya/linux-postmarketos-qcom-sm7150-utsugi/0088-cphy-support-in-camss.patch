@@ -61,7 +61,7 @@ The front camera carries on down the D-PHY branch without noticing.
  
  struct camss_camera_interface {
  	u8 csiphy_id;
-+	/* enlace de tres fases (C-PHY) en vez de D-PHY */
++	/* three-phase link (C-PHY) instead of D-PHY */
 +	u8 cphy;
  	struct csiphy_csi2_cfg csi2;
  };

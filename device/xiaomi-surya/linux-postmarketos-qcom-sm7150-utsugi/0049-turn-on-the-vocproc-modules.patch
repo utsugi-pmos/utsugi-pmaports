@@ -115,7 +115,7 @@ correctly.
  	u16 reserved;
  
  	union {
-+		u32 valor;
++		u32 value;
  		struct vss_param_endpoint_media_format_info media_format_info;
  		struct vss_param_vocproc_dev_channel_info channel_info;
  	};
@@ -128,26 +128,26 @@ correctly.
 + * SET_PARAM_V2 already used for channel info and media format.
 + */
 +static int q6cvp_set_param_u32(struct q6voice_session *cvp, u32 module_id,
-+			       u32 param_id, u32 valor)
++			       u32 param_id, u32 value)
 +{
 +	struct vss_icommon_cmd_set_param_v2_cmd cmd;
 +
 +	cmd.hdr.pkt_size = offsetof(struct vss_icommon_cmd_set_param_v2_cmd,
-+				    param_data.valor)
-+			 + sizeof(cmd.param_data.valor);
++				    param_data.value)
++			 + sizeof(cmd.param_data.value);
 +	cmd.hdr.opcode = VSS_ICOMMON_CMD_SET_PARAM_V2;
 +
 +	/* In band: the data goes in the packet itself, without shared memory. */
 +	cmd.mem_handle = 0;
 +	cmd.mem_address = 0;
-+	cmd.mem_size = offsetof(struct vss_icommon_param_data, valor)
-+		     + sizeof(cmd.param_data.valor);
++	cmd.mem_size = offsetof(struct vss_icommon_param_data, value)
++		     + sizeof(cmd.param_data.value);
 +
 +	cmd.param_data.module_id = module_id;
 +	cmd.param_data.param_id = param_id;
-+	cmd.param_data.param_size = sizeof(cmd.param_data.valor);
++	cmd.param_data.param_size = sizeof(cmd.param_data.value);
 +	cmd.param_data.reserved = 0;
-+	cmd.param_data.valor = valor;
++	cmd.param_data.value = value;
 +
 +	return q6voice_common_send(cvp, &cmd.hdr);
 +}
@@ -161,7 +161,7 @@ correctly.
 + */
 +static void q6cvp_enable_modules(struct q6voice_session *cvp)
 +{
-+	char lista[sizeof(enable_modules)];
++	char list[sizeof(enable_modules)];
 +	char *p, *tok;
 +	int powered_on = 0, failures = 0;
 +
@@ -169,8 +169,8 @@ correctly.
 +		return;
 +
 +	/* strsep() writes over the buffer, and the parameter one is not ours. */
-+	strscpy(lista, enable_modules, sizeof(lista));
-+	p = lista;
++	strscpy(list, enable_modules, sizeof(list));
++	p = list;
 +
 +	while ((tok = strsep(&p, ",")) != NULL) {
 +		u32 module_id;

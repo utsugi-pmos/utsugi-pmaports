@@ -85,7 +85,7 @@ descriptors, in the same order. Paired that way you get 0x0112/3 = 0x0a0a
  	{ 0x3C7F, 0x0A },
  	{ 0x0111, 0x02 },
 @@ -281,97 +289,97 @@
-  * diagnosticar.
+  * which is much harder to diagnose.
   *
   * The price is about 4.2 frames per second at 48 megapixels. */
 -static const struct imx682_reg imx682_8000x6000[] = {

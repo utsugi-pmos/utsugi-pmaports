@@ -145,14 +145,14 @@ a call.
 +	pkt->hdr.opcode = AVCS_CMD_REGISTER_TOPOLOGIES;
 +
 +	/*
-+	 * kzalloc deja payload_addr_lsw, payload_addr_msw y mem_map_handle a
++	 * kzalloc leaves payload_addr_lsw, payload_addr_msw and mem_map_handle at
 +	 * zero, and THAT is what tells the DSP that the data comes inside the
 +	 * packet. It is not an oversight, it is the mechanism.
 +	 */
 +	cmd->payload_size = size;
 +	memcpy(dest, data, size);
 +
-+	dev_info(dev, "registro in-band: %u bytes de topologias, paquete de %d\n",
++	dev_info(dev, "in-band registration: %u bytes of topologies, packet of %d\n",
 +		 size, pkt_size);
 +
 +	core->resp_received = false;

@@ -85,7 +85,7 @@ This does NOT fix anything: it is for looking.
 +		leido = readl_relaxed(csiphy->base + r->reg_addr);
 +		if (leido != val)
 +			dev_info(csiphy->camss->dev,
-+				 "csiphy%d 0x%04x: escrito 0x%02x, leido 0x%08x\n",
++				 "csiphy%d 0x%04x: wrote 0x%02x, read 0x%08x\n",
 +				 csiphy->id, r->reg_addr, val, leido);
 +	}
 +	dev_info(csiphy->camss->dev, "csiphy%d: read-back finished\n",

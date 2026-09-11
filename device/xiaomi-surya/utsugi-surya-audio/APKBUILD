@@ -16,7 +16,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=utsugi-surya-audio
 pkgver=1
-pkgrel=2
+pkgrel=3
 pkgdesc="Audio for the Xiaomi POCO X3 NFC: both speakers, saved volume, UCM ordering"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -67,7 +67,7 @@ systemd() {
 sha512sums="
 921446864342abef0b633b4044fc91309debe8d3ab24f9733f28d0975463720014e38ea89acdc8e3d0a6872d3c171034b611b225cc9babc32b4b799d56eb657a  adsp-audio-init
 f7bed1404573f0d8b3d009cf8bbc710f6d6c3bc7d7fa72d838d1692850663458edbf0d840a93b7d4b2822a9ef459b5f28f58818881d52adfcc50bdbf8a5e120c  audio-volume
-b10ca0d5fbbd82b062c4bc4efb4ac75f8ba31ac33d76c63b25bd8b614a8dbd703d8111fab96e69faf62365be0c424d090f698b06b003b6dc116fd7054481a5fe  audio-output
+db4d2ca8c6d810177b8dd5fd2e1ce86a0e62e632e4e3385e75a1ffe8e06302d61505e7d3b93f69ea216193a1564291f88f74e32a198e188a2c09d25ea9fd9b0c  audio-output
 afffeded471926e239510730670d10934cc60604b034b75c4c20aeb263b5f429d606e4fadd088702af30daaf3f2099eef1d8c201cd22ebbecd2420f69d6a4030  ucm-before-pulseaudio
 db5b6563bdde81ac0b826c0481f8a8eb3798baa8a6a79f38f0983eb5793c1f96d416001932b141bd45bb4d27ede0aae85c065dd1c69e49363aedf6c999b693e9  adsp-audio-init.service
 45b26fd4d9d1b58d4be20861ebd283c8c69dfe6a283a1160e6dbbae5a7b593e69c19f67e4cb049354d7de63914662fd65fe696a2edd319eef38ee8e594626d8d  audio-volume.service

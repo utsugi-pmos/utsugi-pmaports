@@ -133,7 +133,7 @@ the bus, which is a dependency that can be met: moving focus while capturing.
 +		 * as soon as it suspended it was locked out: the regulator at zero, the
 +		 * power state in "error" and the subdevice never opening.
 +		 *
-+		 * Medido: enable count 0 y /sys/.../power/runtime_status = error.
++		 * Measured: enable count 0 and /sys/.../power/runtime_status = error.
 +		 *
 +		 * Leaving the enable line fixed, the chip keeps its power and the
 +		 * driver only depends on the bus, which is a dependency that CAN be
@@ -184,9 +184,8 @@ the bus, which is a dependency that can be met: moving focus while capturing.
 +		 * THE MOTOR BELONGS TO IT, AND IT HAS TO BE SAID HERE.
 +		 *
 +		 * Without this reference the actuator driver binds to the chip
-+		 * -visible in /sys/bus/i2c/devices/12-000c/driver- but it does not show up
-+		 * ningun subdispositivo ni ningun control de enfoque: nadie lo
-+		 * puts it into the graph.
++		 * -visible in /sys/bus/i2c/devices/12-000c/driver- but no subdevice
++		 * and no focus control show up: nobody puts it into the graph.
 +		 *
 +		 * v4l2_async_register_subdev_sensor(), which is what this
 +		 * driver uses, reads lens-focus and creates the ancillary link. That is where

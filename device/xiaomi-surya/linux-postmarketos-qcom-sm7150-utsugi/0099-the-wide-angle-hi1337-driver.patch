@@ -226,7 +226,7 @@ without recompiling.
 +		 * backwards" and the number said the opposite.
 +		 */
 +		rotation = <270>;
-+		orientation = <1>;	/* trasera */
++		orientation = <1>;	/* rear */
 +
 +		/* CAM_RESET3 from the factory, confirmed by measurement. */
 +		reset-gpios = <&tlmm 24 GPIO_ACTIVE_LOW>;
@@ -264,8 +264,8 @@ without recompiling.
 +		 * The MIPI switch. According to docs/CAMERA-02-wiring.md, the
 +		 * front and the wide-angle cameras SHARE CSIPHY1 and take turns through
 +		 * CAM_SEL (pm6150 gpio3). Without putting it in this sensor's
-+		 * position, its lanes do not reach the SoC no matter how much the sensor
-+		 * emita.
++		 * position, its lanes do not reach the SoC no matter how much the
++		 * sensor transmits.
 +		 *
 +		 * Which position is which is not known: it goes as a module parameter
 +		 * (mipi_switch=0 or 1) so it can be tried without recompiling.
@@ -278,7 +278,7 @@ without recompiling.
 +		 * The MIPI switch needs TWO: the regulator above, which
 +		 * the device tree already declared, and this one, which nobody declared.
 +		 * It showed up as "input" in gpioinfo, with the name set by the
-+		 * propio SoC:
++		 * SoC itself:
 +		 *
 +		 *     line 2: "CAM_SW2_OE_2"   input
 +		 *
@@ -372,11 +372,11 @@ without recompiling.
 + * --------------------------------------
 + * From the PLL registers of the full mode, the multiplier of the first
 + * chain (0x0736) is 90, which with INCK = 19.2 MHz gives 1728 MHz of VCO and
-+ * therefore 864 MHz of link clock. It fits comfortably with what the mode needs
-+ * completo (4208 x 3120 x 30 fps x 10 bits / 4 lanes / 2 = 493 MHz minimo),
++ * therefore 864 MHz of link clock. It fits comfortably with what the full mode
++ * needs (4208 x 3120 x 30 fps x 10 bits / 4 lanes / 2 = 493 MHz minimum),
 + * but the exact PLL structure of this sensor is not documented and it has not
-+ * been possible to verify it through a second path, which is how the one of the
-+ * frontal.
++ * been possible to verify it through a second path, which is how the front
++ * one was verified.
 + *
 + * That is why it goes as a module parameter: it can be swept without recompiling, just
 + * like it was done with the scanner's probe.
@@ -425,7 +425,7 @@ without recompiling.
 + * and stop pair. See hi1337_set_ctrl().
 + */
 +/* How much has to be left free at the end of the frame for the exposure. */
-+#define HI1337_EXPOSURE_MARGEN	4
++#define HI1337_EXPOSURE_MARGIN	4
 +
 +/* Below this the sensor stops streaming. Measured, not from the datasheet. */
 +#define HI1337_EXPOSURE_MINIMA	720
@@ -2065,7 +2065,7 @@ without recompiling.
 +	{ CCI_REG16(0x0c34), 0x0300 },
 +};
 +
-+/* Modo completo, 4208x3120 */
++/* Full mode, 4208x3120 */
 +static const struct cci_reg_sequence hi1337_mode_4208x3120[] = {
 +	{ CCI_REG16(0x0b00), 0x0000 },
 +	{ CCI_REG16(0x0204), 0x0000 },
@@ -2156,7 +2156,7 @@ without recompiling.
 +	{ CCI_REG16(0x160e), 0x0d80 },
 +};
 +
-+/* Modo combinado, 2104x1560 */
++/* Binned mode, 2104x1560 */
 +static const struct cci_reg_sequence hi1337_mode_2104x1560[] = {
 +	{ CCI_REG16(0x0b00), 0x0000 },
 +	{ CCI_REG16(0x0204), 0x0200 },
@@ -2275,8 +2275,8 @@ without recompiling.
 +		 * It matters since r180: until then the frame length was
 +		 * written only halfway -just 0x020a, without its mate 0x020e- and the
 +		 * sensor ignored it, so this minimum would have been of no
-+		 * use at all. With the mate in place, doubling vts from 3307 to 6614 drops from
-+		 * 19,5 a 12,3 fps: ya manda.
++		 * use at all. With the mate in place, doubling vts from 3307 to 6614
++		 * drops from 19.5 to 12.3 fps: now it rules.
 +		 */
 +		.vts_min = 1662,
 +		/*
@@ -2345,8 +2345,8 @@ without recompiling.
 +		return 0;
 +
 +	/*
-+	 * CERROJO DE GRUPO
-+	 * ----------------
++	 * GROUP HOLD
++	 * ----------
 +	 * The factory blob carries 0x0208=0x0100 and 0x0208=0x0000 as two
 +	 * single-write "tables", right next to the stream start and
 +	 * stop pair (0x0b00). That is the classic pattern of the group
@@ -2391,7 +2391,7 @@ without recompiling.
 +		 *
 +		 *     4208x3120: 0x020a=3307  0x020e=3311
 +		 *     2104x1560: 0x020a=3307  0x020e=3311
-+		 *     2104x1560: 0x020a=1662  0x020e=1666   (variante rapida)
++		 *     2104x1560: 0x020a=1662  0x020e=1666   (fast variant)
 +		 *
 +		 * Only the first one was written, so as soon as anyone touched
 +		 * the vertical blanking the pair went out of sync. It fits
@@ -2423,7 +2423,7 @@ without recompiling.
 +		 */
 +		if (hi1337->exposure) {
 +			s64 max = hi1337->mode->height + ctrl->val -
-+				  HI1337_EXPOSURE_MARGEN;
++				  HI1337_EXPOSURE_MARGIN;
 +
 +			__v4l2_ctrl_modify_range(hi1337->exposure,
 +						 hi1337->exposure->minimum,
@@ -2468,7 +2468,7 @@ without recompiling.
 +
 +	if (link_freq_hz) {
 +		hi1337_link_freq_menu[0] = link_freq_hz;
-+		dev_info(hi1337->dev, "frecuencia de enlace forzada: %lu Hz\n",
++		dev_info(hi1337->dev, "link frequency forced: %lu Hz\n",
 +			 link_freq_hz);
 +	}
 +
@@ -2524,7 +2524,7 @@ without recompiling.
 +	hi1337->exposure = v4l2_ctrl_new_std(h, &hi1337_ctrl_ops,
 +					     V4L2_CID_EXPOSURE,
 +					     HI1337_EXPOSURE_MINIMA,
-+					     mode->vts - HI1337_EXPOSURE_MARGEN,
++					     mode->vts - HI1337_EXPOSURE_MARGIN,
 +					     1, mode->exposure);
 +
 +	/*
@@ -2582,7 +2582,7 @@ without recompiling.
 + * kernel falls back to that path. Aligning with the case that works is cheaper than
 + * implement routes.
 + */
-+static int hi1337_parar(struct v4l2_subdev *sd);
++static int hi1337_stop(struct v4l2_subdev *sd);
 +
 +/*
 + * THE MIPI SWITCH BELONGS TO WHOEVER IS STREAMING
@@ -2638,7 +2638,7 @@ without recompiling.
 +	int ret;
 +
 +	if (!enable)
-+		return hi1337_parar(sd);
++		return hi1337_stop(sd);
 +
 +	ret = pm_runtime_resume_and_get(hi1337->dev);
 +	if (ret < 0)
@@ -2711,7 +2711,7 @@ without recompiling.
 +	return ret;
 +}
 +
-+static int hi1337_parar(struct v4l2_subdev *sd)
++static int hi1337_stop(struct v4l2_subdev *sd)
 +{
 +	struct hi1337 *hi1337 = to_hi1337(sd);
 +	int ret;
@@ -2744,11 +2744,11 @@ without recompiling.
 + * It is the same trick as the scanner's probe, and for the same reason: to separate
 + * the expensive question -recompiling, risking the boot- from the cheap one.
 + */
-+static struct hi1337 *hi1337_vivo;
++static struct hi1337 *hi1337_live;
 +
 +static int transmit_set(const char *val, const struct kernel_param *kp)
 +{
-+	struct hi1337 *h = READ_ONCE(hi1337_vivo);
++	struct hi1337 *h = READ_ONCE(hi1337_live);
 +	unsigned int on;
 +	int ret;
 +
@@ -2759,7 +2759,7 @@ without recompiling.
 +
 +	if (!on) {
 +		ret = cci_write(h->regmap, HI1337_REG_CTRL_MODE, 0, NULL);
-+		dev_info(h->dev, "transmision parada (%d)\n", ret);
++		dev_info(h->dev, "streaming stopped (%d)\n", ret);
 +		pm_runtime_mark_last_busy(h->dev);
 +		pm_runtime_put_autosuspend(h->dev);
 +		return 0;
@@ -2775,7 +2775,7 @@ without recompiling.
 +				  ARRAY_SIZE(hi1337_init), NULL);
 +	if (ret) {
 +		dev_info(h->dev, "the initialization failed on i2c: %d\n", ret);
-+		goto suelta;
++		goto release;
 +	}
 +	dev_info(h->dev, "init written: %u registers\n",
 +		 (unsigned int)ARRAY_SIZE(hi1337_init));
@@ -2784,9 +2784,9 @@ without recompiling.
 +				  h->mode->reg_list.num_regs, NULL);
 +	if (ret) {
 +		dev_info(h->dev, "the mode table failed on i2c: %d\n", ret);
-+		goto suelta;
++		goto release;
 +	}
-+	dev_info(h->dev, "modo %ux%u escrito: %u registros\n",
++	dev_info(h->dev, "mode %ux%u written: %u registers\n",
 +		 h->mode->width, h->mode->height, h->mode->reg_list.num_regs);
 +
 +	ret = cci_write(h->regmap, HI1337_REG_CTRL_MODE,
@@ -2795,7 +2795,7 @@ without recompiling.
 +		 ret, clk_get_rate(h->mclk));
 +	return 0;
 +
-+suelta:
++release:
 +	pm_runtime_mark_last_busy(h->dev);
 +	pm_runtime_put_autosuspend(h->dev);
 +	return 0;
@@ -2819,7 +2819,7 @@ without recompiling.
 + */
 +static int probe_set(const char *val, const struct kernel_param *kp)
 +{
-+	struct hi1337 *h = READ_ONCE(hi1337_vivo);
++	struct hi1337 *h = READ_ONCE(hi1337_live);
 +	unsigned int reg, datum = 0;
 +	u64 leido = 0;
 +	int n, ret;
@@ -2846,7 +2846,7 @@ without recompiling.
 +
 +	ret = cci_read(h->regmap, CCI_REG16(reg), &leido, NULL);
 +	if (ret)
-+		dev_info(h->dev, "probe: %04x no contesta\n", reg);
++		dev_info(h->dev, "probe: %04x no answers\n", reg);
 +	else
 +		dev_info(h->dev, "probe: %04x = %04llx\n", reg, leido);
 +
@@ -3058,8 +3058,8 @@ without recompiling.
 +/*
 + * The factory file does NOT carry the sensor address -its only slaveAddr is
 + * the EEPROM-, so it is found by reading the ID. It is the same trap
-+ * as with the rear one, where the "documented" 0x50 turned out to be the EEPROM and the
-+ * sensor estaba en 0x1a.
++ * as with the rear one, where the "documented" 0x50 turned out to be the
++ * EEPROM and the sensor was at 0x1a.
 + */
 +static int hi1337_find_sensor(struct hi1337 *hi1337, struct i2c_client *client)
 +{
@@ -3215,8 +3215,8 @@ without recompiling.
 +	/*
 +	 * This goes first, and it is not cosmetic: it is what leaves the subdev
 +	 * hanging off the device, and hi1337_power_on() looks for it there with
-+	 * in dev_get_drvdata(). Powering on before this line is a
-+	 * desreferencia a NULL nada mas arrancar.
++	 * in dev_get_drvdata(). Powering on before this line is a NULL
++	 * dereference as soon as it starts.
 +	 */
 +	v4l2_i2c_subdev_init(&hi1337->sd, client, &hi1337_subdev_ops);
 +
@@ -3262,7 +3262,7 @@ without recompiling.
 +	 * Ruled out before, and by measurement, not by hunch:
 +	 *   - the camera GDSC (camcc_titan_top_gdsc stays off with the
 +	 *     scanner keeping the clock enabled),
-+	 *   - devm_v4l2_sensor_clk_get() frente a devm_clk_get(),
++	 *   - devm_v4l2_sensor_clk_get() against devm_clk_get(),
 +	 *   - setting the frequency again before every enable.
 +	 *
 +	 * So the clock is enabled here and disabled in remove. Runtime PM
@@ -3353,7 +3353,7 @@ without recompiling.
 +		 id, client->addr);
 +
 +	hi1337->mode = &hi1337_supported_modes[0];
-+	WRITE_ONCE(hi1337_vivo, hi1337);
++	WRITE_ONCE(hi1337_live, hi1337);
 +
 +	ret = hi1337_init_controls(hi1337);
 +	if (ret) {
@@ -3414,7 +3414,7 @@ without recompiling.
 +	struct v4l2_subdev *sd = i2c_get_clientdata(client);
 +	struct hi1337 *hi1337 = to_hi1337(sd);
 +
-+	WRITE_ONCE(hi1337_vivo, NULL);
++	WRITE_ONCE(hi1337_live, NULL);
 +	v4l2_async_unregister_subdev(sd);
 +	v4l2_subdev_cleanup(sd);
 +	media_entity_cleanup(&sd->entity);

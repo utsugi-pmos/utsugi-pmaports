@@ -178,7 +178,7 @@ known.
  			writel_relaxed(val, csid->base + CSID_CSI2_RDIN_IRQ_CLEAR(i));
 +			if (i == 0)
 +				diag_rdi0_seen |= val;
- 			if (veces < 25)
+ 			if (times < 25)
  				dev_info(csid->camss->dev,
  					 "csid%d rx=0x%08x rdin%d=0x%08x\n",
 --- a/drivers/media/platform/qcom/camss/camss-csiphy-3ph-1-0.c	2026-08-16 20:50:17.721794705 +0200
@@ -227,7 +227,7 @@ known.
 +	diag_phy_jumps++;
 +
  	/* Bounded: if the link is noisy, this fires nonstop. */
- 	if (veces++ < 20)
+ 	if (times++ < 20)
  		dev_info(csiphy->camss->dev,
 --- a/drivers/media/platform/qcom/camss/camss-csid.c	2026-08-16 21:30:17.978653641 +0200
 +++ b/drivers/media/platform/qcom/camss/camss-csid.c	2026-08-16 21:30:32.676309171 +0200

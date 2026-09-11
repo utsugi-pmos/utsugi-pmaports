@@ -16,7 +16,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # patch was made against: when Plasma moves, apk refuses to upgrade until this
 # package is rebuilt. Loud, rather than silently broken.
 pkgname=keepalive
-pkgver=1.2
+pkgver=1.3
 pkgrel=0
 _pmver=6.7.5
 pkgdesc="Keep chosen apps alive: swiping their card away minimises instead of closing"
@@ -97,7 +97,7 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-bb45cd837164201ebde91fcf7a0d0119e5272650d5947f7e78bc2a5d4a50945e936f4b5d25065358da75126a2c1966cc57620b1901f95f0a66c02e8baca2b173  keepalive-1.2.tar.gz
+32bb1a3664d5f8937dc0fa1db9333d8224810e89097aafc4c00553c3023aee790c5005940c91ef81c785e3f678bf13988701295e62458b22d322e6b6e96628a7  keepalive-1.3.tar.gz
 2fb32939204c0c5f0cda7dbedaf1937e9e052211fe004fc0eadebee6139755c8b8d479253325975676bc00c3225d9325470f86c675ddbaa7a0f80a7b32d93c84  plasma-mobile-6.7.5.tar.xz
 f4b871e98c5afa4d8aa87e419d4e4de13a90cd778a2b44bcbf7d33d5d36095754190956f1e03424790fe7a8dcb48348854345f42969250eac9ea57cc3ae6f89e  keep-marked-apps-alive.diff
 06035ad96e1777c9a892e6542a933f7ad8d283e3cf2f16b5a1f900dc7af6e7156c0f17e42c146f636ea593668efa0e254431f7044ae23b9022fc7c8c93e87fb9  80-keepalive.preset

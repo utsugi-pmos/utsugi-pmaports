@@ -49,9 +49,9 @@ guessing which register to read.
  				 * everything else would be consistent with what was measured.
  				 */
 +				/*
-+				 * VOLCADO COMPLETO.
++				 * FULL DUMP.
 +				 *
-+				 * A estas alturas ir registro a registro es
++				 * By this point going register by register is
 +				 * waste time: everything the vendor writes
 +				 * has been checked one by one and it
 +				 * matches. What is missing is what is NOT

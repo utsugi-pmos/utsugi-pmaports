@@ -242,12 +242,12 @@ includes. It was found by reviewing, not by spending a build.
 +	if (!of_parse_phandle_with_fixed_args(np, "iommus", 1, 0, &args))
 +		*sid = args.args[0] & 0xF;
 +	else
-+		dev_warn(apr_dev, "qcom,q6asm-dais no declara iommus\n");
++		dev_warn(apr_dev, "qcom,q6asm-dais declares no iommus\n");
 +
 +	pdev = of_find_device_by_node(np);
 +	of_node_put(np);
 +	if (!pdev) {
-+		dev_warn(apr_dev, "qcom,q6asm-dais no tiene device asociado\n");
++		dev_warn(apr_dev, "qcom,q6asm-dais has no device attached\n");
 +		goto sin_smmu;
 +	}
 +
@@ -326,7 +326,7 @@ includes. It was found by reviewing, not by spending a build.
 +		rc = dma_coerce_mask_and_coherent(dev, DMA_BIT_MASK(32));
 +		if (rc) {
 +			dev_err(dev, "could not set the DMA mask: %d\n", rc);
-+			goto suelta_dev;
++			goto drop_dev;
 +		}
  	}
  
@@ -341,7 +341,7 @@ includes. It was found by reviewing, not by spending a build.
 +	buf = dma_alloc_coherent(dma_dev, map_size, &phys, GFP_KERNEL);
 +	if (!buf) {
 +		rc = -ENOMEM;
-+		goto suelta_dev;
++		goto drop_dev;
 +	}
  
  	memcpy(buf, data, size);
@@ -354,7 +354,7 @@ includes. It was found by reviewing, not by spending a build.
 +	rc = q6core_map_memory(core, phys, map_size, sid);
  	if (rc) {
  		dev_err(dev, "could not map the DSP memory: %d\n", rc);
- 		goto libera;
+ 		goto release;
 @@ -592,8 +732,8 @@
  	pkt->hdr.pkt_size = pkt_size;
  	pkt->hdr.opcode = AVCS_CMD_REGISTER_TOPOLOGIES;
@@ -369,10 +369,10 @@ includes. It was found by reviewing, not by spending a build.
 @@ -606,7 +746,9 @@
  desmapea:
  	q6core_unmap_memory(core);
- libera:
+ release:
 -	dma_free_coherent(dev, map_size, buf, phys);
 +	dma_free_coherent(dma_dev, map_size, buf, phys);
-+suelta_dev:
++drop_dev:
 +	q6core_dma_dev_put(dma_dev, dev);
  	return rc < 0 ? rc : 0;
  }

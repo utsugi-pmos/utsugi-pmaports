@@ -138,7 +138,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +    TapHandler {
 +        enabled: root.camera.available && root.focuser && root.focuser.available
 +
-+        onTapped: (evento) => {
++        onTapped: (event) => {
 +            // The point has to be mapped to IMAGE coordinates, not to
 +            // screen ones, and with zoom applied it is not the same: the viewfinder is
 +            // magnified from the center, so only the central part is visible and
@@ -146,11 +146,11 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +            // this, with zoom the camera would focus somewhere other than where
 +            // it is tapped, and from outside it would look like focus is broken.
 +            const s = Math.max(0.0001, viewfinder.scale);
-+            const u = 0.5 + ((evento.position.x / root.width) - 0.5) / s;
-+            const v = 0.5 + ((evento.position.y / root.height) - 0.5) / s;
++            const u = 0.5 + ((event.position.x / root.width) - 0.5) / s;
++            const v = 0.5 + ((event.position.y / root.height) - 0.5) / s;
 +
-+            stamp.x = evento.position.x - stamp.width / 2;
-+            stamp.y = evento.position.y - stamp.height / 2;
++            stamp.x = event.position.x - stamp.width / 2;
++            stamp.y = event.position.y - stamp.height / 2;
 +            stamp.visible = true;
 +            stampClock.restart();
 +            root.focuser.focusAt(u, v);
@@ -171,7 +171,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +        border.width: 2
 +        border.color: root.focuser && root.focuser.focusing
 +                      ? "white"
-+                      : (root.focuser && root.focuser.logrado ? "#40d060" : "#e06040")
++                      : (root.focuser && root.focuser.achieved ? "#40d060" : "#e06040")
 +        radius: 4
 +        opacity: root.focuser && root.focuser.focusing ? 1.0 : 0.85
 +
@@ -223,14 +223,14 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +
 +//! Search stages: five positions each, refining around the best.
 +constexpr int kPointsPerStage = 5;
-+constexpr int kEtapas = 3;
++constexpr int kStages = 3;
 +
 +/*!
 + * How much of the image is looked at around the tapped point, as a fraction of one.
 + * A fifth of the side: enough to have edges to measure, and little enough
 + * for focusing "there" to mean something.
 + */
-+constexpr qreal kLadoRecorte = 0.2;
++constexpr qreal kCropSide = 0.2;
 +
 +//! Below this, the hill is noise and the lens is not touched.
 +constexpr double kMinRatio = 1.25;
@@ -259,9 +259,9 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +        return false;
 +    }
 +    const QByteArray line = QByteArray::number(position) + '\n';
-+    const ssize_t escrito = ::write(fd, line.constData(), line.size());
++    const ssize_t written = ::write(fd, line.constData(), line.size());
 +    ::close(fd);
-+    return escrito == line.size();
++    return written == line.size();
 +}
 +
 +void Focuser::moverA(int position)
@@ -284,19 +284,19 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // has just said where they want to look, and the earlier measurements are from another
 +    // place in the image.
 +    m_measurements.clear();
-+    m_pendientes.clear();
++    m_pending.clear();
 +    m_stage = 0;
-+    setLogrado(false);
++    setAchieved(false);
 +
 +    for (int i = 0; i < kPointsPerStage; ++i) {
-+        m_pendientes.append(kMin + (kMax - kMin) * i / (kPointsPerStage - 1));
++        m_pending.append(kMin + (kMax - kMin) * i / (kPointsPerStage - 1));
 +    }
-+    ordenarDesdeDondeEsta();
++    orderFromWhereItIs();
 +    setFocusing(true);
 +    nextPosition();
 +}
 +
-+void Focuser::ordenarDesdeDondeEsta()
++void Focuser::orderFromWhereItIs()
 +{
 +    // WALK EACH STAGE IN THE DIRECTION THAT STARTS CLOSER
 +    //
@@ -311,23 +311,23 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // Walking each stage towards the side that starts closer, that trip
 +    // disappears. The same positions are measured and the same result comes out:
 +    // only the order changes, and with it, the noise and the time.
-+    if (m_pendientes.size() < 2 || m_position < 0) {
++    if (m_pending.size() < 2 || m_position < 0) {
 +        return;
 +    }
-+    std::sort(m_pendientes.begin(), m_pendientes.end());
-+    const int aLoBajo = qAbs(m_pendientes.first() - m_position);
-+    const int aLoAlto = qAbs(m_pendientes.last() - m_position);
-+    if (aLoAlto < aLoBajo) {
-+        std::reverse(m_pendientes.begin(), m_pendientes.end());
++    std::sort(m_pending.begin(), m_pending.end());
++    const int toTheLow = qAbs(m_pending.first() - m_position);
++    const int toTheHigh = qAbs(m_pending.last() - m_position);
++    if (toTheHigh < toTheLow) {
++        std::reverse(m_pending.begin(), m_pending.end());
 +    }
 +}
 +
 +void Focuser::nextPosition()
 +{
-+    if (m_pendientes.isEmpty()) {
++    if (m_pending.isEmpty()) {
 +        return;
 +    }
-+    const int next = m_pendientes.takeFirst();
++    const int next = m_pending.takeFirst();
 +    if (!requestPosition(next)) {
 +        // The service died halfway. Better to give up than to keep measuring
 +        // a lens that no longer moves and give a result that looks good.
@@ -336,22 +336,22 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +        return;
 +    }
 +    setPosition(next);
-+    m_porTirar = kFotogramasDeEspera;
++    m_toDrop = kFramesToWait;
 +}
 +
-+void Focuser::newFrame(const QImage &imagen)
++void Focuser::newFrame(const QImage &image)
 +{
-+    if (!m_focusing || imagen.isNull()) {
++    if (!m_focusing || image.isNull()) {
 +        return;
 +    }
-+    if (m_porTirar > 0) {
-+        --m_porTirar;
++    if (m_toDrop > 0) {
++        --m_toDrop;
 +        return;
 +    }
 +
-+    m_measurements.append({m_position, sharpness(imagen)});
++    m_measurements.append({m_position, sharpness(image)});
 +
-+    if (!m_pendientes.isEmpty()) {
++    if (!m_pending.isEmpty()) {
 +        nextPosition();
 +        return;
 +    }
@@ -361,53 +361,53 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // leaving the maximum out when the best fell on the edge of the hill,
 +    // and more than that refines nothing.
 +    ++m_stage;
-+    if (m_stage < kEtapas) {
++    if (m_stage < kStages) {
 +        int best = m_measurements.first().first;
-+        double valor = m_measurements.first().second;
-+        int menor = best, mayor = best;
++        double value = m_measurements.first().second;
++        int lower = best, higher = best;
 +        for (const auto &m : std::as_const(m_measurements)) {
-+            if (m.second > valor) {
-+                valor = m.second;
++            if (m.second > value) {
++                value = m.second;
 +                best = m.first;
 +            }
-+            menor = qMin(menor, m.first);
-+            mayor = qMax(mayor, m.first);
++            lower = qMin(lower, m.first);
++            higher = qMax(higher, m.first);
 +        }
-+        const int step = qMax(1, (mayor - menor) / (kPointsPerStage - 1));
++        const int step = qMax(1, (higher - lower) / (kPointsPerStage - 1));
 +        const int from = qBound(kMin, best - step, kMax);
 +        const int to = qBound(kMin, best + step, kMax);
 +        for (int i = 0; i < kPointsPerStage; ++i) {
 +            const int p = from + (to - from) * i / (kPointsPerStage - 1);
 +            // Repeating an already measured position adds nothing and costs frames.
-+            bool repetida = false;
++            bool repeated = false;
 +            for (const auto &m : std::as_const(m_measurements)) {
 +                if (m.first == p) {
-+                    repetida = true;
++                    repeated = true;
 +                    break;
 +                }
 +            }
-+            if (!repetida && !m_pendientes.contains(p)) {
-+                m_pendientes.append(p);
++            if (!repeated && !m_pending.contains(p)) {
++                m_pending.append(p);
 +            }
 +        }
-+        if (!m_pendientes.isEmpty()) {
-+            ordenarDesdeDondeEsta();
++        if (!m_pending.isEmpty()) {
++            orderFromWhereItIs();
 +            nextPosition();
 +            return;
 +        }
 +    }
-+    terminar();
++    finish();
 +}
 +
-+void Focuser::terminar()
++void Focuser::finish()
 +{
 +    int best = m_position;
 +    double height = 0.0;
-+    double bajo = 0.0;
++    double low = 0.0;
 +    bool first = true;
 +    for (const auto &m : std::as_const(m_measurements)) {
 +        if (first) {
-+            height = bajo = m.second;
++            height = low = m.second;
 +            best = m.first;
 +            first = false;
 +            continue;
@@ -416,7 +416,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +            height = m.second;
 +            best = m.first;
 +        }
-+        bajo = qMin(bajo, m.second);
++        low = qMin(low, m.second);
 +    }
 +
 +    // IF THE HILL IS FLAT, THE LENS IS NOT TOUCHED.
@@ -426,14 +426,14 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // some arbitrary maximum that looks perfectly good. It already happened: a
 +    // whole search converged to 972 without a single error, with the camera looking
 +    // at nothing. Better to leave focus where it was and report that it failed.
-+    const double ratio = bajo > 0.0 ? height / bajo : 0.0;
-+    const bool bien = m_measurements.size() >= 3 && ratio >= kMinRatio;
++    const double ratio = low > 0.0 ? height / low : 0.0;
++    const bool good = m_measurements.size() >= 3 && ratio >= kMinRatio;
 +
-+    if (bien) {
++    if (good) {
 +        requestPosition(best);
 +        setPosition(best);
 +    }
-+    setLogrado(bien);
++    setAchieved(good);
 +    setFocusing(false);
 +}
 +
@@ -461,35 +461,35 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    }
 +}
 +
-+double Focuser::sharpness(const QImage &imagen) const
++double Focuser::sharpness(const QImage &image) const
 +{
 +    const QPointF p = pointOnSensor();
-+    const int lado = qMax(16, int(qMin(imagen.width(), imagen.height()) * kLadoRecorte));
-+    const int cx = int(p.x() * imagen.width());
-+    const int cy = int(p.y() * imagen.height());
-+    QRect r(cx - lado / 2, cy - lado / 2, lado, lado);
-+    r = r.intersected(imagen.rect());
++    const int side = qMax(16, int(qMin(image.width(), image.height()) * kCropSide));
++    const int cx = int(p.x() * image.width());
++    const int cy = int(p.y() * image.height());
++    QRect r(cx - side / 2, cy - side / 2, side, side);
++    r = r.intersected(image.rect());
 +    if (r.width() < 8 || r.height() < 3) {
 +        return 0.0;
 +    }
 +
 +    // It walks row by row with qGray, which is enough and does not force converting
 +    // the whole image -this runs on every preview frame-.
-+    double suma = 0.0;
-+    double suma2 = 0.0;
++    double sum = 0.0;
++    double sum2 = 0.0;
 +    double level = 0.0;
 +    qint64 n = 0;
 +    qint64 nLevel = 0;
 +
 +    for (int y = r.top(); y <= r.bottom(); ++y) {
-+        const QRgb *fila = reinterpret_cast<const QRgb *>(imagen.constScanLine(y));
++        const QRgb *row = reinterpret_cast<const QRgb *>(image.constScanLine(y));
 +        for (int x = r.left() + 1; x < r.right(); ++x) {
-+            const int a = qGray(fila[x - 1]);
-+            const int b = qGray(fila[x]);
-+            const int c = qGray(fila[x + 1]);
++            const int a = qGray(row[x - 1]);
++            const int b = qGray(row[x]);
++            const int c = qGray(row[x + 1]);
 +            const double d = a + c - 2 * b;
-+            suma += d;
-+            suma2 += d * d;
++            sum += d;
++            sum2 += d * d;
 +            level += b;
 +            ++n;
 +            ++nLevel;
@@ -498,37 +498,37 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    if (n < 8 || nLevel == 0) {
 +        return 0.0;
 +    }
-+    const double media = suma / n;
-+    const double varianza = suma2 / n - media * media;
++    const double mean = sum / n;
++    const double variance = sum2 / n - mean * mean;
 +    const double meanLevel = qMax(1.0, level / nLevel);
-+    return varianza / (meanLevel * meanLevel);
++    return variance / (meanLevel * meanLevel);
 +}
 +
-+void Focuser::setFocusing(bool valor)
++void Focuser::setFocusing(bool value)
 +{
-+    if (m_focusing == valor) {
++    if (m_focusing == value) {
 +        return;
 +    }
-+    m_focusing = valor;
++    m_focusing = value;
 +    Q_EMIT focusingChanged();
 +}
 +
-+void Focuser::setPosition(int valor)
++void Focuser::setPosition(int value)
 +{
-+    if (m_position == valor) {
++    if (m_position == value) {
 +        return;
 +    }
-+    m_position = valor;
++    m_position = value;
 +    Q_EMIT positionChanged();
 +}
 +
-+void Focuser::setLogrado(bool valor)
++void Focuser::setAchieved(bool value)
 +{
-+    if (m_logrado == valor) {
++    if (m_achieved == value) {
 +        return;
 +    }
-+    m_logrado = valor;
-+    Q_EMIT logradoChanged();
++    m_achieved = value;
++    Q_EMIT achievedChanged();
 +}
 diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 --- a/src/plasmacamera/focuser.h
@@ -581,7 +581,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    Q_PROPERTY(bool available READ available NOTIFY availableChanged)
 +    Q_PROPERTY(int position READ position NOTIFY positionChanged)
 +    Q_PROPERTY(QPointF point READ point NOTIFY pointChanged)
-+    Q_PROPERTY(bool logrado READ logrado NOTIFY logradoChanged)
++    Q_PROPERTY(bool achieved READ achieved NOTIFY achievedChanged)
 +
 +public:
 +    explicit Focuser(QObject *parent = nullptr);
@@ -599,7 +599,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    Q_INVOKABLE void moverA(int position);
 +
 +    //! Every preview frame. Cheap when not focusing.
-+    void newFrame(const QImage &imagen);
++    void newFrame(const QImage &image);
 +
 +    /*!
 +     * The degrees the image is going to be rotated by for display.
@@ -629,9 +629,9 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    {
 +        return m_point;
 +    }
-+    bool logrado() const
++    bool achieved() const
 +    {
-+        return m_logrado;
++        return m_achieved;
 +    }
 +
 +Q_SIGNALS:
@@ -639,7 +639,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    void availableChanged();
 +    void positionChanged();
 +    void pointChanged();
-+    void logradoChanged();
++    void achievedChanged();
 +
 +private:
 +    //! Writes the position to the service pipe. False if there is no service.
@@ -658,24 +658,24 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +     * two by 54.3-. Here the image does not come decimated, so adding the
 +     * vertical axis would give more signal; it is left for when it is measured, not before.
 +     */
-+    double sharpness(const QImage &imagen) const;
++    double sharpness(const QImage &image) const;
 +
-+    void terminar();
++    void finish();
 +    void nextPosition();
 +
 +    /*!
 +     * Orders the stage positions in the direction that starts closer to
 +     * where the lens is. Same measurements, same result, less travel.
 +     */
-+    void ordenarDesdeDondeEsta();
++    void orderFromWhereItIs();
 +
-+    void setFocusing(bool valor);
-+    void setPosition(int valor);
-+    void setLogrado(bool valor);
++    void setFocusing(bool value);
++    void setPosition(int value);
++    void setAchieved(bool value);
 +
 +    bool m_focusing = false;
 +    bool m_available = false;
-+    bool m_logrado = false;
++    bool m_achieved = false;
 +    int m_position = -1;
 +    QPointF m_point{0.5, 0.5};
 +    int m_giro = 0;
@@ -684,7 +684,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    QPointF pointOnSensor() const;
 +
 +    //! Positions remaining in the current stage, and what has been measured so far.
-+    QList<int> m_pendientes;
++    QList<int> m_pending;
 +    QList<QPair<int, double>> m_measurements;
 +    int m_stage = 0;
 +
@@ -697,8 +697,8 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +     * position with the new one, and that does not give a noisier curve: it gives a
 +     * SHIFTED curve, which is worse because it looks good.
 +     */
-+    int m_porTirar = 0;
-+    static constexpr int kFotogramasDeEspera = 4;
++    int m_toDrop = 0;
++    static constexpr int kFramesToWait = 4;
 +};
 diff -ruN a/src/plasmacameramanager.cpp b/src/plasmacameramanager.cpp
 --- a/src/plasmacameramanager.cpp

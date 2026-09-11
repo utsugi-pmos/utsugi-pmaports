@@ -76,7 +76,7 @@ boots cold.
 +	 * -not a reboot, which keeps the PMIC- it has no samples yet and
 +	 * reads zero. With zero, the rule below gives 0 %, userspace
 +	 * takes it for a flat battery and powers the phone off... which on power-up
-+	 * vuelve a leer cero. Circulo cerrado.
++	 * reads zero again. Closed circle.
 +	 *
 +	 * The last ADC reading does not have that problem: it is instantaneous and
 +	 * is valid from the very first moment. It is noisier than the average, and that

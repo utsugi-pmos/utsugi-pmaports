@@ -289,7 +289,7 @@ module parameters, and are tested with rmmod/insmod:
 + * work: it is wired in C-PHY. This is measured in the factory calibration file
 + * of the phone itself, along two paths that agree:
 + *
-+ *   laneAssign = 0x0210            tres lanes -> trios C-PHY
++ *   laneAssign = 0x0210            three lanes -> C-PHY trios
 + *   0x0114     = 0x02              three lanes, in the five mode tables
 + *
 + * CAMSS only supports D-PHY. The front one, in contrast, says laneAssign = 0x3210 and
@@ -888,8 +888,8 @@ module parameters, and are tested with rmmod/insmod:
 +		 * The binned mode. It comes first on purpose: it is the one that has
 +		 * been seen capturing on this SoC, and 5 MP is a size that
 +		 * software processing can keep up with. The 20 MP below
-+		 * ask the same of the link but quadruple the work of the
-+		 * revelado.
++		 * ask the same of the link but quadruple the work of developing
++		 * the raw frame.
 +		 */
 +		.width = 2592,
 +		.height = 1940,
@@ -1328,8 +1328,8 @@ module parameters, and are tested with rmmod/insmod:
 +/*
 + * The factory file does NOT carry the sensor address -its only slaveAddr is
 + * the EEPROM-, so it is found by reading the ID. It is the same trap
-+ * as with the rear one, where the "documented" 0x50 turned out to be the EEPROM and the
-+ * sensor estaba en 0x1a.
++ * as with the rear one, where the "documented" 0x50 turned out to be the
++ * EEPROM and the sensor was at 0x1a.
 + */
 +static int s5k3t2_find_sensor(struct s5k3t2 *s5k3t2, struct i2c_client *client)
 +{
@@ -1470,8 +1470,8 @@ module parameters, and are tested with rmmod/insmod:
 +	/*
 +	 * This goes first, and it is not cosmetic: it is what leaves the subdev
 +	 * hanging off the device, and s5k3t2_power_on() looks for it there with
-+	 * in dev_get_drvdata(). Powering on before this line is a
-+	 * desreferencia a NULL nada mas arrancar.
++	 * in dev_get_drvdata(). Powering on before this line is a NULL
++	 * dereference as soon as it starts.
 +	 */
 +	v4l2_i2c_subdev_init(&s5k3t2->sd, client, &s5k3t2_subdev_ops);
 +
@@ -1525,7 +1525,7 @@ module parameters, and are tested with rmmod/insmod:
 +				 "could not set the MIPI switch to %d: %d\n",
 +				 mipi_switch, ret);
 +		else
-+			dev_info(s5k3t2->dev, "conmutador MIPI puesto a %d\n",
++			dev_info(s5k3t2->dev, "MIPI switch set to %d\n",
 +				 mipi_switch);
 +	}
 +

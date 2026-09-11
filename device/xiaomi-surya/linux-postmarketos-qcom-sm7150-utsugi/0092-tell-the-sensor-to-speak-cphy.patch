@@ -73,9 +73,9 @@ between always leaves the doubt that something else may have changed.
 - *    0x0114=0x01, which already come in the tables.
 + * 2. 3-trio C-PHY, which is how the board is wired. The sensor itself says so
 + *    in its capability registers, which are read-only:
-+ *    0x1602 = 0x0C (sabe D-PHY y C-PHY) y 0x1601 = 0x0B (en D-PHY admite 1, 2
-+ *    and 4 lanes; the THREE bit is zero). It is configured with 0x0111 = 0x03
-+ *    y 0x0114 = 0x02.
++ *    0x1602 = 0x0C (it knows D-PHY and C-PHY) and 0x1601 = 0x0B (on D-PHY it
++ *    accepts 1, 2 and 4 lanes; the THREE bit is zero). It is configured with
++ *    0x0111 = 0x03 and 0x0114 = 0x02.
   *
   * WHAT THIS DRIVER DOES NOT DO
   * --------------------------

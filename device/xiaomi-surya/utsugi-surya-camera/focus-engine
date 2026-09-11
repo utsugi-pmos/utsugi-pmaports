@@ -228,7 +228,7 @@ def main():
                 if not line:
                     continue
                 if not line.lstrip("-").isdigit():
-                    note(state="command-no-valida", received=line)
+                    note(state="command-not-valid", received=line)
                     continue
                 pos = max(0, min(1023, int(line)))
 

@@ -3,7 +3,7 @@
 #
 # TWO THINGS THAT ARE LOST FOR DIFFERENT REASONS
 # ----------------------------------------------
-# 1. The LAST SIGN OF LIFE (/var/log/blackbox/latido). It is a one-line
+# 1. The LAST SIGN OF LIFE (/var/log/blackbox/heartbeat). It is a one-line
 #    file that the heartbeat OVERWRITES every 30 s. If it is not moved aside now, the first
 #    heartbeat of this boot overwrites the one from the freeze -- exactly the data of interest.
 #    That is why the heartbeat timer starts AFTER this service.
@@ -20,9 +20,13 @@
 #    script. The sign of life from point 1 is the one that does work.
 set -eu
 
-ORIGEN=/var/lib/systemd/pstore
+SOURCE=/var/lib/systemd/pstore
 BASE=/var/log/blackbox
-LATIDO="$BASE/latido"
+HEARTBEAT="$BASE/heartbeat"
+# The file was called "latido" until 2026-09-11. A phone that froze before the
+# rename still has that one sitting there, and it is the only record of when it
+# last drew breath -- so it is archived too, under the new name.
+[ -f "$HEARTBEAT" ] || [ ! -f "$BASE/latido" ] || HEARTBEAT="$BASE/latido"
 
 mkdir -p "$BASE"
 
@@ -34,16 +38,16 @@ mkdir -p "$BASE"
 # The check needs nothing saved: the line carries 't=' (the instant at
 # which it was written) and this system booted at 'now - uptime'. If the heartbeat is
 # later than that boot, it is from the current session and is not touched.
-hay_latido=0
-if [ -s "$LATIDO" ]; then
-	t="$(tr ' ' '\n' < "$LATIDO" | sed -n 's/^t=//p' | head -1 | tr -dc 0-9)"
+has_heartbeat=0
+if [ -s "$HEARTBEAT" ]; then
+	t="$(tr ' ' '\n' < "$HEARTBEAT" | sed -n 's/^t=//p' | head -1 | tr -dc 0-9)"
 	boot=$(( $(date +%s) - $(cut -d. -f1 /proc/uptime) ))
 	if [ -z "$t" ]; then
 		# Without 't=' it cannot be dated: it is archived, which is the prudent side --
 		# losing a freeze's mark is worse than archiving one too many.
-		hay_latido=1
+		has_heartbeat=1
 	elif [ "$t" -lt "$boot" ]; then
-		hay_latido=1
+		has_heartbeat=1
 	fi
 fi
 # Ramoops ONLY counts if it is NEW. systemd-pstore leaves its files there and does not
@@ -53,50 +57,50 @@ fi
 # dump" showing the oops from September 1st.
 #
 # The boundary is the date of the most recent one already archived, kept aside.
-STATE="$BASE/.ramoops-archivado"
-visto=0
-[ -f "$STATE" ] && visto="$(cat "$STATE" 2>/dev/null | tr -dc 0-9)"
-[ -n "$visto" ] || visto=0
+STATE="$BASE/.ramoops-archived"
+seen=0
+[ -f "$STATE" ] && seen="$(cat "$STATE" 2>/dev/null | tr -dc 0-9)"
+[ -n "$seen" ] || seen=0
 
-hay_ramoops=0
-new_seen="$visto"
-for f in "$ORIGEN"/*-ramoops-*; do
+has_ramoops=0
+new_seen="$seen"
+for f in "$SOURCE"/*-ramoops-*; do
 	[ -e "$f" ] || continue
 	m="$(date -r "$f" +%s 2>/dev/null || echo 0)"
-	[ "$m" -gt "$visto" ] || continue
-	hay_ramoops=1
+	[ "$m" -gt "$seen" ] || continue
+	has_ramoops=1
 	[ "$m" -gt "$new_seen" ] && new_seen="$m"
 done
-[ "$hay_latido" = 1 ] || [ "$hay_ramoops" = 1 ] || exit 0
+[ "$has_heartbeat" = 1 ] || [ "$has_ramoops" = 1 ] || exit 0
 
 # The directory's mark comes from the time of the LAST HEARTBEAT, which is the real time
 # at which the phone stopped giving signals. If there is no heartbeat -- because the black box
 # was not set on that boot -- it falls back to the date of the ramoops trace.
-marca=""
-if [ "$hay_latido" = 1 ]; then
-	marca="$(date -r "$LATIDO" +%Y%m%d-%H%M%S 2>/dev/null || true)"
+mark=""
+if [ "$has_heartbeat" = 1 ]; then
+	mark="$(date -r "$HEARTBEAT" +%Y%m%d-%H%M%S 2>/dev/null || true)"
 fi
-if [ -z "$marca" ] && [ "$hay_ramoops" = 1 ]; then
-	marca="$(date -r "$(ls -t "$ORIGEN"/*-ramoops-* | head -1)" +%Y%m%d-%H%M%S 2>/dev/null || true)"
+if [ -z "$mark" ] && [ "$has_ramoops" = 1 ]; then
+	mark="$(date -r "$(ls -t "$SOURCE"/*-ramoops-* | head -1)" +%Y%m%d-%H%M%S 2>/dev/null || true)"
 fi
-[ -n "$marca" ] || marca="$(date +%Y%m%d-%H%M%S)"
+[ -n "$mark" ] || mark="$(date +%Y%m%d-%H%M%S)"
 
-dir="$BASE/$marca"
+dir="$BASE/$mark"
 [ -d "$dir" ] && exit 0   # already archived in a previous boot
 mkdir -p "$dir"
 
 # 1. The sign of life. It is MOVED, not copied: this way this boot's heartbeat
 #    starts from zero and no old copy is left confusing things.
-if [ "$hay_latido" = 1 ]; then
-	mv "$LATIDO" "$dir/last-latido"
+if [ "$has_heartbeat" = 1 ]; then
+	mv "$HEARTBEAT" "$dir/last-heartbeat"
 fi
 
 # 2. The ramoops trace, and ONLY the one not already archived (see above).
-if [ "$hay_ramoops" = 1 ]; then
-	for f in "$ORIGEN"/*-ramoops-*; do
+if [ "$has_ramoops" = 1 ]; then
+	for f in "$SOURCE"/*-ramoops-*; do
 		[ -e "$f" ] || continue
 		m="$(date -r "$f" +%s 2>/dev/null || echo 0)"
-		[ "$m" -gt "$visto" ] || continue
+		[ "$m" -gt "$seen" ] || continue
 		cp -a "$f" "$dir"/ 2>/dev/null || true
 	done
 	printf '%s\n' "$new_seen" > "$STATE"

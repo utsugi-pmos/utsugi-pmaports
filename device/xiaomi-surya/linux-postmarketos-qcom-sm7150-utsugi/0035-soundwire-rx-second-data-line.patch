@@ -204,7 +204,7 @@ Still to be checked on hardware.
 +			 * The "macro" vote (block 3) is requested but NOT the "dcodec" one.
 +			 *
 +			 * The AFE of this SoC only knows three blocks, according to its
-+			 * propio cabecero downstream q6afe-v2.h:
++			 * own downstream header q6afe-v2.h:
 +			 *     NONE 0, AVTIMER 2, MACRO 3
 +			 * There is no block 4. Mainline always requests macro AND dcodec
 +			 * (0x3 and 0x4) because on the SM8250 both exist, and here
@@ -213,7 +213,7 @@ Still to be checked on hardware.
 +			 *
 +			 * The clocks are optional in the driver
 +			 * (devm_clk_bulk_get_optional), so omitting "dcodec"
-+			 * simplemente no emite ese voto.
++			 * simply does not cast that vote.
 +			 *
 +			 * And the "mclk" is the TX one (0x30C), not the VA one (0x30B).
 +			 * On this SoC the VA macro has no clock of its own: it multiplexes
@@ -356,8 +356,8 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		 * not 2700. With 2.7 V the internal amplifier of the microphone
 +		 * can stick to the supply rail and not deliver
 +		 * an AC signal, which is exactly the measured symptom: the ADC
-+		 * converts and its analog gain scales the noise, but
-+		 * no aparece nada acustico.
++		 * converts and its analog gain scales the noise, but nothing
++		 * acoustic shows up.
 +		 */
 +		qcom,micbias1-microvolt = <1800000>;
 +		qcom,micbias2-microvolt = <1800000>;
@@ -420,7 +420,7 @@ diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/
 +		 *
 +		 * Comes from Xiaomi's atoll-audio-overlay.dtsi, which is the file
 +		 * of THIS SoC (the SM7150 is called "atoll" in the tree of
-+		 * Qualcomm; sm6150 es otro):
++		 * Qualcomm; sm6150 is a different one):
 +		 *   qcom,swr-port-mapping = <1 PCM_OUT1 0xF>,
 +		 *       <2 ADC1 0x1>, <2 ADC2 0x2>,
 +		 *       <3 ADC3 0x1>, <3 ADC4 0x2>, ...
@@ -522,7 +522,7 @@ diff -ruN a/sound/soc/codecs/lpass-rx-macro.c b/sound/soc/codecs/lpass-rx-macro.
 +	 * too early: the master has not started yet, and afterwards the
 +	 * bus gives command errors, "read underflow" and collisions, so that
 +	 * the codec does not accept the configuration of its ports and playback
-+	 * falla en snd_soc_link_prepare().
++	 * fails in snd_soc_link_prepare().
 +	 *
 +	 * It is exactly the same bug the TX macro had and that was fixed
 +	 * in patch 0021; there too it had to be done ONLY ONCE,

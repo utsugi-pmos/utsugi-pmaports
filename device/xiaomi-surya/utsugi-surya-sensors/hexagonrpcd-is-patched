@@ -40,22 +40,22 @@ BIN=${1:-/usr/bin/hexagonrpcd}
 
 [ -r "$BIN" ] || { echo "cannot read $BIN" >&2; exit 1; }
 
-faltan=""
+missing=""
 
 tr '\0' '\n' < "$BIN" | grep -qxa '/sensors/' \
-	|| faltan="$faltan 0001(the registry '..')"
+	|| missing="$missing 0001(the registry '..')"
 
 grep -qa 'Could not write file' "$BIN" \
-	|| faltan="$faltan 0002(write)"
+	|| missing="$missing 0002(write)"
 
 grep -qa 'does not fit in' "$BIN" \
-	|| faltan="$faltan 0003(input buffer)"
+	|| missing="$missing 0003(input buffer)"
 
 grep -qa 'Could not rename' "$BIN" \
-	|| faltan="$faltan 0004(rename)"
+	|| missing="$missing 0004(rename)"
 
-[ -z "$faltan" ] || {
-	echo "$BIN does NOT carry the surya patches; missing:$faltan" >&2
+[ -z "$missing" ] || {
+	echo "$BIN does NOT carry the surya patches; missing:$missing" >&2
 	echo "NOT starting: without them the ADSP crashes in a loop and takes the audio with it." >&2
 	echo "Recompile surya/pmaports/temp/hexagonrpcd and reinstall ALL THREE apk." >&2
 	exit 1

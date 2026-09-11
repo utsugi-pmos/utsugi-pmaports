@@ -9,8 +9,8 @@
 # outside moved every clock ceiling as intended, and the screen never dimmed,
 # because no QML was alive to notice.
 #
-#     perfil=power-saver  max0=1324800  max6=1324800  gpu=430000000
-#     brillo=5476  (sin cambiar)   state=(vacio)
+#     profile=power-saver  max0=1324800  max6=1324800  gpu=430000000
+#     brightness=5476  (sin cambiar)   state=(vacio)
 #
 # Anything that must happen WHENEVER the profile changes therefore cannot live
 # in the tile. It belongs to the session, which is what this is: the same
@@ -26,10 +26,10 @@ PD=org.kde.Solid.PowerManagement
 PP=/org/kde/Solid/PowerManagement/Actions/PowerProfile
 IFACE=org.kde.Solid.PowerManagement.Actions.PowerProfile
 
-AHORRO=power-saver
+SAVER=power-saver
 
 apply_for() {
-	if [ "$1" = "$AHORRO" ]; then
+	if [ "$1" = "$SAVER" ]; then
 		"$SWITCH" apply
 	else
 		"$SWITCH" restore
@@ -40,11 +40,11 @@ apply_for() {
 # signal only fires on CHANGES -- without this the extras would stay off until
 # the user happened to toggle something. Both sides are idempotent, so doing
 # this on every start is safe.
-espera=0
-while [ $espera -lt 30 ]; do
+wait=0
+while [ $wait -lt 30 ]; do
 	actual="$(qdbus6 "$PD" "$PP" "$IFACE.currentProfile" 2>/dev/null)"
 	[ -n "$actual" ] && break
-	espera=$((espera + 1))
+	wait=$((wait + 1))
 	sleep 1
 done
 [ -n "${actual:-}" ] && apply_for "$actual"
@@ -61,7 +61,7 @@ while IFS= read -r line; do
 	case "$line" in
 	*currentProfileChanged*)
 		case "$line" in
-		*"'$AHORRO'"*) apply_for "$AHORRO" ;;
+		*"'$SAVER'"*) apply_for "$SAVER" ;;
 		*)             apply_for other ;;
 		esac
 		;;
