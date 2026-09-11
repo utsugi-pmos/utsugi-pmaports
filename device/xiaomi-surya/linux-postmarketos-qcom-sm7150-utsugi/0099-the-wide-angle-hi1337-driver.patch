@@ -11,7 +11,7 @@ WHERE EACH PIECE COMES FROM
 ---------------------------
 The tables -1457 initialisation writes and 87 per mode- come from THIS module's
 factory file, com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin, read with
-surya/camara/leer-sensormodule.py --tablas.
+surya/camera/read-sensormodule.py --tablas.
 
 And the identification is MEASURED on the chip, not copied from a sibling driver:
 
@@ -56,7 +56,7 @@ The most likely cause is this phone's known boot failure, which this very
 repository has measured at roughly one in four reboots.
 
 And I did not realise the installation had failed because of a handling mistake
-of mine: I chained "instalar-kernel ... | grep version:", and that pipe swallows
+of mine: I chained "camera/install-kernel ... | grep version:", and that pipe swallows
 the exit code. The script has a version guard and a check that it actually wrote,
 and I nullified them by filtering its output. You have to look at the artefact's
 exit code, not just at the line you happen to care about.
@@ -261,7 +261,7 @@ without recompiling.
 +		vddd-supply = <&vreg_camera_vdig>;
 +
 +		/*
-+		 * The MIPI switch. According to docs/CAMARA-02-cableado.md, the
++		 * The MIPI switch. According to docs/CAMERA-02-wiring.md, the
 +		 * front and the wide-angle cameras SHARE CSIPHY1 and take turns through
 +		 * CAM_SEL (pm6150 gpio3). Without putting it in this sensor's
 +		 * position, its lanes do not reach the SoC no matter how much the sensor
@@ -341,7 +341,7 @@ without recompiling.
 + * WHERE THE TABLES COME FROM
 + * -------------------------
 + * From com.qti.sensormodule.j20c_sunny_hi1337_ultra.bin, the file of the phone
-+ * itself, read with surya/camara/leer-sensormodule.py --tablas. They are 1457
++ * itself, read with surya/camera/read-sensormodule.py --tablas. They are 1457
 + * initialization writes and 87 per mode.
 + *
 + * The first few hundred of the initialization go to 0x2000 and above, with values

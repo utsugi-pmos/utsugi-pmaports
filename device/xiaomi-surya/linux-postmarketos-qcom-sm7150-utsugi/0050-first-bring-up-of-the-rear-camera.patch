@@ -211,7 +211,7 @@ at another of the addresses the scan enumerates.
 
 If only 0x50 shows up, the sensor is still asleep and the next suspect is the
 rail that goes through the WL2866D, which this patch does not yet control (it
-has to be turned on by hand first with surya/camara/encender-camaras).
+has to be turned on by hand first with surya/camera/power-on-cameras).
 
 --- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 19:16:35.207304922 +0200
 +++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi	2026-08-14 20:38:40.865370419 +0200

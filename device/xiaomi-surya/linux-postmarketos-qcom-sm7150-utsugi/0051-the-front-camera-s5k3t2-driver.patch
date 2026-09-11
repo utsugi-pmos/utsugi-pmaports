@@ -34,7 +34,7 @@ THE TABLES ARE FROM THIS PHONE, NOT FROM ANOTHER
 ------------------------------------------------
 They come from com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, that is from
 the same module this device carries, read with
-surya/camara/leer-sensormodule.py. Nothing like the rear camera, where they had
+surya/camera/read-sensormodule.py. Nothing like the rear camera, where they had
 to be brought from MediaTek's GPL driver for another phone and the PLL
 recalculated. Here nothing is recalculated.
 
@@ -299,7 +299,7 @@ module parameters, and are tested with rmmod/insmod:
 + * -------------------------
 + * From the factory file of THIS phone and THIS module,
 + * com.qti.sensormodule.j20c_sunny_s5k3t2_front.bin, read with
-+ * surya/camara/leer-sensormodule.py. They are not from another phone nor another
++ * surya/camera/read-sensormodule.py. They are not from another phone nor another
 + * vendor, so there is no PLL to recalculate.
 + *
 + * THE LINK ARITHMETIC, AND HOW IT WAS CHECKED

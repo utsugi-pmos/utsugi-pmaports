@@ -57,7 +57,7 @@ dereferences freed memory just to compare one byte. That WARN_ON is also the
 
 HOW IT IS CHECKED
 -----------------
-surya/arranque/bucle-reinicios 30. The failure rate before the patch was between
+surya/boot/reboot-loop 30. The failure rate before the patch was between
 25% and 40% depending on the run.
 
 --- a/drivers/input/touchscreen/nt36xxx_core.c

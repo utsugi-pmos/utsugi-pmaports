@@ -75,7 +75,7 @@ With the `voz-puertos` trigger it can be checked without spending a call that
 the DSP still accepts the session and that the trace says `channel info TX: 1
 canales`. To know whether it is heard a call is needed, and in that same call
 the three combinations can be swept by recreating the session on the fly (see
-`prueba-canales-tx`).
+`audio/test-tx-channels`).
 
 --- a/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 16:32:42.176789482 +0200
 +++ b/sound/soc/qcom/qdsp6/q6cvp.c	2026-08-11 16:34:21.413004463 +0200
