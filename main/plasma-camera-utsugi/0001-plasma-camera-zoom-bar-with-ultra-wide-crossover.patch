@@ -150,8 +150,8 @@ the ultra-wide has its own path.
 +    readonly property real iman: 0.05
 +
 +    // Dead zone: while inside the magnet the value stays PINNED
-+    // at the stop. Without that the number wobbles around 2.0 and does not give the
-+    // sensacion de haberse enganchado a nada.
++    // at the stop. Without that the number wobbles around 2.0 and never feels
++    // like it has snapped to anything.
 +    function pegar(z) {
 +        for (const tope of topes) {
 +            if (tope < zoomMinimo - epsilon || tope > zoomMaximo + epsilon) {
