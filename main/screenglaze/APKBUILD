@@ -13,7 +13,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 #   feedbackd        the shutter click and the vibration, from the device's own
 #                    theme.
 pkgname=screenglaze
-pkgver=1.0
+pkgver=1.1
 pkgrel=0
 pkgdesc="Screenshot with volume-down + power on Plasma Mobile, Android-style"
 url="https://github.com/utsugi-pmos/screenglaze"
@@ -64,6 +64,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-9a16a97c5f932213e4de7a9c98e9a63271aa25dbc86754f5e04fc384cd66d104753f203fadad63462e65f4b0a6fbc8702ff894ea0d9f8d342cb73523f3ee394b  screenglaze-1.0.tar.gz
+51df71154ae266ee95feaa2e0a653f966ad979c2adfde9963fbca9a58d4b35f2f5ca61992924a75778b77105c6537af8a131d9bd5753ef360ad9c7982f7d6ba4  screenglaze-1.1.tar.gz
 b11f764b600261069ca26f2d41b997c4c359e1fa63bb067a842e868ad3c70823522c47cb498bac99d58f3689233254b6438b4837d03d6082ddf0f3d248b6425e  80-screenglaze.preset
 "
