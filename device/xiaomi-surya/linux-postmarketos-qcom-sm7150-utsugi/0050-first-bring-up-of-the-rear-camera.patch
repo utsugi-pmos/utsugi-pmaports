@@ -787,7 +787,7 @@ diff -ruN a/drivers/media/i2c/imx682.c b/drivers/media/i2c/imx682.c
 +	return container_of(sd, struct imx682, sd);
 +}
 +
-+/* Registro de 16 bits de direccion y 8 de datum. */
++/* Register with a 16-bit address and 8 bits of data. */
 +static int imx682_read(struct imx682 *s, u16 reg, u8 *val)
 +{
 +	u8 dir[2] = { reg >> 8, reg & 0xff };
@@ -1339,9 +1339,9 @@ diff -ruN a/drivers/regulator/wl2866d.c b/drivers/regulator/wl2866d.c
 + * factory values match the formula bit for bit is what turns this
 + * into a reading and not a guess.
 + *
-+ *   0x03  DVDD1     microvoltios = 600000 + valor * 6000
++ *   0x03  DVDD1     microvolts = 600000 + value * 6000
 + *   0x04  DVDD2     idem
-+ *   0x05  AVDD1     microvoltios = 1200000 + valor * 12500
++ *   0x05  AVDD1     microvolts = 1200000 + value * 12500
 + *   0x06  AVDD2     idem
 + *   0x0E  enable, one bit per LDO
 + *

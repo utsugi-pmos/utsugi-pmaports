@@ -36,7 +36,7 @@ What is expected for the front camera, with 4 lanes on CSIPHY1:
 +				 * had been checked. If CSI2_RX_CFG0 does not
 +				 * keep what was written to it -for example
 +				 * because it is written before the block comes
-+				 * receptor estaria escuchando a otro sitio y
++				 * receiver would be listening somewhere else and
 +				 * everything else would be consistent with what was measured.
 +				 */
 +				dev_info(csid->camss->dev,

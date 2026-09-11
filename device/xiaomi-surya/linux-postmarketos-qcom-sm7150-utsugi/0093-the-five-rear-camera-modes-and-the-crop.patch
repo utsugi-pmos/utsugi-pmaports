@@ -611,15 +611,15 @@ dmesg, which is why it carries that message.
 +{
 +	const struct imx682_mode *best = &imx682_modes[0];
 +	u64 pedida = (u64)w * h;
-+	u64 dist_mejor = abs_diff((u64)best->width * best->height, pedida);
++	u64 best_dist = abs_diff((u64)best->width * best->height, pedida);
 +	unsigned int i;
 +
 +	for (i = 1; i < ARRAY_SIZE(imx682_modes); i++) {
 +		const struct imx682_mode *m = &imx682_modes[i];
 +		u64 d = abs_diff((u64)m->width * m->height, pedida);
 +
-+		if (d < dist_mejor) {
-+			dist_mejor = d;
++		if (d < best_dist) {
++			best_dist = d;
 +			best = m;
 +		}
 +	}

@@ -32,7 +32,7 @@ Two traces are added:
 +					"the DSP refuses to register the topologies: %d\n",
 +					result->status);
 +			else
-+				dev_info(&adev->dev, "topologias registradas\n");
++				dev_info(&adev->dev, "topologies registered\n");
 +			core->resp_received = true;
 +			break;
  		case AVCS_CMD_ADSP_EVENT_GET_STATE:

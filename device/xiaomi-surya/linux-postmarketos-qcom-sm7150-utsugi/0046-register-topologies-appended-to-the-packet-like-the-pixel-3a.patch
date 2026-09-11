@@ -102,7 +102,7 @@ a call.
 + * Here it was done the other way round. The first attempt was in-band, the DSP answered
 + * ADSP_EBADPARAM, and it was inferred that shared memory was needed. That
 + * inference led to a dead end: mapping the region **reboots the
-+ * movil entero**.
++ * whole phone**.
 + *
 + * The EBADPARAM had a much simpler explanation. The DSP was being
 + * given the calibration file of the **Pixel 4a**: the one the kernel read

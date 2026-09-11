@@ -55,7 +55,7 @@ The delay goes as a parameter in 0644 so it can be swept without recompiling.
 +	 * The mode table is what programs the OUTPUT PLL, the one that sets the
 +	 * MIPI link rate (0x030e, 0x0310, 0x0312). There was no wait here
 +	 * at all: it was programmed and streaming was started in the
-+	 * mismo suspiro.
++	 * same breath.
 +	 *
 +	 * A sensor that starts streaming with its output PLL unlocked
 +	 * says it is streaming -its 0x0100 confirms it- and its frame counter

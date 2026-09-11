@@ -83,11 +83,11 @@ boots cold.
 +	 * is why it is only used when the average says nothing credible.
 +	 */
 +	if (voltage_now < voltage_min) {
-+		int ultimo;
++		int last;
 +
 +		if (!qcom_qg_get_voltage(chip, QG_LAST_ADC_V_DATA0_REG,
-+					 &ultimo) && ultimo > voltage_now)
-+			voltage_now = ultimo;
++					 &last) && last > voltage_now)
++			voltage_now = last;
 +	}
 +
  	if (voltage_now <= voltage_min)
@@ -104,7 +104,7 @@ boots cold.
  	case POWER_SUPPLY_PROP_STATUS:
 -		val->intval = POWER_SUPPLY_STATUS_UNKNOWN;
 +		/*
-+		 * Decir siempre UNKNOWN tampoco es neutral: UPower lo combina
++		 * Always saying UNKNOWN is not neutral either: UPower combines it
 +		 * with the percentage and, if it is low or zero, presents the
 +		 * battery as `empty` and fires the critical battery action.
 +		 *

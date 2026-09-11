@@ -59,7 +59,7 @@ break. The `audio/test-tx-channels` sweep lowers it to 1 in the phases that need
 + * sm8250_be_hw_params_fixup() forces ALL backends to 2 channels. For
 + * playback that is fine, but not for the microphone: this device has ONE
 + * microphone in the voice path, and the second channel of the port is silence
-+ * digital exacto (medido: max=0 en 3 segundos de grabacion).
++ * exact digital zero (measured: max=0 over 3 seconds of recording).
 + *
 + * The factory Android of this same phone sets it to one. In its
 + * mixer_paths_wcd9375qrd.xml, ALL the paths of a single microphone carry:

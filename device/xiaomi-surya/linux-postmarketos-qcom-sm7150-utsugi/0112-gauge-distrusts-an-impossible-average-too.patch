@@ -25,13 +25,13 @@ itself plausible.
 +	 * a little over it.
 +	 */
 +	if (voltage_now < voltage_min || voltage_now > voltage_max + 100000) {
- 		int ultimo;
+ 		int last;
  
  		if (!qcom_qg_get_voltage(chip, QG_LAST_ADC_V_DATA0_REG,
--					 &ultimo) && ultimo > voltage_now)
-+					 &ultimo) &&
-+		    ultimo >= voltage_min - 300000 &&
-+		    ultimo <= voltage_max + 100000)
- 			voltage_now = ultimo;
+-					 &last) && last > voltage_now)
++					 &last) &&
++		    last >= voltage_min - 300000 &&
++		    last <= voltage_max + 100000)
+ 			voltage_now = last;
  	}
  

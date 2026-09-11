@@ -180,7 +180,7 @@ the ultra-wide has its own path.
 +                                      || root.camera.cameraDevice.indexOf(nodoGranAngular) !== -1
 +    readonly property real zoomMinimo: (enTrasera && hayGranAngular) ? factorGranAngular : 1.0
 +
-+    function aplicarZoom() {
++    function applyZoom() {
 +        if (!enTrasera) {
 +            viewfinder.scale = Math.max(1.0, zoomPedido);
 +            return;
@@ -208,17 +208,17 @@ the ultra-wide has its own path.
 +        onTriggered: {
 +            if (!root.camera.busy) {
 +                running = false;
-+                root.aplicarZoom();
++                root.applyZoom();
 +            }
 +        }
 +    }
 +
-+    onZoomPedidoChanged: aplicarZoom()
++    onZoomPedidoChanged: applyZoom()
 +
 +    // And also at startup: the camera may come set to the wide angle from
 +    // a previous session, and then there is no zoom change to trigger
 +    // the correction.
-+    Component.onCompleted: aplicarZoom()
++    Component.onCompleted: applyZoom()
 +
 +    Connections {
 +        target: root.camera
@@ -238,9 +238,9 @@ the ultra-wide has its own path.
 +            // so it started on wide angle reading 1.0x and the startup
 +            // correction came too early to be of any use.
 +            //
-+            // There is no loop: aplicarZoom only assigns when the camera is not already
++            // There is no loop: applyZoom only assigns when the camera is not already
 +            // the right one, so on the second pass it does nothing.
-+            root.aplicarZoom();
++            root.applyZoom();
 +        }
 +    }
 +
@@ -279,18 +279,18 @@ the ultra-wide has its own path.
 +        target: null
 +        enabled: root.camera.available
 +
-+        property real zoomAlEmpezar: 1.0
++        property real zoomAtStart: 1.0
 +
 +        onActiveChanged: {
 +            if (active) {
-+                zoomAlEmpezar = root.zoomPedido;
++                zoomAtStart = root.zoomPedido;
 +            }
 +        }
 +        onActiveScaleChanged: {
 +            if (!active) {
 +                return;
 +            }
-+            const z = zoomAlEmpezar * activeScale;
++            const z = zoomAtStart * activeScale;
 +            const acotado = Math.max(root.zoomMinimo, Math.min(root.zoomMaximo, z));
 +            root.zoomPedido = root.pegar(acotado);
 +        }

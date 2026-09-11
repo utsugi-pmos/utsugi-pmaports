@@ -107,7 +107,7 @@ the three combinations can be swept by recreating the session on the fly (see
 + *   tx_dev_channels - how many MICROPHONES the vocproc has to process.
 + *                     The device has only one in the voice path, and the
 + *                     topology we use, TX_SM_ECNS, is literally
-+ *                     "Single Mic ECNS": UN microfono.
++ *                     "Single Mic ECNS": ONE microphone.
 + *
 + * Declaring 2 microphones to a single-microphone chain, with the second one in
 + * absolute silence, is exactly what can leave the TX path mute: a

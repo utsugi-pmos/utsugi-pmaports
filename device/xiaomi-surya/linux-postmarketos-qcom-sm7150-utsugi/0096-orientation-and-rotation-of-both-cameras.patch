@@ -73,7 +73,7 @@ Rear 270 and front 90 it is.
  			  IMX682_ANA_GAIN_STEP, IMX682_ANA_GAIN_MIN);
  
 +	/*
-+	 * ORIENTACION Y ROTACION.
++	 * ORIENTATION AND ROTATION.
 +	 *
 +	 * Without this libcamera warns "Failed to retrieve the camera location" and
 +	 * "Rotation control not available, default to 0 degrees", and the image
@@ -137,7 +137,7 @@ Rear 270 and front 90 it is.
 +		 * Measured the same as the rear one and with the same scene. This one goes the
 +		 * other way round from the rear one: it has to be rotated 90 degrees
 +		 * COUNTERCLOCKWISE. That is to be expected, because the two cameras look at
-+		 * lados opuestos y van montadas en espejo.
++		 * opposite sides and are mounted mirrored.
 +		 *
 +		 * Same sign change as on the rear one, for the same reason.
 +		 */

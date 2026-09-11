@@ -59,7 +59,7 @@ would give garbage or zero packets, which is perfectly distinguishable.
 + * On the real path through RDI the width is not programmed anywhere: the VFE write
 + * master receives WM_IMAGE_CFG_0_DEFAULT_WIDTH = 0xFFFF without looking at the
 + * format. Even so the 8191 was copied as a global cap in camss-video, csiphy,
-+ * csid y vfe, y ahi bloquea sensores perfectamente validos.
++ * csid and vfe, and there it blocks perfectly valid sensors.
 + *
 + * The symptom on the surya, with the 64 Mpx mode of the rear camera:
 + *

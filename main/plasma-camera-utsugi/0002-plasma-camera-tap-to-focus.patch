@@ -149,10 +149,10 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +            const u = 0.5 + ((evento.position.x / root.width) - 0.5) / s;
 +            const v = 0.5 + ((evento.position.y / root.height) - 0.5) / s;
 +
-+            marca.x = evento.position.x - marca.width / 2;
-+            marca.y = evento.position.y - marca.height / 2;
-+            marca.visible = true;
-+            relojDeLaMarca.restart();
++            stamp.x = evento.position.x - stamp.width / 2;
++            stamp.y = evento.position.y - stamp.height / 2;
++            stamp.visible = true;
++            stampClock.restart();
 +            root.focuser.focusAt(u, v);
 +        }
 +    }
@@ -162,7 +162,7 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +    // a scene with no edges the search cannot converge, and keeping quiet would leave
 +    // the user waiting for something that is not going to happen.
 +    Rectangle {
-+        id: marca
++        id: stamp
 +
 +        width: Math.round(root.width * 0.22)
 +        height: width
@@ -176,18 +176,18 @@ diff -ruN a/src/contents/ui/camera/Viewfinder.qml b/src/contents/ui/camera/Viewf
 +        opacity: root.focuser && root.focuser.focusing ? 1.0 : 0.85
 +
 +        SequentialAnimation on scale {
-+            running: marca.visible && root.focuser && root.focuser.focusing
++            running: stamp.visible && root.focuser && root.focuser.focusing
 +            loops: Animation.Infinite
 +            NumberAnimation { from: 1.0; to: 0.88; duration: 500 }
 +            NumberAnimation { from: 0.88; to: 1.0; duration: 500 }
 +        }
 +
 +        Timer {
-+            id: relojDeLaMarca
++            id: stampClock
 +            // It stays for a while after finishing so there is time to see the
 +            // color of the result, not just the search.
 +            interval: 2500
-+            onTriggered: if (!root.focuser || !root.focuser.focusing) marca.visible = false;
++            onTriggered: if (!root.focuser || !root.focuser.focusing) stamp.visible = false;
 +                         else restart()
 +        }
 +    }
@@ -233,7 +233,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +constexpr qreal kLadoRecorte = 0.2;
 +
 +//! Below this, the hill is noise and the lens is not touched.
-+constexpr double kRelacionMinima = 1.25;
++constexpr double kMinRatio = 1.25;
 +}
 +
 +Focuser::Focuser(QObject *parent)
@@ -258,10 +258,10 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    if (fd < 0) {
 +        return false;
 +    }
-+    const QByteArray linea = QByteArray::number(position) + '\n';
-+    const ssize_t escrito = ::write(fd, linea.constData(), linea.size());
++    const QByteArray line = QByteArray::number(position) + '\n';
++    const ssize_t escrito = ::write(fd, line.constData(), line.size());
 +    ::close(fd);
-+    return escrito == linea.size();
++    return escrito == line.size();
 +}
 +
 +void Focuser::moverA(int position)
@@ -283,7 +283,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // It starts from scratch even if a search was in progress: the user
 +    // has just said where they want to look, and the earlier measurements are from another
 +    // place in the image.
-+    m_medidas.clear();
++    m_measurements.clear();
 +    m_pendientes.clear();
 +    m_stage = 0;
 +    setLogrado(false);
@@ -327,19 +327,19 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    if (m_pendientes.isEmpty()) {
 +        return;
 +    }
-+    const int siguiente = m_pendientes.takeFirst();
-+    if (!requestPosition(siguiente)) {
++    const int next = m_pendientes.takeFirst();
++    if (!requestPosition(next)) {
 +        // The service died halfway. Better to give up than to keep measuring
 +        // a lens that no longer moves and give a result that looks good.
 +        qWarning() << "focus: the pipe stopped accepting; giving up";
 +        setFocusing(false);
 +        return;
 +    }
-+    setPosition(siguiente);
++    setPosition(next);
 +    m_porTirar = kFotogramasDeEspera;
 +}
 +
-+void Focuser::nuevoFotograma(const QImage &imagen)
++void Focuser::newFrame(const QImage &imagen)
 +{
 +    if (!m_focusing || imagen.isNull()) {
 +        return;
@@ -349,7 +349,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +        return;
 +    }
 +
-+    m_medidas.append({m_position, sharpness(imagen)});
++    m_measurements.append({m_position, sharpness(imagen)});
 +
 +    if (!m_pendientes.isEmpty()) {
 +        nextPosition();
@@ -362,10 +362,10 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // and more than that refines nothing.
 +    ++m_stage;
 +    if (m_stage < kEtapas) {
-+        int best = m_medidas.first().first;
-+        double valor = m_medidas.first().second;
++        int best = m_measurements.first().first;
++        double valor = m_measurements.first().second;
 +        int menor = best, mayor = best;
-+        for (const auto &m : std::as_const(m_medidas)) {
++        for (const auto &m : std::as_const(m_measurements)) {
 +            if (m.second > valor) {
 +                valor = m.second;
 +                best = m.first;
@@ -380,7 +380,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +            const int p = from + (to - from) * i / (kPointsPerStage - 1);
 +            // Repeating an already measured position adds nothing and costs frames.
 +            bool repetida = false;
-+            for (const auto &m : std::as_const(m_medidas)) {
++            for (const auto &m : std::as_const(m_measurements)) {
 +                if (m.first == p) {
 +                    repetida = true;
 +                    break;
@@ -404,12 +404,12 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    int best = m_position;
 +    double height = 0.0;
 +    double bajo = 0.0;
-+    bool primero = true;
-+    for (const auto &m : std::as_const(m_medidas)) {
-+        if (primero) {
++    bool first = true;
++    for (const auto &m : std::as_const(m_measurements)) {
++        if (first) {
 +            height = bajo = m.second;
 +            best = m.first;
-+            primero = false;
++            first = false;
 +            continue;
 +        }
 +        if (m.second > height) {
@@ -427,7 +427,7 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // whole search converged to 972 without a single error, with the camera looking
 +    // at nothing. Better to leave focus where it was and report that it failed.
 +    const double ratio = bajo > 0.0 ? height / bajo : 0.0;
-+    const bool bien = m_medidas.size() >= 3 && ratio >= kRelacionMinima;
++    const bool bien = m_measurements.size() >= 3 && ratio >= kMinRatio;
 +
 +    if (bien) {
 +        requestPosition(best);
@@ -437,9 +437,9 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    setFocusing(false);
 +}
 +
-+void Focuser::setGiro(int grados)
++void Focuser::setGiro(int degrees)
 +{
-+    m_giro = ((grados % 360) + 360) % 360;
++    m_giro = ((degrees % 360) + 360) % 360;
 +}
 +
 +QPointF Focuser::pointOnSensor() const
@@ -477,9 +477,9 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +    // the whole image -this runs on every preview frame-.
 +    double suma = 0.0;
 +    double suma2 = 0.0;
-+    double nivel = 0.0;
++    double level = 0.0;
 +    qint64 n = 0;
-+    qint64 nNivel = 0;
++    qint64 nLevel = 0;
 +
 +    for (int y = r.top(); y <= r.bottom(); ++y) {
 +        const QRgb *fila = reinterpret_cast<const QRgb *>(imagen.constScanLine(y));
@@ -490,18 +490,18 @@ diff -ruN a/src/plasmacamera/focuser.cpp b/src/plasmacamera/focuser.cpp
 +            const double d = a + c - 2 * b;
 +            suma += d;
 +            suma2 += d * d;
-+            nivel += b;
++            level += b;
 +            ++n;
-+            ++nNivel;
++            ++nLevel;
 +        }
 +    }
-+    if (n < 8 || nNivel == 0) {
++    if (n < 8 || nLevel == 0) {
 +        return 0.0;
 +    }
 +    const double media = suma / n;
 +    const double varianza = suma2 / n - media * media;
-+    const double nivelMedio = qMax(1.0, nivel / nNivel);
-+    return varianza / (nivelMedio * nivelMedio);
++    const double meanLevel = qMax(1.0, level / nLevel);
++    return varianza / (meanLevel * meanLevel);
 +}
 +
 +void Focuser::setFocusing(bool valor)
@@ -599,7 +599,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +    Q_INVOKABLE void moverA(int position);
 +
 +    //! Every preview frame. Cheap when not focusing.
-+    void nuevoFotograma(const QImage &imagen);
++    void newFrame(const QImage &imagen);
 +
 +    /*!
 +     * The degrees the image is going to be rotated by for display.
@@ -611,7 +611,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +     * bottom left, and the user would see the camera focus somewhere else without
 +     * understanding why.
 +     */
-+    void setGiro(int grados);
++    void setGiro(int degrees);
 +
 +    bool focusing() const
 +    {
@@ -685,7 +685,7 @@ diff -ruN a/src/plasmacamera/focuser.h b/src/plasmacamera/focuser.h
 +
 +    //! Positions remaining in the current stage, and what has been measured so far.
 +    QList<int> m_pendientes;
-+    QList<QPair<int, double>> m_medidas;
++    QList<QPair<int, double>> m_measurements;
 +    int m_stage = 0;
 +
 +    /*!
@@ -712,7 +712,7 @@ diff -ruN a/src/plasmacameramanager.cpp b/src/plasmacameramanager.cpp
 +    // is applied to the QVideoFrame below, not to the image. That is why the
 +    // rotation is passed separately, so it can translate the point the user tapped.
 +    m_focuser.setGiro(int(outputOrientationDegrees()));
-+    m_focuser.nuevoFotograma(image);
++    m_focuser.newFrame(image);
 +
      QVideoFrame frame = QVideoFrame(image);
  

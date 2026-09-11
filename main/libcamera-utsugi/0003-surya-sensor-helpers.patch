@@ -69,7 +69,7 @@ the pedestal.
 +		/*
 +		 * gain = 1024 / (1024 - code), the classic Sony curve.
 +		 * The driver declares the range 0..978, and 0 as the default
-+		 * defecto: 1024/1024 = 1x abajo y 1024/46 = 22,3x arriba.
++		 * default: 1024/1024 = 1x at the bottom and 1024/46 = 22.3x at the top.
 +		 */
 +		gain_ = AnalogueGainLinear{ 0, 1024, -1, 1024 };
 +	}
