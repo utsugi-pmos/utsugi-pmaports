@@ -10,12 +10,12 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/bin/sh -c 'for i in $(seq 1 60); do [ -e /dev/snd/controlC0 ] && exit 0; sleep 1; done; exit 1'
 
-# 'todo', not 'altavoz': that mode turns off the top speaker on purpose.
+# 'all', not 'speaker': that mode turns off the top speaker on purpose.
 # Without this service the chips boot at around -36 dB and the phone seems mute.
 #
 # 'audio-output' saves the state with 'alsactl store' when it finishes, so what
 # 'alsa-restore' restores on the next boot will be exactly this.
-ExecStart=/usr/bin/audio-output todo 85
+ExecStart=/usr/bin/audio-output all 85
 
 [Install]
 WantedBy=multi-user.target

@@ -1,13 +1,15 @@
 #!/bin/sh
 # Chooses where the audio comes out of the POCO X3 NFC (surya).
 #
-#   audio-output todo        both speakers  <- the normal one
-#   audio-output altavoz     only the bottom one
-#   audio-output audifono    only the top one, the one you hold to your ear
-#   audio-output cascos      3.5 mm jack
-#   audio-output estado      only reports, changes nothing
+#   audio-output all         both speakers  <- the normal one
+#   audio-output speaker     only the bottom one
+#   audio-output earpiece    only the top one, the one you hold to your ear
+#   audio-output headphones  3.5 mm jack
+#   audio-output state       only reports, changes nothing
 #
-# Accepted aliases: auricular=audifono, ambos=todo, arriba=audifono, abajo=altavoz.
+# The Spanish names it was born with still work -- units, notes and muscle
+# memory carry them: todo=all, altavoz=speaker, audifono/auricular/arriba=
+# earpiece, cascos=headphones, estado=state, ambos/estereo=all, abajo=speaker.
 #
 # THE HARDWARE
 #
@@ -32,36 +34,38 @@
 
 set -u
 
-QUE="${1:-estado}"
+WHAT="${1:-state}"
 BUS=9
-ALTAVOZ=0x4c
-AUDIFONO=0x4d
+SPEAKER=0x4c
+EARPIECE=0x4d
 
-case "$QUE" in
-	auricular|arriba)  QUE=audifono ;;
-	ambos|estereo)     QUE=todo ;;
-	abajo)             QUE=altavoz ;;
+case "$WHAT" in
+	audifono|auricular|arriba) WHAT=earpiece ;;
+	todo|ambos|estereo)        WHAT=all ;;
+	altavoz|abajo)             WHAT=speaker ;;
+	cascos)                    WHAT=headphones ;;
+	estado)                    WHAT=state ;;
 esac
 
 # The top one is not a small earpiece: it is a real speaker, and at 85%
 # held to the ear it hurts. When only it plays it is assumed to be at the
 # ear, so its default volume is lower.
-case "$QUE" in
-	audifono) POR_DEFECTO=45 ;;
-	*)        POR_DEFECTO=85 ;;
+case "$WHAT" in
+	earpiece) DEFAULT_VOL=45 ;;
+	*)        DEFAULT_VOL=85 ;;
 esac
 
 # The volume is resolved BEFORE the sudo below and passed as a positional
 # argument: sudo does not propagate the environment, so a VOL= variable will not
 # survive the user switch.
-VOL="${2:-${VOL:-$POR_DEFECTO}}"
+VOL="${2:-${VOL:-$DEFAULT_VOL}}"
 
 case "$VOL" in
 	''|*[!0-9]*) echo "invalid volume: '$VOL' (0-100 expected)"; exit 1 ;;
 esac
 [ "$VOL" -le 100 ] || { echo "invalid volume: $VOL (the maximum is 100)"; exit 1; }
 
-[ "$QUE" = estado ] || [ "$(id -u)" = 0 ] || exec sudo -p "Password for %u: " "$0" "$QUE" "$VOL"
+[ "$WHAT" = state ] || [ "$(id -u)" = 0 ] || exec sudo -p "Password for %u: " "$0" "$WHAT" "$VOL"
 
 # The ALSA control goes from 0 to 109 on a logarithmic scale, ~1 dB per step, with
 # 108 = 0 dB (gain 1.0). MAPA translates percentage 0-100 -> index, picking
@@ -101,7 +105,7 @@ leer_amp() {  # $1 = address
 #   /usr/share/alsa/ucm2/codecs/wcd937x/HeadphoneEnableSeq.conf
 #   /usr/share/alsa/ucm2/codecs/qcom-lpass/rx-macro/HeadphoneEnableSeq.conf
 # plus the backend routing, which there is set by the SectionVerb.
-cascos() {  # $1 = on|off
+headphones_path() {  # $1 = on|off
 	c() { amixer -c0 cset name="$1" "$2" >/dev/null 2>&1; }
 	if [ "$1" = on ]; then
 		c 'RX_HPH PWR Mode' LOHIFI
@@ -126,8 +130,8 @@ cascos() {  # $1 = on|off
 	fi
 }
 
-estado() {
-	A=$(leer_amp $ALTAVOZ); B=$(leer_amp $AUDIFONO)
+report_state() {
+	A=$(leer_amp $SPEAKER); B=$(leer_amp $EARPIECE)
 	mudo() {
 		case "$1" in
 			"")         echo "cannot read without sudo" ;;
@@ -168,7 +172,7 @@ estado() {
 #
 # Always 3. With 0 the top one delivers nothing. With 1 and 2 the
 # channels are split, and since the bus only carries the left one, the bottom one is muted.
-prepara_amps() {
+prepare_amps() {
 	# By NUMBER, not by name: 'LeftRightDiv2' starts with 'Left' and amixer
 	# keeps the first match, leaving the selector at 1.
 	amixer -c0 cset name='Left ASI1 Sel' 3 >/dev/null 2>&1
@@ -180,7 +184,7 @@ prepara_amps() {
 # The routing has to be switched TOO, not just the volumes: without this, after
 # choosing headphones once, the speakers stay muted because nobody reconnects
 # TERT_MI2S_RX with MultiMedia1.
-ruta() {  # $1 = mi2s|codec
+route() {  # $1 = mi2s|codec
 	if [ "$1" = mi2s ]; then
 		amixer -c0 cset name='TERT_MI2S_RX Audio Mixer MultiMedia1' 1 >/dev/null 2>&1
 		amixer -c0 cset name='RX_CODEC_DMA_RX_0 Audio Mixer MultiMedia1' 0 >/dev/null 2>&1
@@ -190,18 +194,18 @@ ruta() {  # $1 = mi2s|codec
 	fi
 }
 
-case "$QUE" in
-	altavoz)  ruta mi2s; prepara_amps; amp Right $VOL; amp Left 0; cascos off
-	          echo "output: bottom SPEAKER, volume $VOL%" ;;
-	audifono) ruta mi2s; prepara_amps; amp Right 0; amp Left $VOL; cascos off
-	          echo "output: top EARPIECE, volume $VOL%" ;;
-	cascos)   ruta codec; amp Right 0; amp Left 0; cascos on
-	          echo "output: HEADPHONES on the 3.5 mm jack" ;;
-	todo)     ruta mi2s; prepara_amps; amp Right $VOL; amp Left $VOL; cascos off
-	          echo "output: both speakers, volume $VOL%" ;;
-	estado)   estado; exit 0 ;;
-	*) echo "usage: $(basename "$0") {todo|altavoz|audifono|cascos|estado} [volume 0-100]"
-	   echo "     aliases: auricular=audifono  ambos=todo  arriba=audifono  abajo=altavoz"
+case "$WHAT" in
+	speaker)    route mi2s; prepare_amps; amp Right $VOL; amp Left 0; headphones_path off
+	            echo "output: bottom SPEAKER, volume $VOL%" ;;
+	earpiece)   route mi2s; prepare_amps; amp Right 0; amp Left $VOL; headphones_path off
+	            echo "output: top EARPIECE, volume $VOL%" ;;
+	headphones) route codec; amp Right 0; amp Left 0; headphones_path on
+	            echo "output: HEADPHONES on the 3.5 mm jack" ;;
+	all)        route mi2s; prepare_amps; amp Right $VOL; amp Left $VOL; headphones_path off
+	            echo "output: both speakers, volume $VOL%" ;;
+	state)      report_state; exit 0 ;;
+	*) echo "usage: $(basename "$0") {all|speaker|earpiece|headphones|state} [volume 0-100]"
+	   echo "     the Spanish names still work: todo, altavoz, audifono, cascos, estado"
 	   exit 1 ;;
 esac
 
@@ -211,4 +215,4 @@ esac
 alsactl store 0 >/dev/null 2>&1 || true
 
 echo
-estado
+report_state
