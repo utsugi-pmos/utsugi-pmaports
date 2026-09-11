@@ -50,7 +50,7 @@ of data arrives). The exact pattern is what is missing.
 +	 * interrupt registers, and the values look like masks -three of them
 +	 * with a single bit removed-, but it is the last CSIPHY write
 +	 * left untested, and at this point it is better to measure than to
-+	 * suponer.
++	 * guessing.
 +	 *
 +	 *   unmask = 0   like mainline: everything to zero
 +	 *                   1   all 0xff (already tested: the PHY fires, no data)

@@ -147,7 +147,7 @@ without rebooting:
 +
 +/*
 + * The DSP does not accept the topology block glued to the packet: it has to be left
-+ * en memoria y pasarle un asa. Enviandolo en banda contesta ADSP_EBADPARAM (2),
++ * in memory and hand it a handle. Sent in band it answers ADSP_EBADPARAM (2),
 + * which is what happened with the patch as it came from upstream.
 + */
 +static int q6core_map_memory(struct q6core *core, dma_addr_t phys, u32 size)

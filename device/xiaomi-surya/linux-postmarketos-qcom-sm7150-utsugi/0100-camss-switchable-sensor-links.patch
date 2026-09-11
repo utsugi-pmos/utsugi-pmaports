@@ -63,7 +63,7 @@ physically cannot be disconnected, and here it can.
 + * through a MIPI switch. Only the first one is left enabled; the second one is
 + * created disabled and is switched from userspace. If both were left
 + * enabled, pipeline validation would walk both and would not capture
-+ * ninguno.
++ * neither.
 + */
 +static bool camss_first_sensor_of_csiphy(struct media_entity *csiphy)
 +{

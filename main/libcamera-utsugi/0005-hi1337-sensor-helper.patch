@@ -70,7 +70,7 @@ gain raises both. Confusing them cost three wrong conclusions in a row.
 +		 * contrast, which is what tells a gain apart from a black
 +		 * level offset:
 +		 *
-+		 *     codigo  senal   contraste
++		 *     code    signal  contrast
 +		 *        512   9,58        25,0
 +		 *       1024  19,57        49,0    (x2,04 y x1,96)
 +		 *       2048  39,49        96,0    (x4,12 y x3,84)

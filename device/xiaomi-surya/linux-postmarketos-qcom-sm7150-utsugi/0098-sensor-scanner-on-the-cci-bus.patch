@@ -290,7 +290,7 @@ caused nor when it was caused.
 +		 *
 +		 * The index in THIS list is what shows up in the module
 +		 * messages, so the order matters and is not touched without updating
-+		 * the CAMARA-06 table.
++		 * the CAMERA-06 table.
 +		 */
 +		probe-gpios = <&tlmm 24 GPIO_ACTIVE_HIGH>,   /* 0: the reset, found */
 +			      /* 1..19: what is left free in the tlmm below 59.
@@ -792,7 +792,7 @@ caused nor when it was caused.
 +	regulator_bulk_disable(ARRAY_SIZE(surya_supplies), e->supplies);
 +	if (e->standby)
 +		gpiod_set_value_cansleep(e->standby, 0);
-+	dev_info(&cl->dev, "apagado: reset y standby abajo, clocks y rieles fuera\n");
++	dev_info(&cl->dev, "off: reset and standby low, clocks and rails out\n");
 +}
 +
 +static const struct of_device_id surya_cam_scan_of[] = {

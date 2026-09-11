@@ -43,7 +43,7 @@ guessing which register to read.
 +
  static unsigned int diag_pkts;
  module_param(diag_pkts, uint, 0644);
- MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
+ MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 received (contador de hardware, 0x160).");
 @@ -508,6 +513,41 @@
  				 * receptor estaria escuchando a otro sitio y
  				 * everything else would be consistent with what was measured.

@@ -40,7 +40,7 @@ single instrument.
   */
 +static unsigned int diag_pkts;
 +module_param(diag_pkts, uint, 0644);
-+MODULE_PARM_DESC(diag_pkts, "Paquetes CSI-2 recibidos (contador de hardware, 0x160).");
++MODULE_PARM_DESC(diag_pkts, "CSI-2 packets received (hardware counter, 0x160).");
 +
 +static unsigned int diag_crc;
 +module_param(diag_crc, uint, 0644);
@@ -68,9 +68,9 @@ single instrument.
 +				 *
 +				 * The Qualcomm CSID register map
 +				 * (cam_ife_csid170.h) declares counters that
-+				 * mainline no lee NUNCA:
++				 * mainline NEVER reads:
 +				 *
-+				 *   0x160  total de paquetes recibidos
++				 *   0x160  total de packets received
 +				 *   0x168  total de errores de CRC
 +				 *   0x130  header of the last long packet
 +				 *   0x134  idem, segunda palabra
@@ -88,7 +88,7 @@ single instrument.
 +				diag_pkt_hdr1 = readl_relaxed(csid->base + 0x134);
 +				diag_bytes_rdi0 = readl_relaxed(csid->base + 0x3e0);
 +				dev_info(csid->camss->dev,
-+					 "csid%d contadores: paquetes=%u crc_malo=%u cabecera=0x%08x/0x%08x bytes_rdi0=%u\n",
++					 "csid%d contadores: packets=%u crc_malo=%u cabecera=0x%08x/0x%08x bytes_rdi0=%u\n",
 +					 csid->id, diag_pkts, diag_crc,
 +					 diag_pkt_hdr0, diag_pkt_hdr1,
 +					 diag_bytes_rdi0);

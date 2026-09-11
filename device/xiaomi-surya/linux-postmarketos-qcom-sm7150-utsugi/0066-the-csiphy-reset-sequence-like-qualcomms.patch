@@ -29,7 +29,7 @@ values, checked automatically-, the common block is corrected to version 1.2
 +	 *     {0x0814, 0x00, wait 5 ms}   <- clear the lane enable
 +	 *     {0x0818, 0x00}
 +	 *     {0x081C, 0x00}
-+	 *     {0x0800, 0x01, espera 1 ms}   <- pulso de reset
++	 *     {0x0800, 0x01, wait 1 ms}     <- the reset pulse
 +	 *     {0x0800, 0x00}
 +	 *
 +	 * Mainline only pulses 0x0800 and leaves the other three as they were. It is

@@ -109,7 +109,7 @@ the bus, which is a dependency that can be met: moving focus while capturing.
 +	 * That pin is the reason the actuator seemed not to exist. With it
 +	 * low, sweeping the whole bus of its sensor finds nothing; setting it
 +	 * high, 0x0c -the classic address of Dongwoon VCMs- shows up in the
-+	 * DOS modos de sweep, y acepta ordenes de posicion.
++	 * TWO sweep modes, and it takes position commands.
 +	 *
 +	 * It is exactly the same kind of bug the wide-angle had with
 +	 * CAM_SW2_OE_2: an enable line nobody declared.

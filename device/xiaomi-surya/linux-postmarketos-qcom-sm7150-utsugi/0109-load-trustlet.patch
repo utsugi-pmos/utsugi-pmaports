@@ -1242,7 +1242,7 @@ conclusions from a second test.
 + * us without hanging. This mode tests that.
 + *
 + *   echo "r a80068" > /sys/kernel/debug/probe_ta/scmio   # read the proto register
-+ *   echo "w a80068 1" > /sys/kernel/debug/probe_ta/scmio # escribir
++ *   echo "w a80068 1" > /sys/kernel/debug/probe_ta/scmio # write_it
 + */
 +static ssize_t probe_scmio_write(struct file *f, const char __user *ubuf,
 +				 size_t len, loff_t *off)
@@ -1389,7 +1389,7 @@ conclusions from a second test.
 + * Dump of a physical memory region readable by the HLOS (ioremap). To
 + * read the TZ_DIAG log from QSEE (~0x146aa000 in IMEM), which is where the secure
 + * world writes its messages -- including those from the sensor SPI.
-+ *   echo "146aa000 2000" > /sys/kernel/debug/probe_ta/leermem
++ *   echo "146aa000 2000" > /sys/kernel/debug/probe_ta/readmem
 + * NOTE: only for non-secure readable regions; a walled-off region would hang.
 + */
 +static ssize_t probe_readmem_write(struct file *f, const char __user *ubuf,
@@ -1414,10 +1414,10 @@ conclusions from a second test.
 +
 +	m = ioremap((phys_addr_t)addr, n);
 +	if (!m) {
-+		pr_err("probe_ta: leermem ioremap %#llx failure\n", addr);
++		pr_err("probe_ta: readmem ioremap %#llx failure\n", addr);
 +		return -ENOMEM;
 +	}
-+	pr_info("probe_ta: leermem %#llx (%u bytes):\n", addr, n);
++	pr_info("probe_ta: readmem %#llx (%u bytes):\n", addr, n);
 +	for (i = 0; i < (int)n; i += 32) {
 +		u8 tmp[32];
 +		memcpy_fromio(tmp, m + i, 32);
@@ -1523,7 +1523,7 @@ conclusions from a second test.
 +		goto out;
 +	}
 +
-+	pr_info("probe_ta: keymaster suelta %u bytes de clave\n", length);
++	pr_info("probe_ta: keymaster hands over %u bytes of key\n", length);
 +
 +	ret = qcom_scm_qseecom_app_fpc_buf(fp_id, FPC_GROUP_FPCDATA,
 +					   FPC_SET_KEY_DATA, rsp + offset,

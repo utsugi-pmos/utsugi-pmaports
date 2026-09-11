@@ -91,8 +91,8 @@ recompiling.
 +	 *     {0x0814, 0xd5, ..., CSIPHY_LANE_ENABLE}     <- ctrl5, coincide
 +	 *     {0x0818, 0x01, ...}                         <- ctrl6, coincide
 +	 *     {0x081C, 0x52, ...}                         <- ctrl7: 0x52, NO 0x02
-+	 *     {0x0800, 0x03, delay 1 ms}                  <- ctrl0: 0x03 y esperar
-+	 *     {0x0800, 0x02, ..., CSIPHY_2PH_REGS}        <- luego 0x02
++	 *     {0x0800, 0x03, delay 1 ms}                  <- ctrl0: 0x03 and wait
++	 *     {0x0800, 0x02, ..., CSIPHY_2PH_REGS}        <- then 0x02
 +	 *
 +	 * And in the old versions:
 +	 *

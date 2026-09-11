@@ -209,7 +209,7 @@ without recompiling.
 +	 * the port is declared in camss and this sensor failed to probe, the
 +	 * async notifier keeps waiting and /dev/media0 is lost, which
 +	 * is where the front camera works. First make it probe; the wiring
-+	 * CSI, despues.
++	 * CSI, afterwards.
 +	 */
 +	camera@21 {
 +		compatible = "hynix,hi1337";
@@ -2580,7 +2580,7 @@ without recompiling.
 + * after having validated the WHOLE pipeline. The IMX682 driver, which does
 + * capture with this same camss, uses plain .s_stream: without enable_streams the
 + * kernel falls back to that path. Aligning with the case that works is cheaper than
-+ * implementar rutas.
++ * implement routes.
 + */
 +static int hi1337_parar(struct v4l2_subdev *sd);
 +
@@ -2686,7 +2686,7 @@ without recompiling.
 +	 * What remains unexplained is the floor itself: between 700 and 720, the
 +	 * same in both modes, unrelated to vts or to the height, and with
 +	 * the chip accepting and reading back any value written to it
-+	 * -incluido 0x0004-. Ver docs/CAMARA-06.
++	 * -0x0004 included-. See docs/CAMERA-06.
 +	 */
 +	ret = __v4l2_ctrl_handler_setup(&hi1337->ctrl_handler);
 +	if (ret)
@@ -2840,7 +2840,7 @@ without recompiling.
 +	if (n >= 2) {
 +		ret = cci_write(h->regmap, CCI_REG16(reg), datum, NULL);
 +		if (ret)
-+			dev_info(h->dev, "probe: escribir %04x=%04x failure\n",
++			dev_info(h->dev, "probe: write_it %04x=%04x failure\n",
 +				 reg, datum);
 +	}
 +
@@ -2964,8 +2964,8 @@ without recompiling.
 +		 * was left over from the driver this was ported from. The Hi-1337 is 13 MP,
 +		 * not 20. It was visible from outside, in cam --list-properties:
 +		 *
-+		 *     camara 2 (hi1337):  PixelArraySize = 5184x3880
-+		 *     camara 3 (s5k3t2):  PixelArraySize = 5184x3880
++		 *     camera 2 (hi1337):  PixelArraySize = 5184x3880
++		 *     camera 3 (s5k3t2):  PixelArraySize = 5184x3880
 +		 *
 +		 * Two different sensors declaring the same array. libcamera
 +		 * uses that size for the crop and the field of view, so a
@@ -3077,7 +3077,7 @@ without recompiling.
 +	for (i = 0; i < ARRAY_SIZE(probables); i++) {
 +		if (!hi1337_probe_id_at(client, probables[i], &id) &&
 +		    id == HI1337_CHIP_ID) {
-+			dev_info(hi1337->dev, "HI1337 encontrado en 0x%02x\n",
++			dev_info(hi1337->dev, "HI1337 found en 0x%02x\n",
 +				 probables[i]);
 +			client->addr = probables[i];
 +			return 0;
@@ -3181,7 +3181,7 @@ without recompiling.
 +	 * later, when no image would arrive. That is the worst thing a
 +	 * fault: showing up far from where it is caused.
 +	 */
-+	dev_dbg(dev, "encendido: MCLK a %lu Hz\n", clk_get_rate(hi1337->mclk));
++	dev_dbg(dev, "powered_on: MCLK a %lu Hz\n", clk_get_rate(hi1337->mclk));
 +
 +	return 0;
 +}
@@ -3349,7 +3349,7 @@ without recompiling.
 +		goto power_off;
 +	}
 +
-+	dev_info(hi1337->dev, "ES UN HI1337: identificacion 0x%04x en 0x%02x\n",
++	dev_info(hi1337->dev, "IT IS A HI1337: id 0x%04x at 0x%02x\n",
 +		 id, client->addr);
 +
 +	hi1337->mode = &hi1337_supported_modes[0];

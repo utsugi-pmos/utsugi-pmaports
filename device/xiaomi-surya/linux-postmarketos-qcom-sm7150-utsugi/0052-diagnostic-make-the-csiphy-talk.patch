@@ -83,7 +83,7 @@ known.
 + *
 + * It is left tunable AT RUNTIME (0644) so it can be swept without recompiling or
 + * reboot, which is expensive on this phone: one boot in four hangs
-+ * arranques.
++ * starts.
 + */
 +static int unmask;
 +module_param(unmask, int, 0644);

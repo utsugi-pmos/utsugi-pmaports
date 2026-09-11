@@ -51,7 +51,7 @@ This does NOT fix anything: it is to look.
 +	 * What is interesting is to COMPARE the dump with the sensor transmitting against
 +	 * the sensor silent: the registers that change are the ones that respond to the
 +	 * real signal, and that would be the only clue left about whether the
-+	 * PHY llega a ver alta velocidad o solo baja potencia.
++	 * PHY llega a ver alta speed o solo baja potencia.
 +	 */
 +	if (csiphy_dump) {
 +		int a;

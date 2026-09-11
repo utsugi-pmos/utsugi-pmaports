@@ -85,7 +85,7 @@ correctly.
 + * VSTICDFT): this parameter accompanies 26 of the 27 modules, and one that shows up with
 + * almost all of them is not a fine tuning, it is the enable. Without calibration it is never
 + * sent, and that is why the modules -the echo canceller among them- are
-+ * apagados.
++ * turned off.
 + */
 +#define VOICE_PARAM_MOD_ENABLE				0x00010E00
 +
@@ -192,7 +192,7 @@ correctly.
 +			       module_id, ret);
 +			failures++;
 +		} else {
-+			pr_info("q6cvp: modulo %#x encendido\n", module_id);
++			pr_info("q6cvp: modulo %#x powered_on\n", module_id);
 +			powered_on++;
 +		}
 +	}
