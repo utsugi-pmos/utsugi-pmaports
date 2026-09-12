@@ -228,10 +228,10 @@ def main():
     console_mode(KD_GRAPHICS)
 
     with open(FB, "r+b", buffering=0) as fb:
-        if "--clean-only" in sys.argv or "--solo-limpiar" in sys.argv:
+        if "--clean-only" in sys.argv:
             clean(fb, height, stride)
             return
-        if "--clean" in sys.argv or "--limpiar" in sys.argv:
+        if "--clean" in sys.argv:
             clean(fb, height, stride)
         L.dump(fb, stride)
 
