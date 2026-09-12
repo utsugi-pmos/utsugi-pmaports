@@ -1,0 +1,92 @@
+media: dw9807-vcm: let the subdev outlive the unbind
+
+Unbinding this driver while a file descriptor is open on its /dev/v4l-subdevN
+oopses the kernel when that descriptor is closed:
+
+    Unable to handle kernel paging request at virtual address 001f01405800006a
+    Internal error: Oops: 0000000096000004 [#1]  SMP
+    pc : subdev_close+0x30/0xc0 [videodev]
+    Call trace:
+      subdev_close -> v4l2_release -> __fput -> ____fput
+      task_work_run -> do_exit -> do_group_exit -> get_signal
+
+and then "Fixing recursive fault but reboot is needed!", which wedges the
+device until the watchdog pulls it out. Reproduced on a Xiaomi POCO X3 NFC
+(SM7150) on 2026-09-05; the analysis, with the disassembly, is in
+docs/CAMERA-07 of the surya port.
+
+WHY IT HAPPENS
+
+struct dw9807_device is devm_kzalloc'd and the v4l2_subdev is embedded in it, so
+unbind frees the subdev. It does not close the descriptors anybody already had
+open on the device node, nor invalidate them. On close, subdev_close() reads
+sd->internal_ops->close from freed memory: dw9807_int_ops declares .close at
+offset 32, which is exactly the `ldr x8, [x8, #32]` the trap lands on, and the
+address read back is in the linear map rather than the module range -- it is
+data, not code, which is why CFI catches it. An open fd does pin the module, but
+unbind does not look at that count: devm frees the struct regardless.
+
+THE FIX
+
+The v4l2 core already has the mechanism. v4l2_device_release_subdev_node() is
+the device node's release callback and runs when the LAST reference to the node
+is dropped -- after the last close -- and from there it calls
+internal_ops->release(). A driver that frees its subdev there cannot be freed
+underneath an open descriptor.
+
+So: plain kzalloc instead of devm, and .release frees it. The struct then lives
+exactly as long as something can still reach it, which is the invariant that was
+missing.
+
+Signed-off-by: Dr. Utsugi <cidwel@gmail.com>
+
+--- a/drivers/media/i2c/dw9807-vcm.c
++++ b/drivers/media/i2c/dw9807-vcm.c
+@@ -140,9 +140,23 @@
+ 	return 0;
+ }
+ 
++/*
++ * Called by the v4l2 core when the last reference to the device node is
++ * dropped, which is after the last descriptor on it has been closed. Freeing
++ * here -- and NOT with devm -- is what keeps an unbind from pulling the subdev
++ * out from under a descriptor somebody still holds.
++ */
++static void dw9807_release(struct v4l2_subdev *sd)
++{
++	struct dw9807_device *dw9807_dev = sd_to_dw9807_vcm(sd);
++
++	kfree(dw9807_dev);
++}
++
+ static const struct v4l2_subdev_internal_ops dw9807_int_ops = {
+ 	.open = dw9807_open,
+ 	.close = dw9807_close,
++	.release = dw9807_release,
+ };
+ 
+ static const struct v4l2_subdev_ops dw9807_ops = { };
+@@ -180,8 +194,13 @@
+ 	struct dw9807_device *dw9807_dev;
+ 	int rval;
+ 
+-	dw9807_dev = devm_kzalloc(&client->dev, sizeof(*dw9807_dev),
+-				  GFP_KERNEL);
++	/*
++	 * NOT devm: the subdev is embedded here and has to outlive the unbind,
++	 * because descriptors open on the device node still reach it. It is
++	 * freed in dw9807_release(), which the core calls when the last one
++	 * goes away.
++	 */
++	dw9807_dev = kzalloc(sizeof(*dw9807_dev), GFP_KERNEL);
+ 	if (dw9807_dev == NULL)
+ 		return -ENOMEM;
+ 
+@@ -212,6 +231,7 @@
+ err_cleanup:
+ 	v4l2_ctrl_handler_free(&dw9807_dev->ctrls_vcm);
+ 	media_entity_cleanup(&dw9807_dev->sd.entity);
++	kfree(dw9807_dev);
+ 
+ 	return rval;
+ }
