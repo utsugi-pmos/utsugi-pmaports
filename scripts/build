@@ -46,17 +46,34 @@ for pkg in "$@"; do
 		rc=1; continue
 	fi
 
+	# Where the log ends BEFORE this build, so the checks below read only what
+	# this build appended. log.txt accumulates across runs, and grepping the
+	# whole file makes every later failure inherit the diagnosis of an earlier
+	# one: on 2026-09-12 a plain typo in an APKBUILD was reported as "the
+	# patches do not apply" because a kernel build had failed that way hours
+	# before, in a package that has no patches at all.
+	log_was=$(wc -c < "$WORK/log.txt" 2>/dev/null || echo 0)
+
 	if ! pmb build "$pkg" --arch "$ARCH" $FORCE; then
+		since_log() { tail -c "+$((log_was + 1))" "$WORK/log.txt" 2>/dev/null; }
 		# Only a CROSS failure is worth retrying under emulation. Everything
 		# else -- a patch that does not apply, a compile error, a missing
 		# dependency -- fails again the same way, and for the kernel that costs
 		# hours in QEMU instead of the nine minutes it takes cross. It happened
 		# on 2026-09-11: five patches stopped applying and the retry spent the
 		# evening emulating the same failure.
-		if grep -qE 'patches failed to apply|prepare failed' \
-		     "$WORK/log.txt" 2>/dev/null; then
+		if since_log | grep -qE 'patches failed to apply|prepare failed'; then
 			red "  $pkg FAILED: the patches do not apply. QEMU would not help."
 			red "  (a patch that ADDS a line is CONTEXT for the ones after it)"
+			rc=1; continue
+		fi
+		# Same reasoning for anything that fails after the source is prepared:
+		# a compile error or a bad install line in package() is the recipe's
+		# fault and reproduces identically under emulation.
+		if since_log | grep -qE 'rootpkg failed|: package failed'; then
+			red "  $pkg FAILED while building or packaging. QEMU would not help."
+			since_log | grep -E '^>>> ERROR|^install: |^cp: |^mv: ' | tail -3 |
+				while IFS= read -r line; do red "  $line"; done
 			rc=1; continue
 		fi
 		# crossdirect loses liblto_plugin.so when the host toolchain and the

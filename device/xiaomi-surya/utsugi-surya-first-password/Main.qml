@@ -48,25 +48,35 @@ Kirigami.ApplicationWindow {
         }
     }
 
+    pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
+
     pageStack.initialPage: Kirigami.Page {
-        title: "Choose a password"
 
         ColumnLayout {
-            anchors.centerIn: parent
-            width: Math.min(parent.width - Kirigami.Units.gridUnit * 2,
-                            Kirigami.Units.gridUnit * 22)
+            // Anchored to the TOP, not centred: the on-screen keyboard takes
+            // the bottom half of the panel the moment a field has focus, and a
+            // centred column puts the fields and the button exactly there.
+            // Everything that has to be read or touched lives in the top half.
+            anchors.top: parent.top
+            anchors.topMargin: Kirigami.Units.gridUnit
+            anchors.horizontalCenter: parent.horizontalCenter
+            // Nearly the whole width, and generous spacing. The default
+            // control sizes are made for a pointer; on this panel -- 1080 wide,
+            // held at arm's length -- they come out as a row of thin slots that
+            // are hard to hit and harder to read.
+            width: parent.width - Kirigami.Units.gridUnit * 2
             spacing: Kirigami.Units.largeSpacing
 
             Kirigami.Icon {
                 source: "security-medium"
                 Layout.alignment: Qt.AlignHCenter
-                Layout.preferredWidth: Kirigami.Units.iconSizes.huge
-                Layout.preferredHeight: Kirigami.Units.iconSizes.huge
+                Layout.preferredWidth: Kirigami.Units.iconSizes.large
+                Layout.preferredHeight: Kirigami.Units.iconSizes.large
             }
 
             Kirigami.Heading {
                 text: "This phone still has the password it came with"
-                level: 2
+                level: 1
                 wrapMode: Text.Wrap
                 horizontalAlignment: Text.AlignHCenter
                 Layout.fillWidth: true
@@ -81,20 +91,51 @@ Kirigami.ApplicationWindow {
                 Layout.fillWidth: true
             }
 
+            QQC2.Label {
+                text: "A 4-digit PIN is fine. It is also the password for "
+                    + "sudo and for ssh, if you ever use them."
+                wrapMode: Text.Wrap
+                horizontalAlignment: Text.AlignHCenter
+                opacity: 0.6
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 0.95
+                Layout.fillWidth: true
+            }
+
+            QQC2.Label {
+                text: "New password"
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1
+                opacity: 0.75
+            }
+
             QQC2.TextField {
                 id: first
                 echoMode: TextInput.Password
-                placeholderText: "New password"
+                // A finger, not a mouse pointer: Kirigami's own touch target.
                 Layout.fillWidth: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
+                horizontalAlignment: TextInput.AlignHCenter
                 onAccepted: second.forceActiveFocus()
                 focus: true
+            }
+
+            QQC2.Label {
+                text: "Type it again"
+                Layout.fillWidth: true
+                horizontalAlignment: Text.AlignHCenter
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.1
+                opacity: 0.75
             }
 
             QQC2.TextField {
                 id: second
                 echoMode: TextInput.Password
-                placeholderText: "Again"
                 Layout.fillWidth: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
+                horizontalAlignment: TextInput.AlignHCenter
                 onAccepted: root.apply()
             }
 
@@ -111,6 +152,8 @@ Kirigami.ApplicationWindow {
                 text: root.working ? "Changing…" : "Set password"
                 enabled: !root.working && first.text.length > 0 && second.text.length > 0
                 Layout.fillWidth: true
+                Layout.preferredHeight: Kirigami.Units.gridUnit * 3
+                font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.3
                 onClicked: root.apply()
             }
         }

@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=10
+pkgrel=11
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -46,6 +46,7 @@ subpackages="$pkgname-systemd $pkgname-firefox:_firefox:noarch $pkgname-librewol
 source="surya-120hz.js
 	change-the-password
 	change-the-password.service
+	change-the-password.path
 	80-utsugi-surya-password.preset
 	location-switch
 	power-saving-switch
@@ -124,6 +125,7 @@ package() {
 	install -Dm755 "$srcdir"/change-the-password \
 		-t "$pkgdir"/usr/libexec/utsugi-surya/
 	install -Dm644 "$srcdir"/change-the-password.service \
+		"$srcdir"/change-the-password.path \
 		-t "$pkgdir"/usr/lib/systemd/system/
 	# A SYSTEM preset, not the user one below: this unit reads /etc/shadow.
 	install -Dm644 "$srcdir"/80-utsugi-surya-password.preset \
@@ -154,7 +156,8 @@ sha512sums="
 46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
 7b164105744f7ec033c679fbb81e3af750106073957dd1690d6ea32def23303aef269a725474fb2f3c895869c4634993c9825cc33fc8fc6d0a2bfcc31686bea0  change-the-password
 53498ac58811efa97c1436d692343618093c64b684d4065ff8da6afaa427e1054af821e757e177fd173bf22a0d0dd77eca2a4b8b7799726a9a8b4efc62b8a677  change-the-password.service
-53cf9072f2bce4f15c2109e84acc9973bccc3c2e9f8d2a0d14c2f6b06ccc84bcdf810fcb8c5c389ca14e5a7c29c7a0af623f10acda924a750acd164def6cf035  80-utsugi-surya-password.preset
+74cc650e1c96753744ae871597da3f3f9b464da000f1a4055f06665894cbfa5e339c8491fe07d95246d4cf2951b4e2dd467fbc80b0a1848d873dd79eb6d4b6b9  change-the-password.path
+a534a75ab7f8e79970ad39c47dc28b2e93d1df5b3b118558e98d4ceb08c72bbf9f937fc7100295ecfe53ce36d2024d32696364bcc307284a6166bdbd94e7e47c  80-utsugi-surya-password.preset
 b3be4dfccb85b36004b7ad3865a81fb11a8aa853c73a1821141d7e54a840ba7138c299c9eb79173722dbf5fdb4bf7a975133897e30bdb5d425fd642c10eecbd5  location-switch
 45a9365b702b25d0e7bcadc68a87ed8f0f7ffeffae1923f26baab731fbbaab24f18da4ef057437b1ee5419124f9b56b9470c45d652b2b727c70037b9b62868b4  power-saving-switch
 c1f97d776a1331944864e80ce50e07fcda81d6a0f5b055af687fb12e5fd8e7b7a784477f16335978bc96ce2b8269d9c8a77b613a4a61914480063e132325179d  usb-power-switch
