@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=8
+pkgrel=9
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -44,6 +44,9 @@ replaces_priority=100
 # and pick it by hand.
 subpackages="$pkgname-systemd $pkgname-firefox:_firefox:noarch $pkgname-librewolf:_librewolf:noarch"
 source="surya-120hz.js
+	change-the-password
+	change-the-password.service
+	80-utsugi-surya-password.preset
 	location-switch
 	power-saving-switch
 	usb-power-switch
@@ -118,6 +121,14 @@ package() {
 		-t "$pkgdir"/usr/lib/systemd/user/app-pulseaudio@autostart.service.d/
 	install -Dm644 "$srcdir"/10-utsugi-vvmd-off.conf \
 		-t "$pkgdir"/usr/lib/systemd/user/app-vvmd@autostart.service.d/
+	install -Dm755 "$srcdir"/change-the-password \
+		-t "$pkgdir"/usr/libexec/utsugi-surya/
+	install -Dm644 "$srcdir"/change-the-password.service \
+		-t "$pkgdir"/usr/lib/systemd/system/
+	# A SYSTEM preset, not the user one below: this unit reads /etc/shadow.
+	install -Dm644 "$srcdir"/80-utsugi-surya-password.preset \
+		-t "$pkgdir"/usr/lib/systemd/system-preset/
+
 	install -Dm644 "$srcdir"/80-utsugi-surya-plasma.preset \
 		-t "$pkgdir"/usr/lib/systemd/user-preset/
 }
@@ -141,6 +152,9 @@ systemd() {
 }
 sha512sums="
 46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
+c9f8ad85b525eaf83666cc59267ecc990ff1f5872705d7c5623029290236d56b6cbcd9e327d4b2dbd53d866a9e5318148d347171f694faa5732dad3255f24de1  change-the-password
+6f0ed7b54e88bf42c3ca65fa65b132e45545dd6a6e25bdda101b957edc7f4257372d1c092db0fd52112069b723eb7f272a51b76dac5d2c0cc63bda3b85a4c439  change-the-password.service
+53cf9072f2bce4f15c2109e84acc9973bccc3c2e9f8d2a0d14c2f6b06ccc84bcdf810fcb8c5c389ca14e5a7c29c7a0af623f10acda924a750acd164def6cf035  80-utsugi-surya-password.preset
 b3be4dfccb85b36004b7ad3865a81fb11a8aa853c73a1821141d7e54a840ba7138c299c9eb79173722dbf5fdb4bf7a975133897e30bdb5d425fd642c10eecbd5  location-switch
 45a9365b702b25d0e7bcadc68a87ed8f0f7ffeffae1923f26baab731fbbaab24f18da4ef057437b1ee5419124f9b56b9470c45d652b2b727c70037b9b62868b4  power-saving-switch
 c1f97d776a1331944864e80ce50e07fcda81d6a0f5b055af687fb12e5fd8e7b7a784477f16335978bc96ce2b8269d9c8a77b613a4a61914480063e132325179d  usb-power-switch

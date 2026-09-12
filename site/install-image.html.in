@@ -131,7 +131,16 @@ sudo fastboot reboot</pre>
 		<div class="note"><i></i><div>
 			<b>Log in and change the password.</b>
 			The image ships user <code>user</code> with password <code>147147</code>,
-			because an image has to have one. Change it: <code>passwd</code>.
+			because an image has to have one and it is printed on this page &mdash; so
+			anybody who can read knows the password of a phone that has not changed it.
+			Change it in <b>Settings &rarr; Users</b>, or in a terminal:
+			<code>passwd</code>.
+			<br><br>
+			The phone will remind you: on every boot it checks whether the password is
+			still the one it shipped with and, while it is, says so in a notification.
+			It does not store the password to do that &mdash; it takes the salt out of
+			your own entry in <code>/etc/shadow</code>, hashes the shipped one with it
+			and compares. Change the password and the reminder stops, for good.
 		</div></div>
 	</div>
 </section>
