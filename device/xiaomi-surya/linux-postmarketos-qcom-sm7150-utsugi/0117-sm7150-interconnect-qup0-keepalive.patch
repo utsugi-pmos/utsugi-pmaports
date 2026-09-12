@@ -1,0 +1,29 @@
+interconnect: qcom: sm7150: keep the QUP0 BCM alive
+
+On the POCO X3 NFC (surya) the SoC freezes silently within seconds of the
+aggregated bandwidth on the QUPv3 wrapper 0 path (qhm_qup_center, BCM
+"QUP0") dropping to zero, i.e. as soon as every serial engine of the wrapper
+is runtime-suspended: the Bluetooth UART closed by bluetoothd, the
+touchscreen SPI, the haptics and the NFC I2C engines idle. The AOP then
+gates the wrapper's core clock and the next access to any engine of that
+wrapper wedges the bus. Measured on 2026-09-08 by holding engines
+runtime-active one at a time: any single engine keeping its default
+GENI_DEFAULT_BW vote (QUP0 vote 101) is enough for the phone to survive
+Bluetooth power cycles; releasing the last one kills it within ~20 s.
+Keeping the wrapper AHB clocks on (CLK_IS_CRITICAL) does not help, so it is
+the RPMh-managed core clock, not the GCC branches.
+
+Mark the BCM keepalive so the framework always votes a minimum for it, as
+the memory, shub, multimedia and config-noc BCMs already are.
+
+--- a/drivers/interconnect/qcom/sm7150.c
++++ b/drivers/interconnect/qcom/sm7150.c
+@@ -1343,7 +1343,7 @@
+ 
+ static struct qcom_icc_bcm bcm_qup0 = {
+ 	.name = "QUP0",
+-	.keepalive = false,
++	.keepalive = true,
+ 	.num_nodes = 2,
+ 	.nodes = { &qhm_qup_center,
+ 		   &qhm_qup_north
