@@ -36,8 +36,16 @@ beats_of() {
 	grep -a '^blackbox ' "$1/last-heartbeat" 2>/dev/null || true
 }
 
-field() {  # field <line> <name>  ->  the value, or empty
-	printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1
+field() {  # field <line> <name> [old-name]  ->  the value, or empty
+	# The old name matters because the log outlives the rename: a phone upgraded
+	# today has lines written as 'luz=' sitting above lines written as
+	# 'backlight='. Reading only the new one makes the column go blank for the
+	# older half, and silently -- a missing name and an empty value look alike
+	# here.
+	v="$(printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$2=//p" | head -1)"
+	[ -n "$v" ] || [ -z "${3:-}" ] ||
+		v="$(printf '%s\n' "$1" | tr ' ' '\n' | sed -n "s/^$3=//p" | head -1)"
+	printf '%s\n' "$v"
 }
 
 FREEZE_DEV=/dev/disk/by-partlabel/logdump
@@ -95,12 +103,12 @@ case "${1:-}" in
 esac
 
 d="$(last)" || {
-	cat <<'FIN'
+	cat <<'END'
 No trace saved yet.
 
 That is good news: it means the phone has not hung since the black box was put
 in place. Come back here after the next hang.
-FIN
+END
 	exit 0
 }
 
@@ -108,17 +116,17 @@ echo "=== Trace of $(basename "$d") ==="
 echo
 
 # --- 1. how long it stayed alive -------------------------------------------
-ult="$(beats_of "$d" | tail -1)"
-if [ -z "$ult" ]; then
+last="$(beats_of "$d" | tail -1)"
+if [ -z "$last" ]; then
 	echo "No heartbeats. Either the black box was not in place on that boot, or the"
 	echo "message area filled up and wrapped around."
 else
-	t="$(field "$ult" t)"
+	t="$(field "$last" t)"
 	boot="$(($(date +%s) - $(cut -d. -f1 /proc/uptime)))"
 	# The line is: blackbox <date> t=... up=...  -- the date is the 2nd field.
-	echo "Last heartbeat:  $(printf '%s\n' "$ult" | cut -d' ' -f2)"
-	echo "  the phone had been on for $(field "$ult" up) s"
-	echo "  screen $(field "$ult" luz), suspends $(field "$ult" susp) (good/bad), charge $(field "$ult" load)"
+	echo "Last heartbeat:  $(printf '%s\n' "$last" | cut -d' ' -f2)"
+	echo "  the phone had been on for $(field "$last" up) s"
+	echo "  screen $(field "$last" backlight luz), suspends $(field "$last" susp) (good/bad), charge $(field "$last" load)"
 	if [ -n "$t" ] && [ "$t" -gt 0 ] 2>/dev/null; then
 		gap=$((boot - t))
 		if [ "$gap" -gt 0 ]; then
@@ -143,12 +151,12 @@ if [ -s "$d/dmesg-ramoops-0" ]; then
 	echo "--- THERE WAS A KERNEL PANIC, and this is its tail ---"
 	tail -30 "$d/dmesg-ramoops-0"
 else
-	cat <<'FIN'
+	cat <<'END'
 --- there was no kernel panic ---
 There is no dmesg dump. The kernel did not enter a panic: either it got stuck
 unable to write, or it died all at once. A panic would have left the trace here
 with the exact function.
-FIN
+END
 fi
 echo
 echo "The log of the previous boot: $d/previous-boot-log.txt"
