@@ -72,7 +72,7 @@ sync
 # a string, and neither glibc nor musl expose it through reboot(), hence python.
 if [ "$mode" = reboot ] && [ -s /run/systemd/reboot-param ]; then
 	reason="$(cat /run/systemd/reboot-param)"
-	python3 - "$reason" <<'FIN' && exit 0
+	python3 - "$reason" <<'END' && exit 0
 import ctypes, sys
 libc = ctypes.CDLL(None, use_errno=True)
 libc.syscall.restype = ctypes.c_long
@@ -80,7 +80,7 @@ libc.syscall.restype = ctypes.c_long
 libc.syscall(ctypes.c_long(142), ctypes.c_ulong(0xfee1dead),
              ctypes.c_ulong(672274793), ctypes.c_ulong(0xA1B2C3D4),
              ctypes.c_char_p(sys.argv[1].encode()))
-FIN
+END
 	# If that returned, the reason could not be honoured; fall through rather
 	# than leave the phone half shut down.
 fi

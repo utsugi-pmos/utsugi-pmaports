@@ -41,7 +41,7 @@ command -v python3 >/dev/null 2>&1 || {
 echo "rebooting into fastboot; nothing else will be written from here on"
 sync
 
-python3 - bootloader <<'FIN'
+python3 - bootloader <<'END'
 import ctypes, sys
 libc = ctypes.CDLL(None, use_errno=True)
 libc.syscall.restype = ctypes.c_long
@@ -49,7 +49,7 @@ libc.syscall.restype = ctypes.c_long
 libc.syscall(ctypes.c_long(142), ctypes.c_ulong(0xfee1dead),
              ctypes.c_ulong(672274793), ctypes.c_ulong(0xA1B2C3D4),
              ctypes.c_char_p(sys.argv[1].encode()))
-FIN
+END
 
 # Only reached if the syscall was refused.
 echo "the kernel did not take the reason: still running" >&2
