@@ -168,4 +168,28 @@ else
 	green "  $(printf '%s' "$_pw_seen" | head -1) in all $(printf '%s' "$_pw_files" | grep -c .) files"
 fi
 
+# EVERY APORT IS NAMED SOMEWHERE ON THE SITE.
+#
+# The site is hand-written prose, not generated from the index, so it does not
+# notice a new package: it just stops being complete, silently and with nothing
+# failing. On 2026-09-12 it was missing five -- both vayu packages, the camera
+# fork, utsugi-keys and the two packages added that day -- and still claimed a
+# patch count that was two short.
+#
+# Naming is all this asks for. Prose that explains it well is a human's job;
+# prose that does not exist is the failure worth catching.
+title "every aport is named on the site"
+_site_missing=""
+for pkg in $(all_aports); do
+	grep -qrF -- "$pkg" "$REPO"/site/*.in || _site_missing="$_site_missing $pkg"
+done
+if [ -n "$_site_missing" ]; then
+	red "  the site never mentions:"
+	for p in $_site_missing; do red "    $p"; done
+	red "  add it to site/packages.html.in (or wherever it belongs) and republish"
+	rc=1
+else
+	green "  all $(all_aports | grep -c .) of them"
+fi
+
 exit $rc
