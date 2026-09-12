@@ -37,6 +37,35 @@ image.
 The image already carries the repository line and the signing key, so
 `apk upgrade` tracks updates from the first boot.
 
+## Logging in, and the password
+
+The image ships one account:
+
+```
+user: user
+password: 147147
+```
+
+It has to ship a password -- an image cannot ask for one the way pmbootstrap
+does while installing -- and it is written down here, publicly, which means
+anybody who can read knows the password of a phone that has not changed it. The
+same password is the one for `sudo` and for `ssh`.
+
+So the first session opens full screen on a step that asks for a new one before
+anything else, and does not offer a way past it. A four-digit PIN is a
+perfectly good answer on a phone; nothing here imposes a minimum beyond that.
+
+It knows whether to ask without storing the shipped password anywhere it could
+be read back: it takes the salt out of this account's own entry in
+`/etc/shadow`, hashes the shipped password with that salt and compares. Change
+the password and the salt changes with it, so the step stops appearing -- with
+no state file to go stale, and nothing on disk that says what the password is.
+
+## What language the phone comes up in
+
+`en_US.UTF-8`, clock in UTC. An image does not know where it is going. Both are
+changed on the phone afterwards, in Settings.
+
 ## After the first boot
 
 The image cannot contain anything that needs a network or a user session:
