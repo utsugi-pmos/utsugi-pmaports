@@ -13,12 +13,12 @@ not here must appear below, with a reason.**
 
 ## How to check
 
-    for p in surya/kernel/*.patch; do
-        # take a sample of the lines the patch ADDS and look for them in this aport
-        ...
-    done
+    scripts/compare-patch-series
 
-The script is in tasks/023. Run it after any migration or rebase.
+It compares by CONTENT, not by file name -- the numbers differ between the two
+trees -- and it exits 1 if a patch is absent and this file does not say why.
+Run it after any migration, after a rebase, and before trusting that the two
+trees agree.
 
 ## Deliberately not shipped
 
