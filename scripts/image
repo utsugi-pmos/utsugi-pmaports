@@ -95,9 +95,28 @@ fi
 if [ "$RELEASE" = 1 ]; then
 	command -v gh >/dev/null || die "gh is not installed"
 	title "Publishing the release"
+	GH_REPO="$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')"
+
+	# Create the release EMPTY, then upload. Handing the files to
+	# "gh release create" makes one request that both creates the release and
+	# uploads a gigabyte, and when the upload fails the release is rolled back
+	# too: on 2026-09-12 that returned "HTTP 400" and left no release at all,
+	# after a forty-minute build. Uploading separately is also retryable --
+	# "gh release upload --clobber" resumes the job without rebuilding.
 	gh release create "$TAG-$DEVICE" \
-		--repo "$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')" \
+		--repo "$GH_REPO" \
 		--title "utsugi postmarketOS $DEVICE $TAG" \
-		--notes-file "$OUT/flash.md" \
+		--notes-file "$OUT/flash.md"
+	gh release upload "$TAG-$DEVICE" --repo "$GH_REPO" --clobber \
 		"$OUT"/*.xz "$OUT/SHA256SUMS" "$OUT/PACKAGES.txt"
+
+	# And prove the image is actually there. A release whose only assets are a
+	# checksum file and a package list is worse than no release: the install
+	# page links to it and the link 404s.
+	img_name="$(basename "$OUT"/*.xz)"
+	gh release view "$TAG-$DEVICE" --repo "$GH_REPO" --json assets \
+		-q '.assets[].name' | grep -qxF "$img_name" ||
+		die "the release exists but $img_name did not upload: retry with
+  gh release upload $TAG-$DEVICE --repo $GH_REPO --clobber $OUT/*.xz"
+	green "  https://github.com/$GH_REPO/releases/tag/$TAG-$DEVICE"
 fi
