@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=11
+pkgrel=12
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -69,6 +69,7 @@ source="surya-120hz.js
 	10-utsugi-vvmd-off.conf
 	powerdevilrc
 	plasmanotifyrc
+	networkmanagement.notifyrc
 	surya-device-preset.conf
 	80-utsugi-surya-plasma.preset
 	"
@@ -101,7 +102,8 @@ package() {
 
 	# KConfig cascades, so these are defaults: anything the user changes lands in
 	# $HOME and still wins.
-	install -Dm644 "$srcdir"/powerdevilrc "$srcdir"/plasmanotifyrc -t "$pkgdir"/etc/xdg/
+	install -Dm644 "$srcdir"/powerdevilrc "$srcdir"/plasmanotifyrc \
+		"$srcdir"/networkmanagement.notifyrc -t "$pkgdir"/etc/xdg/
 
 	# The file name IS the match: the shell looks up the first string in
 	# /sys/firmware/devicetree/base/compatible. abuild forbids a comma in a
@@ -179,6 +181,7 @@ f266c15e31124891ff2d42482918911738232d672bb9ce206654e78f4340becb13da2de40a17fc53
 c97ce22291b3cd6c2e0862c232ece9bed6dcd57dda9a417cc22f766c4c6cd440a3a14800da1d6b23e86c7407af3e0becfd7247e02e7ea74f445df616e4803723  10-utsugi-vvmd-off.conf
 fbe3156ee0b7f6ab9513474ac3338419be1ecf12d6ef5033b55b3cd18f7edeac028d2ede5b98ded1fddf1e87d0da231dcdfd0c3e8c3cbb154d8d8d6cf3267c58  powerdevilrc
 c7dd56d3a8b4a6481b694cf9aa63687b3463ea8f39dded17dd3956c6a1e8ff29c9cead3bdc977d18672103ec2c2c21e2073742e08bc225b2952013f83cdcc480  plasmanotifyrc
+08456fd25d28d6c6373a185825aa2c529f340a30ce194bd7d29f3bb6c3672d8eb838701191048e3438bab0d59ae29b9c489595ac6f78831365226414ccabd4c3  networkmanagement.notifyrc
 53d1b8d82628baa296babd0432f620055e31246dbe44ded77f471a2e7148247113128463aa581703619a454873d519c7eb1fc906297e3728c24418fe13ec2458  surya-device-preset.conf
 5ab4f9daa2fed3bfe713966bf5c952a4a0a643fafb3b6349af37280521ae83f5102bdd2ea9b4184faba3135ed5eaa873bc4d4b087a5b793f1e7ad0704e046c6f  80-utsugi-surya-plasma.preset
 "

@@ -1,0 +1,22 @@
+# The second half of silencing "Connection activated".
+#
+# There are two layers, and they are read by different code:
+#
+#   /usr/share/knotifications6/networkmanagement.notifyrc   what plasma-nm ships
+#       [Event/ConnectionActivated] Action=Popup
+#   /etc/xdg/plasmanotifyrc                                 the notification KCM
+#       [Services][networkmanagement] ShowPopups=false
+#
+# The KCM layer is the one a person toggles in Settings, and it is already set.
+# This file overrides the event's own default instead, so the popup is off even
+# for the path that does not consult the KCM at all -- KNotification reads
+# <app>.notifyrc from the data dirs and then merges any copy found in the
+# config dirs, and /etc/xdg is a config dir.
+#
+# Only the two noisy ones. Every failure event keeps its popup: a phone that
+# quietly fails to join a network is worse than a chatty one.
+[Event/ConnectionActivated]
+Action=None
+
+[Event/ConnectionDeactivated]
+Action=None
