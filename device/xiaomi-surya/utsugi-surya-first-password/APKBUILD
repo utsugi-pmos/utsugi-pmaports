@@ -1,0 +1,76 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# A full-screen step, shown once, that makes somebody flashing our image choose
+# their own password before using the phone.
+#
+# WHY A STEP AND NOT A NOTIFICATION
+# ---------------------------------
+# A prebuilt image has to carry a password, and ours is printed on the install
+# page -- so anybody who read it knows the password of a phone that has not
+# changed it. A notification about that is swiped away and forgotten. This is
+# the KDE onboarding step the image does not have, because plasma-welcome is not
+# part of a Plasma Mobile install.
+#
+# WHY IT NEEDS NO PRIVILEGE
+# -------------------------
+# It only ever runs while the password is STILL the shipped one, which it knows,
+# so it drives passwd(1) as the user and answers the old-password prompt itself.
+# Nothing is setuid and no helper runs as root. Deciding "still the shipped one"
+# does need /etc/shadow, and that half lives in utsugi-surya-plasma, as a system
+# unit that leaves a flag in /run.
+pkgname=utsugi-surya-first-password
+pkgver=1
+pkgrel=0
+pkgdesc="Choose a password before using a phone flashed from the image"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="aarch64"
+license="GPL-2.0-or-later"
+depends="shadow"
+makedepends="
+	cmake
+	extra-cmake-modules
+	kirigami-dev
+	ki18n-dev
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	samurai
+	util-linux-dev
+	"
+subpackages="$pkgname-systemd"
+options="!check"
+source="CMakeLists.txt
+	main.cpp
+	passwd.cpp
+	passwd.h
+	Main.qml
+	first-password.service
+	80-utsugi-surya-first-password.preset
+	"
+builddir="$srcdir"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=Release \
+		-DCMAKE_INSTALL_PREFIX=/usr
+	cmake --build build
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+systemd() {
+	pkgdesc="$pkgdesc (session unit)"
+	install -Dm644 "$srcdir"/first-password.service \
+		-t "$subpkgdir"/usr/lib/systemd/user/
+	install -Dm644 "$srcdir"/80-utsugi-surya-first-password.preset \
+		-t "$subpkgdir"/usr/lib/systemd/user-preset/
+}
+sha512sums="
+e681e54e1a8e0aa6efe9a50d1feaf379482f522309d2e1aebb7f42e91c56e62ad30199a16468216b1505c710861996281d439895fca21a4dfd0e4f647ce5bd3f  CMakeLists.txt
+acb77cec9aac5a55af294bf8668acc439310131bd482dc20cbdc22d8a08a3d54f85210fd12abbc79d129d9ae7d2b53f68c1514090de39a9343310ffeadbbd953  main.cpp
+6222e3d9bba52eaa069522014bac29d7f94634fc132c028a567dd8c64dcf33baec6df401e9449e87a7c8243b1e5d1727a5bc42cb3dfce1e13f10c93da73ed400  passwd.cpp
+1eae24b1170b8480a2c85790c7d2a1aa3d9372fa5551fe1dfe923c71fd0836e4397bc62d23ccd093ac1a7e7b480ca7015641409335d06b541db26528d197b0ba  passwd.h
+09200e29bca18bd0ae698473223e2f7c4cb348cf0ca836bab33d9ea23f67935f31df700efdfb2a5b1c3aa2b226cbb466cdbd5b0705b0257bece840282d4ec8cc  Main.qml
+45db755d0318cbbb9889eac65ab828de09ebc6787f575177deafa42b0e83ade0979b5a065600ca5739b781a40b75e63b90f12a2d2e7f04d5e53f13a85d721a1e  first-password.service
+7a6457b1bcd8515192f30da3b975271b1a647d35194b6989a3cecf9d6a02a1ffeabdbe1dce74f0c1067f39971acbcd5428259af804b6983c6f375102a9b5c6e6  80-utsugi-surya-first-password.preset
+"
