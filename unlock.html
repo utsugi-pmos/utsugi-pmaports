@@ -1,0 +1,133 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unlock the bootloader &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=94828a95">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Step zero &middot; everything needs it</div>
+		<h1>Unlock the bootloader</h1>
+		<p class="lede">Xiaomi has to give you the key before the phone will boot
+		anything but MIUI. It takes seven days of waiting, so start here even if you
+		are only reading. Everything on the phone is erased at the end. No Windows
+		needed.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>On the phone</h2></div>
+		<ol>
+			<li>Put a SIM in and turn <b>mobile data</b> on. The next step will not go
+			through over wifi.</li>
+			<li><b>Settings &rarr; About phone</b> and tap <b>MIUI version</b> seven
+			times. That turns on the developer options.</li>
+			<li><b>Settings &rarr; Additional settings &rarr; Developer options
+			&rarr; Mi Unlock status</b>, then <b>Add account and device</b>. Sign in
+			with your Mi account.</li>
+			<li>Wait however long it tells you. The usual answer is <b>168 hours
+			&mdash; seven days</b>. The clock runs on Xiaomi's side and nothing you
+			do shortens it.</li>
+		</ol>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>A week later, on your computer</h2></div>
+		<p>The unlock is a request to Xiaomi's server with your account's token,
+		which is why <b>Windows is not required</b>. <b>MiUnlockTool</b> makes that
+		request from any of the three systems &mdash; it is a pip package,
+		<code>miunlock</code>
+		(<a href="https://github.com/offici5l/MiUnlockTool">offici5l/MiUnlockTool</a>),
+		and it downloads <code>fastboot</code> itself if you do not have it.</p>
+		<p>Put the phone in fastboot first: turn it off, hold <b>volume-down +
+		power</b> until it says <i>fastboot</i>, then plug the USB cable in.</p>
+		<div class="os">
+			<input type="radio" name="unlock-os" id="unlock-linux" checked>
+			<input type="radio" name="unlock-os" id="unlock-win">
+			<input type="radio" name="unlock-os" id="unlock-mac">
+			<div class="tabs">
+				<label for="unlock-linux">Linux</label>
+				<label for="unlock-win">Windows</label>
+				<label for="unlock-mac">macOS</label>
+			</div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>pipx install miunlock     <i># or: pip install --user miunlock</i>
+
+sudo fastboot devices     <b># must print your phone</b>
+miunlock</pre>
+			</div>
+			<p>If <code>miunlock</code> says it cannot see the phone while
+			<code>sudo fastboot devices</code> can, it is the udev rules: run it as
+			<code>sudo env PATH=$PATH miunlock</code>, or install
+			<code>android-udev-rules</code> for your distro.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN POWERSHELL</span></div>
+				<pre>pip install miunlock
+
+.\fastboot devices        <i># or let miunlock fetch platform-tools</i>
+miunlock</pre>
+			</div>
+			<p>Windows needs the phone's fastboot driver: the <b>Google USB
+			Driver</b>, or Xiaomi's own installer. Xiaomi's
+			<a href="https://en.miui.com/unlock/">Mi Unlock</a> is the official
+			route here and it works the same way &mdash; log in, phone in fastboot,
+			press Unlock.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>pipx install miunlock     <i># or: pip install --user miunlock</i>
+
+fastboot devices          <b># no sudo needed on macOS</b>
+miunlock</pre>
+			</div>
+			<p>Xiaomi ships no macOS tool, so this is the only route. MiUnlockTool
+			downloads the macOS platform-tools by itself the first time.</p></div>
+		</div>
+		<p>Then, whichever system you used, it walks you through the same four
+		things:</p>
+		<ol>
+			<li>Sign in with the <b>same Mi account</b> you bound the phone to.</li>
+			<li>It shows your account's region. Enter to accept.</li>
+			<li>It warns that unlocking <b>erases the phone</b>. That is Xiaomi's
+			behaviour, not the tool's.</li>
+			<li>It gets the token and runs <code>fastboot stage</code> +
+			<code>fastboot oem unlock</code>. The phone wipes and reboots into
+			MIUI.</li>
+		</ol>
+		<p>If it refuses, the message comes from Xiaomi's server and says why
+		&mdash; usually the week is not up, or the account is not the one bound to
+		the phone.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>Check it worked</h2></div>
+		<p>Turn the phone off, hold <b>volume-down + power</b> to get back into
+		fastboot, and from your PC:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+			<pre>sudo fastboot devices              <b># must print your phone</b>
+sudo fastboot getvar unlocked      <i># unlocked: yes</i>
+
+<i># Windows: .\fastboot, no sudo. macOS: fastboot, no sudo.</i></pre>
+		</div>
+		<p>With that <code>yes</code>, every route on this site is open to you.</p>
+		<div class="next">
+			<a href="install-image.html"><b>Then</b><span>Flash the ready image</span></a>
+			<a href="install-pmos.html"><b>Or</b><span>Build a system yourself</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz">https://utsugi-pmos.github.io/utsugi-pmaports/main</a></span>
+	<span>key <a href="https://utsugi-pmos.github.io/utsugi-pmaports/keys/utsugi-pmaports-6aa024e2.rsa.pub">utsugi-pmaports-6aa024e2.rsa.pub</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

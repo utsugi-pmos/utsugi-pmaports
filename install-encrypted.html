@@ -1,0 +1,78 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Encrypted install &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=94828a95">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Route 4 &middot; you build it</div>
+		<h1>Encrypted</h1>
+		<p class="lede">Full-disk encryption with an on-screen keyboard at boot. It
+		works on this phone, and there is no image to download.</p>
+		<p>Like every route here, it needs the phone unlocked at Xiaomi first
+		&mdash; a Mi account and seven days of waiting.
+		<a href="unlock.html">The steps</a>.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Why there is no download</h2></div>
+		<p>A LUKS master key is created when the disk is formatted, which for an image
+		means on the machine that builds it. Changing the passphrase later replaces the
+		slot protecting that key, not the key. A shared encrypted image would give
+		whoever built it the master key of every phone flashed from it.</p>
+		<p>Yours has to be born on your machine. One command.</p>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Build it</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
+cd utsugi-pmaports
+scripts/setup-workdir
+scripts/build-your-own-image --encrypted</pre>
+		</div>
+		<p>pmbootstrap asks <b>you</b> for the passphrase during the install. Then
+		flash it like any other image, to <code>userdata</code>.</p>
+		<p>Verified end to end here: the initramfs opens a LUKS that lives inside a
+		loop file on <code>userdata</code>, and <code>unl0kr</code> draws its keyboard
+		on this panel.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>What it costs</h2></div>
+		<div class="note"><i></i><div>
+			<b>A stuck kernel workqueue takes the whole filesystem with it.</b>
+			On 2026-09-10 an ADSP crash whose recovery deadlocked left this phone frozen
+			for seven hours with the root inside dm-crypt. The trigger is fixed, and a
+			watchdog now reboots and saves the kernel log to a partition, but the cause
+			is still open.
+		</div></div>
+		<div class="note"><i></i><div>
+			<b>Encrypting an install you already have is not offered.</b>
+			It needs the filesystem shrunk, cannot run on the mounted root, and ends with
+			initramfs, <code>fstab</code> and <code>crypttab</code> rewritten by hand.
+			Back up, reinstall encrypted, restore.
+		</div></div>
+		<div class="next">
+			<a href="install-image.html"><b>Simpler</b><span>The ready image</span></a>
+			<a href="devices.html"><b>Read</b><span>What does not work</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz">https://utsugi-pmos.github.io/utsugi-pmaports/main</a></span>
+	<span>key <a href="https://utsugi-pmos.github.io/utsugi-pmaports/keys/utsugi-pmaports-6aa024e2.rsa.pub">utsugi-pmaports-6aa024e2.rsa.pub</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

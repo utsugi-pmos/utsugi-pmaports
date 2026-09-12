@@ -1,0 +1,188 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>utsugi-pmaports &mdash; Linux on your POCO X3 NFC</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=94828a95">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html" aria-current="page">Start</a>
+	<a href="install.html">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="hero">
+		<div class="left">
+			<div class="eyebrow">POCO X3 NFC &middot; postmarketOS &middot; Plasma Mobile</div>
+			<h1>Real Linux on your POCO X3 NFC.</h1>
+			<p class="lede">Flash one image and you get a working phone: three
+			cameras, calls, LTE, GPS, sensors, both speakers, 120&nbsp;Hz. Then
+			<code>apk upgrade</code> keeps it current, kernel included.</p>
+			<div class="btns">
+				<a class="btn ghost" href="devices.html">See what does not work</a>
+				<a class="btn ghost" href="install.html">Other ways to install</a>
+			</div>
+		</div>
+		<div class="right">
+			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/utsugi-surya-v2026.09.12.4.img.xz"
+			   style="text-align:center">Download the image &mdash; 1.2 GB</a>
+			<div><b>Two things first</b>Xiaomi has to
+			<a href="unlock.html">unlock the bootloader</a>: a Mi account, seven days
+			of waiting, no Windows needed. Then U-Boot goes on <code>boot</code>, the
+			build for your panel.
+			<a href="install-image.html">Both, in order, with the commands</a>.</div>
+			<div class="os">
+				<input type="radio" name="os" id="os-linux" checked>
+				<input type="radio" name="os" id="os-win">
+				<input type="radio" name="os" id="os-mac">
+				<div class="tabs">
+					<label for="os-linux">Linux</label>
+					<label for="os-win">Windows</label>
+					<label for="os-mac">macOS</label>
+				</div>
+				<div class="pane pane-linux"><div class="sh"><pre><i># install fastboot:</i>
+<i>#   Debian/Ubuntu  apt install android-sdk-platform-tools</i>
+<i>#   Arch           pacman -S android-tools</i>
+<i>#   Fedora         dnf install android-tools</i>
+
+<i># phone OFF, hold volume-down + power until it says</i>
+<i># "fastboot", then plug the USB cable in</i>
+sudo fastboot devices      <b># must print your phone</b>
+
+xz -d utsugi-surya-v2026.09.12.4.img.xz
+sudo fastboot flash userdata utsugi-surya-v2026.09.12.4.img
+sudo fastboot reboot</pre></div></div>
+				<div class="pane pane-win"><div class="sh"><pre><i># 1. platform-tools.zip from developer.android.com,</i>
+<i>#    unzip it, open PowerShell in that folder</i>
+<i># 2. the Google USB Driver, or Windows will not see</i>
+<i>#    the phone in fastboot</i>
+<i># 3. 7-Zip to unpack the .img.xz</i>
+
+<i># phone OFF, hold volume-down + power, plug the cable</i>
+.\fastboot devices
+
+.\fastboot flash userdata utsugi-surya-v2026.09.12.4.img
+.\fastboot reboot
+<b># not tested by me: reports welcome</b></pre></div></div>
+				<div class="pane pane-mac"><div class="sh"><pre>brew install android-platform-tools xz
+
+<i># phone OFF, hold volume-down + power until it says</i>
+<i># "fastboot", then plug the USB cable in</i>
+fastboot devices           <b># no sudo needed on macOS</b>
+
+xz -d utsugi-surya-v2026.09.12.4.img.xz
+fastboot flash userdata utsugi-surya-v2026.09.12.4.img
+fastboot reboot
+<b># not tested by me: reports welcome</b></pre></div></div>
+			</div>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>What is in the image</h2></div>
+		<p>One file, 1.2&nbsp;GB compressed. Nothing to add afterwards.</p>
+		<div class="scroll">
+		<table>
+			<tr><th>The hardware</th><td>Patched kernel, cameras, in-call audio,
+			sensors, GPS, power-off, charge mode, 60 and 120&nbsp;Hz.</td></tr>
+			<tr><th>Plasma Mobile, fixed</th><td>A dialpad that does not drop digits,
+			quick settings for location, power saving and USB power, a screen that turns
+			itself off, notification sounds.</td></tr>
+			<tr><th>Six own apps</th><td>Navigation with voice, screenshots on the
+			buttons, always-alive apps, battery per app, smart unlock,
+			find-my-phone.</td></tr>
+			<tr><th>The usual ones</th><td>Firefox at 120&nbsp;Hz, mail and calendar,
+			two-factor, Mastodon, Matrix, RSS, photo gallery.</td></tr>
+		</table>
+		</div>
+		<p style="margin-top:20px">
+			<a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/utsugi-surya-v2026.09.12.4.img.xz">Download the image &mdash; 1.2 GB</a>
+			<a class="btn ghost" href="install.html">Other ways to install</a>
+		</p>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>What you actually get</h2></div>
+		<div class="scroll">
+		<table>
+			<tr><th>Take photos</th><td>All three cameras, with autofocus: 64&nbsp;Mpx
+			rear, front, ultra-wide.</td></tr>
+			<tr><th>Make calls</th><td>Voice both ways over LTE. The other end hears an
+			echo. Still open.</td></tr>
+			<tr><th>Hear things</th><td>Both speakers, earpiece, and the volume you left
+			it at. Out of the box this phone booted mute.</td></tr>
+			<tr><th>Rotate the screen</th><td>Accelerometer, light, compass, proximity
+			, all four.</td></tr>
+			<tr><th>Find yourself</th><td>Twelve satellites, fix in about 40&nbsp;s from
+			cold. postmarketOS ships the GPS locked; this unlocks it.</td></tr>
+			<tr><th>Save battery</th><td>60&nbsp;Hz instead of 120 when you ask, and a
+			charge screen when you plug it in switched off.</td></tr>
+			<tr><th>Turn it off</th><td>And it turns off. That took a kernel patch.</td></tr>
+			<tr><th>Use it as a phone</th><td>Navigation with voice, screenshots with
+			the buttons, apps that survive the task switcher, battery per app, smart
+			unlock, find-my-phone without Google.
+			<a href="packages.html">All six &rarr;</a></td></tr>
+		</table>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>Questions you are about to ask</h2></div>
+		<div class="grid quiet">
+			<div>
+				<div class="t">Can I use it as my only phone?</div>
+				<p>Someone does, since August 2026. Calls, data, camera and GPS work. You
+				lose the fingerprint reader and you get an echo on calls.</p>
+			</div>
+			<div>
+				<div class="t">Can I go back to Android?</div>
+				<p>Yes. Flash a stock ROM over <code>userdata</code> and reflash the
+				stock <code>boot</code>. Nothing here is irreversible.</p>
+			</div>
+			<div>
+				<div class="t">Will an update break it?</div>
+				<p>The patched packages are forks with their own names, so an upstream
+				release cannot silently replace them. The kernel comes with updates, so
+				reboot deliberately, not in a hurry.</p>
+			</div>
+			<div>
+				<div class="t">Is the image encrypted?</div>
+				<p>No, and you should not want one that is: the master key would be born
+				on my machine. <a href="install-encrypted.html">Build your own &rarr;</a></p>
+			</div>
+			<div>
+				<div class="t">Do I need to trust your binaries?</div>
+				<p>Not much: everything is built from public recipes and signed. Or build
+				it yourself with <code>scripts/build --all</code>.</p>
+			</div>
+			<div>
+				<div class="t">Why is the fingerprint impossible?</div>
+				<p>The sensor works. Its bus belongs to the TrustZone and is never handed
+				to Linux. Four routes measured, four dead ends.
+				<a href="devices.html">The detail &rarr;</a></p>
+			</div>
+		</div>
+		<div class="next">
+			<a href="install-image.html"><b>Start</b><span>Flash the image</span></a>
+			<a href="devices.html"><b>First</b><span>What does not work</span></a>
+			<a href="contribute.html"><b>Code</b><span>Seven repositories</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz">https://utsugi-pmos.github.io/utsugi-pmaports/main</a></span>
+	<span>key <a href="https://utsugi-pmos.github.io/utsugi-pmaports/keys/utsugi-pmaports-6aa024e2.rsa.pub">utsugi-pmaports-6aa024e2.rsa.pub</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>
