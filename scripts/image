@@ -40,6 +40,21 @@ title "Building the image for $DEVICE ($META, $TAG)"
 pmb config device "$PMOS_DEVICE"
 pmb config ui plasma-mobile
 pmb config service_manager systemd
+
+# WHAT LANGUAGE AND CLOCK A STRANGER'S PHONE COMES UP IN.
+#
+# Set here, and not left to the work dir's config, because that file is
+# gitignored: it is per-machine setup, and it had been carrying the locale and
+# timezone of the machine that happens to build the images. Every image
+# published until 2026-09-12 came up in Spanish, on Madrid time, for everybody
+# who flashed it -- which nothing in the repository said, and nobody reviewing
+# the repository could have seen.
+#
+# en_US.UTF-8 is pmbootstrap's own default and UTC is the honest clock for an
+# image that does not know where it is going. Both are changed on the phone
+# afterwards, in Settings, by whoever owns it.
+pmb config locale en_US.UTF-8
+pmb config timezone UTC
 pmb zap
 # Not --no-local-pkgs: pmbootstrap refuses it while any locally built package
 # exists, and the only way to satisfy it is to delete the whole package store,
