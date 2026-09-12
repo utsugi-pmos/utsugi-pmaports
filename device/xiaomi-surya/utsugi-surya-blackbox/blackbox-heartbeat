@@ -38,12 +38,12 @@
 set -eu
 
 # bl_power: 0 = screen on, 4 = off (FB_BLANK_POWERDOWN).
-luz=?
+backlight=?
 for b in /sys/class/backlight/*/bl_power; do
 	[ -r "$b" ] || continue
 	case "$(cat "$b")" in
-		0) luz=on ;;
-		*) luz=off ;;
+		0) backlight=on ;;
+		*) backlight=off ;;
 	esac
 	break
 done
@@ -52,16 +52,16 @@ done
 # does not rise between heartbeats but the screen is off, the phone was
 # not asleep: it was with the screen off and awake.
 ok="$(cat /sys/power/suspend_stats/success 2>/dev/null || echo ?)"
-mal="$(cat /sys/power/suspend_stats/fail 2>/dev/null || echo ?)"
+failed="$(cat /sys/power/suspend_stats/fail 2>/dev/null || echo ?)"
 
 # The time is written TWICE: readable for whoever reads it by eye, and in seconds
 # since 1970 so the reader can subtract without having to interpret formats --
 # busybox's 'date -d' does not swallow just anything.
-LINE="$(printf 'blackbox %s t=%s up=%s susp=%s/%s luz=%s load=%s' \
+LINE="$(printf 'blackbox %s t=%s up=%s susp=%s/%s backlight=%s load=%s' \
 	"$(date -Iseconds)" \
 	"$(date +%s)" \
 	"$(cut -d. -f1 /proc/uptime)" \
-	"$ok" "$mal" "$luz" \
+	"$ok" "$failed" "$backlight" \
 	"$(cut -d' ' -f1 /proc/loadavg)")"
 
 # To disk, and with fsync: without it, the line stays in the page cache and a

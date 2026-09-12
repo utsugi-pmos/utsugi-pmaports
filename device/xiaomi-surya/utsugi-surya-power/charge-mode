@@ -74,17 +74,17 @@ last="$(cat "$QG/capacity" 2>/dev/null)/$(cat "$QG/status" 2>/dev/null)"
 brightness "$DIM"
 wakes=$(date +%s)
 pressed=0
-sin_cable=0
+no_cable=0
 
 while :; do
 	# Unplugged: power off. Two readings in a row are required because a single
 	# reading of zero during a port renegotiation would power off the phone
 	# while it is still plugged in.
 	if [ "$(cat "$CHG/online" 2>/dev/null || echo 0)" = 1 ]; then
-		sin_cable=0
+		no_cable=0
 	else
-		sin_cable=$(( sin_cable + 1 ))
-		if [ "$sin_cable" -ge 2 ]; then
+		no_cable=$(( no_cable + 1 ))
+		if [ "$no_cable" -ge 2 ]; then
 			charge-screen --clean-only 2>/dev/null
 			exec systemctl poweroff
 		fi
