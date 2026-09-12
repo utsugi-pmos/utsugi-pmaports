@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=7
+pkgrel=8
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -36,8 +36,15 @@ depends="kconfig plasma-dialer-utsugi plasma-camera-utsugi"
 # rebuild of theirs does not start winning by accident.
 replaces="plasma-workspace"
 replaces_priority=100
-subpackages="$pkgname-systemd"
-source="location-switch
+# The 120 Hz preference travels with the browser, not with the metapackage:
+# install_if means apk adds it the moment firefox (or librewolf) is installed
+# and removes it when they go. utsugi-surya-extras brings firefox, so a plain
+# install now gets the panel's real refresh rate instead of half of it --
+# before this, that fix existed only inside surya-setup, where you had to go
+# and pick it by hand.
+subpackages="$pkgname-systemd $pkgname-firefox:_firefox:noarch $pkgname-librewolf:_librewolf:noarch"
+source="surya-120hz.js
+	location-switch
 	power-saving-switch
 	usb-power-switch
 	power-saving-agent
@@ -115,10 +122,25 @@ package() {
 		-t "$pkgdir"/usr/lib/systemd/user-preset/
 }
 
+_firefox() {
+	pkgdesc="$pkgdesc (Firefox at the panel's 120 Hz)"
+	install_if="$pkgname=$pkgver-r$pkgrel firefox"
+	install -Dm644 "$srcdir"/surya-120hz.js \
+		"$subpkgdir"/usr/lib/firefox/browser/defaults/preferences/surya-120hz.js
+}
+
+_librewolf() {
+	pkgdesc="$pkgdesc (LibreWolf at the panel's 120 Hz)"
+	install_if="$pkgname=$pkgver-r$pkgrel librewolf"
+	install -Dm644 "$srcdir"/surya-120hz.js \
+		"$subpkgdir"/usr/lib/librewolf/browser/defaults/preferences/surya-120hz.js
+}
+
 systemd() {
 	default_systemd
 }
 sha512sums="
+46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
 b3be4dfccb85b36004b7ad3865a81fb11a8aa853c73a1821141d7e54a840ba7138c299c9eb79173722dbf5fdb4bf7a975133897e30bdb5d425fd642c10eecbd5  location-switch
 45a9365b702b25d0e7bcadc68a87ed8f0f7ffeffae1923f26baab731fbbaab24f18da4ef057437b1ee5419124f9b56b9470c45d652b2b727c70037b9b62868b4  power-saving-switch
 c1f97d776a1331944864e80ce50e07fcda81d6a0f5b055af687fb12e5fd8e7b7a784477f16335978bc96ce2b8269d9c8a77b613a4a61914480063e132325179d  usb-power-switch
