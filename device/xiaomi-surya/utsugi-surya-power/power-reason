@@ -1,0 +1,61 @@
+#!/bin/sh
+# Why the phone turned on, and how it turned off last time.
+#
+#   power-reason          both registers, decoded
+#
+# WHY THIS EXISTS
+# ---------------
+# "It rebooted instead of powering off" and "it powered off and came back" look
+# identical from outside, and they are different things. The PMIC knows which,
+# and it is the only witness that survives the event itself -- the journal does
+# not, because the phone was not writing one at the time.
+#
+# It settled task 002 on 2026-09-12: what had been called a shutdown freeze for
+# months turned out, that day, to be POFF_REASON1 = PS_HOLD (it powered off
+# correctly) followed by PON_REASON1 = USB_CHG (the cable turned it back on).
+# With the cable out the same test gave KPDPWR, a person pressing the button.
+#
+# THE REGISTERS
+# -------------
+# Read through the debugfs regmap, because the mainline driver does not publish
+# them. The main PMIC is SID 0; it is found by name so it does not depend on the
+# order the regmaps appear in.
+set -u
+
+decode_pon() {
+	v=$1; out=""
+	[ $((v & 1))   -ne 0 ] && out="$out HARD_RESET"
+	[ $((v & 8))   -ne 0 ] && out="$out DC_CHG"
+	[ $((v & 16))  -ne 0 ] && out="$out USB_CHG"
+	[ $((v & 128)) -ne 0 ] && out="$out KPDPWR"
+	[ -n "$out" ] || out=" (none set)"
+	echo "$out"
+}
+
+decode_poff() {
+	v=$1; out=""
+	[ $((v & 2))   -ne 0 ] && out="$out PS_HOLD"
+	[ $((v & 4))   -ne 0 ] && out="$out PMIC_WD"
+	[ $((v & 128)) -ne 0 ] && out="$out KPDPWR_HELD"
+	[ -n "$out" ] || out=" (none set)"
+	echo "$out"
+}
+
+for d in /sys/kernel/debug/regmap/*; do
+	[ -r "$d/registers" ] || continue
+	[ "$(cat "$d/name" 2>/dev/null)" = pmic-spmi ] || continue
+	pon=$(grep -E '^0*8c0: ' "$d/registers" | awk '{print $2}')
+	poff=$(grep -E '^0*8c5: ' "$d/registers" | awk '{print $2}')
+	[ -n "$pon" ] || { echo "the registers are not readable"; exit 1; }
+	printf 'turned on   PON_REASON1  0x%s  %s\n'  "$pon"  "$(decode_pon  $((0x$pon)))"
+	printf 'turned off  POFF_REASON1 0x%s  %s\n'  "$poff" "$(decode_poff $((0x$poff)))"
+	echo
+	echo "  KPDPWR      a person pressed the button"
+	echo "  USB_CHG     the cable turned it on -- NOT a fault, and easy to mistake for one"
+	echo "  HARD_RESET  it came from a reset: a reboot, or a freeze the watchdog ended"
+	echo "  PS_HOLD     it powered off properly"
+	echo "  PMIC_WD     the PMIC's own watchdog ended it"
+	exit 0
+done
+echo "the pmic-spmi regmap is not there: is CONFIG_DEBUG_FS mounted?"
+exit 1

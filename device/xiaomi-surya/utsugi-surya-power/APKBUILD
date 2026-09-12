@@ -12,7 +12,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=8
+pkgrel=9
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -20,7 +20,8 @@ license="MIT"
 options="!check"
 depends="python3"
 subpackages="$pkgname-systemd"
-source="poweroff-for-real
+source="power-reason
+	poweroff-for-real
 	charge-mode
 	charge-mode-decide
 	charge-screen
@@ -35,6 +36,10 @@ source="poweroff-for-real
 	"
 
 package() {
+	# A user-facing command: which is why it goes in /usr/bin and not in
+	# /usr/libexec, unlike the units' own helpers.
+	install -Dm755 "$srcdir"/power-reason -t "$pkgdir"/usr/bin/
+
 	local helper
 	for helper in poweroff-for-real charge-mode charge-mode-decide charge-screen; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
@@ -66,6 +71,7 @@ systemd() {
 	default_systemd
 }
 sha512sums="
+113c78460fffd54bcf8b97e9ff6752d911aa299cb3da09c1eab5fca923dbee14489124bbea14bfbd080748274cd94918950d6a3e87b6caf12b89d3effe9090c7  power-reason
 8be702045b59c632fef17b0acc43ed299b4cff8e3e38b768e675c8004a95a65b0bc4d7bfb9aeeb9a18513cdb098f8e58cc13f5c4f968b4ef6331de2dd729cab8  poweroff-for-real
 ce9f9c93492061b4b64a509a15c9b4b0bba7f0b1dd1fe0e4dfaee11c23a10428c1d036b3e2a9df834cc05b582557d62da367b394511159682312ca816af41ea3  charge-mode
 1f1d085a1cc7fcb4718cd83858c35fadea9dc90eeb2111fec35c2ab5ccf9237d47550357458e9eeffd260ebbfc0cd68dc213cfbcedeb0259b7db757922bfd974  charge-mode-decide
