@@ -136,11 +136,16 @@ sudo fastboot reboot</pre>
 			Change it in <b>Settings &rarr; Users</b>, or in a terminal:
 			<code>passwd</code>.
 			<br><br>
-			The phone will remind you: on every boot it checks whether the password is
-			still the one it shipped with and, while it is, says so in a notification.
-			It does not store the password to do that &mdash; it takes the salt out of
-			your own entry in <code>/etc/shadow</code>, hashes the shipped one with it
-			and compares. Change the password and the reminder stops, for good.
+			The phone asks you to, and it does not ask politely: the first session
+			opens full screen on a step that wants a new password before anything
+			else. Plasma Mobile ships no onboarding wizard, so this is one, and it
+			is the whole of it.
+			<br><br>
+			It stores nothing to know when to appear: a unit reads the salt out of
+			your own entry in <code>/etc/shadow</code>, hashes the shipped password
+			with that salt and compares. Change the password and the salt changes
+			with it, so the step never appears again &mdash; with no state file to
+			go stale, and nothing on disk that says what the password is.
 		</div></div>
 	</div>
 </section>
