@@ -84,6 +84,11 @@ jobs:
       - name: sign and push
         env:
           ABUILD_PRIVKEY: ${{ secrets.ABUILD_PRIVKEY }}
+          # scripts/publish asks 'gh' for the latest -surya release to name the
+          # image in the instructions, and refuses to publish if it cannot --
+          # a hardcoded name would make the download button a 404. The CLI is
+          # installed on the runner but not logged in, so it needs the token.
+          GH_TOKEN: ${{ github.token }}
         run: |
           mkdir -p ~/.local/var/pmbootstrap-utsugi/config_abuild
           KEY=$(basename keys/*.rsa.pub .pub)
