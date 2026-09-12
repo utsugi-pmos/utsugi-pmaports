@@ -33,7 +33,9 @@ XTRA_URL="${XTRA_URL:-https://path1.xtracloud.net/xtra3grcej.bin}"
 XTRA="/var/cache/xtra.bin"
 # The XTRA data expires; Android renews it every few days. Below this it is not
 # downloaded again, so as not to spend data on every boot.
-HORAS_VALIDO="${HORAS_VALIDO:-48}"
+# HORAS_VALIDO was the only name; both are read, because it is set from
+# outside and a unit or a shell profile may still carry the old one.
+VALID_HOURS="${VALID_HOURS:-${HORAS_VALIDO:-48}}"
 
 say() { printf '   %s\n' "$*"; }
 
@@ -176,7 +178,7 @@ say "supported assistance: $(mmcli -m any --location-status 2>/dev/null \
 lower=1
 if [ -s "$XTRA" ]; then
 	age=$(( ($(date +%s) - $(date -r "$XTRA" +%s 2>/dev/null || echo 0)) / 3600 ))
-	[ "$age" -lt "$HORAS_VALIDO" ] && lower=0
+	[ "$age" -lt "$VALID_HOURS" ] && lower=0
 fi
 
 if [ "$lower" = 1 ]; then

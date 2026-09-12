@@ -103,7 +103,16 @@ docker run --rm \
 		chown -R "$UID:$GID" /r /c
 	'
 # The first member of a signed index is the signature, named after the key.
-first="$(tar -tzf "$DIR/APKINDEX.tar.gz" | head -1)"
+#
+# Read the whole listing and take the first line, rather than piping into
+# 'head -1'. head exits after one line, tar keeps writing into a pipe with no
+# reader, and with pipefail that is a failed publish: "tar: stdout: write
+# error". It passed locally for weeks and failed in CI on 2026-09-11, because
+# whether tar notices the closed pipe is a race with how fast head exits.
+# The listing is a handful of members; reading it all costs nothing.
+first="$(tar -tzf "$DIR/APKINDEX.tar.gz")"
+first="${first%%
+*}"
 [ "$first" = ".SIGN.RSA.$KEY.pub" ] || die "index is not signed by $KEY (first member: $first)"
 green "  signed by $KEY"
 

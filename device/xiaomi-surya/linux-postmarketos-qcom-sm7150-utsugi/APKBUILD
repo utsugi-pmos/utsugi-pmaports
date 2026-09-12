@@ -5,7 +5,7 @@ _flavor="postmarketos-qcom-sm7150"
 _orig=linux-$_flavor
 pkgname=$_orig-utsugi
 pkgver=7.1_rc3
-pkgrel=258
+pkgrel=259
 
 # FORK of linux-postmarketos-qcom-sm7150. _flavor is deliberately NOT renamed:
 # /boot/vmlinuz, /lib/modules/<release> and /usr/share/kernel/<flavor> must stay
