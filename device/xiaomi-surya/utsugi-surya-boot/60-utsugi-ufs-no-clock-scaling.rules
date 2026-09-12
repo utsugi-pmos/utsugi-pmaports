@@ -1,0 +1,36 @@
+# UFS clock scaling off on this phone, and it is an EXPERIMENT, not a setting.
+#
+# WHAT WAS MEASURED (2026-09-12, captured while the phone was frozen; the full
+# capture is in tasks/021-live-capture-2026-09-12.md):
+#
+#     /proc/pressure/io   some avg10=99.12    /proc/pressure/cpu   0.00
+#
+#     kworker/0:2+events        blk_execute_rq <- ufshcd_exec_dev_cmd
+#                               <- ufshcd_query_attr
+#                               <- ufshcd_exception_event_handler
+#     kworker/u32:0+devfreq_wq  ufshcd_devfreq_scale <- devfreq_monitor
+#     kworker/u32:3+flush-7:0   ext4_writepages, jbd2, fsync: all behind it
+#
+# The device raised an exception event, the query that asks it what happened
+# never returned, and clock scaling blocked behind that. With the queue held,
+# every write in the system stopped -- including the black box's own fsync,
+# which is why fifteen hours of freeze left nothing on disk.
+#
+# WHY SCALING IS THE SUSPECT. At boot the driver says:
+#
+#     ufshcd-qcom 1d84000.ufshc: freq-table-hz property not specified
+#
+# The device tree never gives this controller a frequency table, and devfreq
+# was nonetheless running simple_ondemand and sitting in a 50 MHz gear. Scaling
+# to gears the hardware was never told about is a good explanation for a
+# controller that stops answering.
+#
+# HOW TO READ THE RESULT. If the freezes stop, this is the cause and the real
+# fix is a freq-table-hz in the device tree, not this file. If they do not, this
+# is ruled out and the next suspect is auto_hibern8 (150 ms here, longer in the
+# vendor kernel). Either way the answer is worth more than the guess.
+#
+# It has to be set BEFORE a freeze: writing this attribute takes the same lock
+# the stuck path holds, so during a freeze the write hangs too.
+ACTION=="add", SUBSYSTEM=="scsi_host", DRIVERS=="ufshcd", ATTR{clkscale_enable}=="1", ATTR{clkscale_enable}="0"
+ACTION=="add", SUBSYSTEM=="platform", KERNEL=="*.ufshc", ATTR{clkscale_enable}=="1", ATTR{clkscale_enable}="0"
