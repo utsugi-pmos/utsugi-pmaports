@@ -75,12 +75,18 @@
 			postmarketOS leaves locked on every Qualcomm device. Without it there is only
 			network position, with kilometres of error; with it, twelve satellites and a fix
 			in about forty seconds from cold.</td></tr>
-			<tr><td class="mono">utsugi-surya-power</td><td>A power-off that powers off: it
-			hands the shutdown to the kernel before the teardown, which is where this phone
-			freezes. Plus the charge screen when you plug in a phone that is off, the
-			hardware watchdog so a hang does not need a person, the USB-C direction switch
-			(the connector was source-only and the phone fed the laptop), and the
-			power-saving profile.</td></tr>
+			<tr><td class="mono">utsugi-surya-power</td><td>A power-off that powers off:
+			it hands the shutdown to the kernel before the userspace teardown, which used
+			to freeze this phone. On 2026-09-12 the teardown was measured completing on
+			its own, twice, so this is a belt rather than a crutch now &mdash; and it is
+			kept, because one afternoon is not enough to remove a safety net. Plus
+			<code>power-reason</code>, which reads out of the PMIC why the phone turned on
+			and how it turned off: <i>a person pressed the button</i>, <i>the cable</i> and
+			<i>it came from a reset</i> are indistinguishable from outside, and confusing
+			the first two is what kept a bug open for months. Plus the charge screen when
+			you plug in a phone that is off, the hardware watchdog so a hang does not need
+			a person, the USB-C direction switch (the connector was source-only and the
+			phone fed the laptop), and the power-saving profile.</td></tr>
 			<tr><td class="mono">utsugi-surya-camera</td><td>The rear autofocus, as a
 			user-space engine against a measured curve. It has to be a service: the driver
 			returns the lens to origin and powers the chip off the moment the node is
@@ -158,6 +164,14 @@
 			gets more logical pixels, without shrinking the rest of the phone.</td></tr>
 			<tr><td>Bar margins</td><td>The clock and the rotation button sat under the
 			rounded corners. Fixed as a device preset, which is upstreamable to KDE.</td></tr>
+			<tr><td>120 Hz in the browser</td><td>Gecko does not detect this panel's
+			refresh rate in a Wayland session and falls back to 60, half of what the
+			screen gives: measured 59.7 fps against 115.8. The preference travels
+			<b>with the browser</b>, not with this package:
+			<code>utsugi-surya-plasma-firefox</code> and
+			<code>-librewolf</code> are <code>install_if</code> subpackages, so apk
+			adds one the moment firefox or librewolf is installed and drops it when
+			they go.</td></tr>
 			<tr><td>The dialer's first open</td><td>210 MB of libraries loaded on the first
 			call. Preheated at session start instead.</td></tr>
 		</table>
@@ -226,9 +240,10 @@
 		<div class="scroll">
 		<table>
 			<tr><th class="mono">Package</th><th>What it is</th></tr>
-			<tr><td class="mono">firefox<br>mobile-config-firefox</td><td>Firefox adapted to
-			a phone screen, with uBlock Origin, and painting at a real 120 Hz. Out of the
-			box it ran at 60.</td></tr>
+			<tr><td class="mono">firefox<br>mobile-config-firefox</td><td>Firefox, and
+			postmarketOS's own configuration that makes it usable on a phone screen,
+			with uBlock Origin. The refresh rate is <b>not</b> part of that: see
+			<code>utsugi-surya-plasma-firefox</code> below.</td></tr>
 			<tr><td class="mono">keysmith</td><td>Two-factor TOTP codes, native
 			Kirigami.</td></tr>
 			<tr><td class="mono">merkuro</td><td>Mail, calendar and contacts in one
