@@ -128,4 +128,44 @@ if command -v apkbuild-lint >/dev/null 2>&1; then
 else
 	grey "apkbuild-lint not installed (apk add atools); skipped"
 fi
+
+# THE SHIPPED PASSWORD IS ONE CONSTANT IN FIVE FILES.
+#
+# scripts/image passes it to pmbootstrap, change-the-password hashes it to
+# decide whether to ask, the dialog sends it as the current password, and the
+# release notes and the install page tell people what it is. Drift between any
+# two of them ships an image whose first-run step either never appears or
+# cannot authenticate -- and nothing fails at build time, because each file is
+# correct on its own.
+title "the shipped password agrees everywhere"
+_pw_files="scripts/image
+device/xiaomi-surya/utsugi-surya-plasma/change-the-password
+device/xiaomi-surya/utsugi-surya-first-password/passwd.cpp
+flash/surya.md
+site/install-image.html.in"
+_pw_seen=""
+for f in $_pw_files; do
+	# The value as each file spells it: --password X, SHIPPED='X', "X", <code>X</code>.
+	v=$(grep -oE "(--password |password: |kShipped = \"|SHIPPED='|<code>)[0-9]{4,}" "$REPO/$f" |
+	    grep -oE '[0-9]{4,}' | sort -u | head -1)
+	if [ -z "$v" ]; then
+		red "  $f: no shipped password found -- did it get renamed?"
+		rc=1
+		continue
+	fi
+	_pw_seen="$_pw_seen$v
+"
+done
+if [ "$(printf '%s' "$_pw_seen" | sort -u | grep -c .)" -gt 1 ]; then
+	red "  they disagree:"
+	i=1
+	for f in $_pw_files; do
+		red "    $(printf '%s' "$_pw_seen" | sed -n "${i}p")  $f"
+		i=$((i + 1))
+	done
+	rc=1
+else
+	green "  $(printf '%s' "$_pw_seen" | head -1) in all $(printf '%s' "$_pw_files" | grep -c .) files"
+fi
+
 exit $rc
