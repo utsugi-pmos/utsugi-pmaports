@@ -2,7 +2,7 @@
 # What was left of the last hang.
 #
 #   blackbox              the last hang, with a verdict
-#   blackbox --lista      all saved traces
+#   blackbox --list       all saved traces
 #   blackbox --beats      the raw heartbeats, to inspect by hand
 #   blackbox --state      what is installed right now
 #   blackbox --freeze     the dump freeze-watchdog left on the dump partition
@@ -33,9 +33,7 @@ last() {
 # appears the day ramoops works here -- see the header of blackbox-heartbeat.
 beats_of() {
 	grep -a '^blackbox ' "$1/pmsg-ramoops-0" 2>/dev/null || true
-	# Archives made before 2026-09-11 carry the file under its old name.
-	grep -a '^blackbox ' "$1/last-heartbeat" 2>/dev/null \
-		|| grep -a '^blackbox ' "$1/last-latido" 2>/dev/null || true
+	grep -a '^blackbox ' "$1/last-heartbeat" 2>/dev/null || true
 }
 
 field() {  # field <line> <name>  ->  the value, or empty
@@ -58,7 +56,7 @@ case "${1:-}" in
 	echo "== freeze dump, from $FREEZE_DEV =="
 	dd if="$FREEZE_DEV" bs=1M count=1 2>/dev/null | tr -d '\000' | tail -n +2
 	exit 0 ;;
---lista)
+--list)
 	echo "Traces saved in $ARCHIVE:"
 	for d in "$ARCHIVE"/*/; do
 		[ -d "$d" ] || { echo "  (none yet)"; break; }
@@ -67,11 +65,11 @@ case "${1:-}" in
 			"$([ -e "${d%/}/dmesg-ramoops-0" ] && echo ', WITH panic dump')"
 	done
 	exit 0 ;;
---beats|--latidos)
+--beats)
 	d="$(last)" || { echo "No trace saved."; exit 1; }
 	beats_of "$d"
 	exit 0 ;;
---state|--estado)
+--state)
 	printf 'console awake on suspend        %s\n' \
 		"$(cat /sys/module/printk/parameters/console_suspend 2>/dev/null)  (N = yes, which is what we want)"
 	printf 'console level                   %s\n' "$(cut -f1 /proc/sys/kernel/printk)  (7 = everything)"
@@ -82,8 +80,7 @@ case "${1:-}" in
 	# 'Finished', not 'Started': for a oneshot service systemd logs
 	# "Starting"/"Finished", so counting "Started" always gave zero.
 	printf 'sign of life right now          %s\n' \
-		"$(cut -d' ' -f2 /var/log/blackbox/heartbeat 2>/dev/null \
-			|| cut -d' ' -f2 /var/log/blackbox/latido 2>/dev/null || echo 'none yet')"
+		"$(cut -d' ' -f2 /var/log/blackbox/heartbeat 2>/dev/null || echo 'none yet')"
 	printf 'heartbeats in this boot         %s\n' \
 		"$(journalctl -u blackbox-heartbeat.service -b --no-pager 2>/dev/null | grep -c Finished || true)"
 	exit 0 ;;
@@ -146,9 +143,4 @@ with the exact function.
 FIN
 fi
 echo
-# Archives made before 2026-09-11 carry the Spanish file name; name the one
-# that is actually there, so this line never points at nothing.
-log="$d/previous-boot-log.txt"
-[ -f "$log" ] || [ ! -f "$d/diario-del-arranque-anterior.txt" ] \
-	|| log="$d/diario-del-arranque-anterior.txt"
-echo "The log of the previous boot: $log"
+echo "The log of the previous boot: $d/previous-boot-log.txt"

@@ -40,11 +40,11 @@ SPEAKER=0x4c
 EARPIECE=0x4d
 
 case "$WHAT" in
-	audifono|auricular|top) WHAT=earpiece ;;
-	todo|ambos|estereo)        WHAT=all ;;
-	speaker|bottom)             WHAT=speaker ;;
-	headphones)                    WHAT=headphones ;;
-	state)                    WHAT=state ;;
+	earpiece|top)      WHAT=earpiece ;;
+	all|both)          WHAT=all ;;
+	speaker|bottom)    WHAT=speaker ;;
+	headphones)        WHAT=headphones ;;
+	state)             WHAT=state ;;
 esac
 
 # The top one is not a small earpiece: it is a real speaker, and at 85%
@@ -205,7 +205,6 @@ case "$WHAT" in
 	            echo "output: both speakers, volume $VOL%" ;;
 	state)      report_state; exit 0 ;;
 	*) echo "usage: $(basename "$0") {all|speaker|earpiece|headphones|state} [volume 0-100]"
-	   echo "     the Spanish names still work: todo, speaker, audifono, headphones, state"
 	   exit 1 ;;
 esac
 

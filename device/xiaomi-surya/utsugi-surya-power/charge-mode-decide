@@ -44,7 +44,7 @@ reason() {
 # With --say it only reports, without touching /run: that way the setting can show what
 # it would decide without deciding it, which with the session already up would lock Plasma.
 ONLY_SAY=0
-case "${1:-}" in --say|--decir) ONLY_SAY=1 ;; esac
+[ "${1:-}" = --say ] && ONLY_SAY=1
 
 [ "$ONLY_SAY" = 1 ] || rm -f "$RUN"
 
