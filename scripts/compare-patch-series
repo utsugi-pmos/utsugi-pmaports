@@ -1,0 +1,73 @@
+#!/bin/sh
+# Which patches of the research series are NOT in this aport, and are they meant
+# to be absent?
+#
+#   scripts/compare-patch-series [RESEARCH_KERNEL_DIR]
+#
+# Default: ../vayu-postmarketos/surya/kernel
+#
+# WHY IT EXISTS
+# -------------
+# On 2026-09-12 the phone went into a nine-reboot loop, and the cause was that
+# 0118-sm7150-interconnect-qup0-keepalive -- half the fix for the same loop on
+# 2026-09-08 -- had never been migrated here. It had been missing for weeks.
+# Nothing compared the two series, so "deliberately not shipped" and "lost" were
+# indistinguishable, and the difference between them is a phone that reboots
+# every forty-five seconds.
+#
+# HOW IT DECIDES
+# --------------
+# By CONTENT, not by file name: names carry numbers that differ between the two
+# trees. It takes a sample of the lines each research patch ADDS and looks for
+# them here. A patch whose added lines are largely absent is reported, and then
+# checked against NOT-SHIPPED.md -- the list of the ones that are absent on
+# purpose, each with a reason.
+#
+# Exit 1 if anything is missing and unexplained. Run it after a migration, after
+# a rebase, and before trusting that the two trees agree.
+set -eu
+REPO="$(cd "$(dirname "$0")/.." && pwd)"
+RESEARCH="${1:-$REPO/../vayu-postmarketos/surya/kernel}"
+APORT="$REPO/device/xiaomi-surya/linux-postmarketos-qcom-sm7150-utsugi"
+NOTE="$APORT/NOT-SHIPPED.md"
+
+[ -d "$RESEARCH" ] || { echo "no research kernel dir: $RESEARCH" >&2; exit 2; }
+[ -d "$APORT" ] || { echo "no aport dir: $APORT" >&2; exit 2; }
+
+python3 - "$RESEARCH" "$APORT" "$NOTE" <<'PY'
+import glob, os, sys
+
+research, aport, note = sys.argv[1], sys.argv[2], sys.argv[3]
+here = ''.join(open(p, encoding='utf-8', errors='ignore').read()
+               for p in glob.glob(os.path.join(aport, '*.patch')))
+explained = open(note, encoding='utf-8').read() if os.path.exists(note) else ''
+
+missing, unexplained = [], []
+for p in sorted(glob.glob(os.path.join(research, '*.patch'))):
+    body = open(p, encoding='utf-8', errors='ignore').read()
+    adds = [l[1:].strip() for l in body.split('\n')
+            if l.startswith('+') and not l.startswith('+++') and len(l.strip()) > 25]
+    if not adds:
+        continue
+    sample = adds[:40]
+    found = sum(1 for a in sample if a in here)
+    if found >= max(1, len(sample) // 2):
+        continue
+    name = os.path.basename(p)
+    stem = name[:-len('.patch')]
+    missing.append((stem, found, len(sample)))
+    if stem not in explained:
+        unexplained.append(stem)
+
+print('research patches: %d' % len(glob.glob(os.path.join(research, '*.patch'))))
+print('not represented here: %d' % len(missing))
+for stem, f, t in missing:
+    mark = '  ' if stem not in unexplained else '  <-- NOT IN NOT-SHIPPED.md'
+    print('  %-62s %2d/%d added lines found%s' % (stem, f, t, mark))
+
+if unexplained:
+    print('\n%d patch(es) are absent and nothing says why.' % len(unexplained))
+    print('Either migrate them, or add them to %s with a reason.' % os.path.relpath(note))
+    sys.exit(1)
+print('\nEvery absent patch is listed in NOT-SHIPPED.md with a reason.')
+PY
