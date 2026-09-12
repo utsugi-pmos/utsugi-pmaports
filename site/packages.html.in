@@ -237,8 +237,9 @@
 				<div class="n">lost-phone</div>
 				<p><b>Find the phone without Google.</b> Four paths, switched on one by
 				one: an SMS with your key from any phone (the only one that needs no data),
-				your home network with no server at all, your own relay with a web panel
-				and a map for when it is out on the street, or your ntfy. It rings at full
+				your home network with no server at all,
+				<a href="https://github.com/utsugi-pmos/lost-phone-relay">your own relay</a>
+				with a web panel and a map for when it is out on the street, or your ntfy. It rings at full
 				volume even silenced, turns wifi and GPS on to let itself be found and
 				gives them back, says where it is, and can lock or power off the phone from
 				the panel.</p></a>
