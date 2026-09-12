@@ -119,6 +119,38 @@ fi
 	journalctl -b -1 --no-pager 2>/dev/null
 } > "$dir/previous-boot-log.txt" 2>/dev/null || true
 
+# AN EMPTY ARCHIVE IS A LIE, AND A USEFUL MEASUREMENT.
+#
+# Measured on 2026-09-12: nine reboots in a row left nine directories in which
+# EVERY file was zero bytes -- the ramoops, and previous-boot-log.txt too. The
+# phone reset before journald flushed anything and before ramoops held anything,
+# so there was nothing to copy. But 'blackbox --list' then showed ten traces, and
+# nine of them were nothing. A directory that looks like evidence and holds none
+# is worse than no directory at all.
+#
+# So: if everything collected is empty, the directory is replaced by a note. The
+# note is not a consolation prize -- "the phone reset before anything reached
+# disk" tells you it was a HARD reset and not a clean reboot, which is exactly
+# what you want to know when you are counting boots.
+empty=1
+for f in "$dir"/*; do
+	[ -e "$f" ] || continue
+	[ -s "$f" ] && { empty=0; break; }
+done
+if [ "$empty" = 1 ]; then
+	rm -f "$dir"/*
+	{
+		echo "# Nothing reached disk for this boot."
+		echo "#"
+		echo "# The archiver ran and found the ramoops empty and the previous"
+		echo "# boot's journal unflushed. That is what a HARD reset looks like"
+		echo "# from here: the phone did not live long enough, or did not shut"
+		echo "# down cleanly enough, for anything to be written."
+		echo "#"
+		printf '# Archived at: '; date -Iseconds
+	} > "$dir/nothing-was-captured.txt"
+fi
+
 # Keep it from growing without end: the last ten are enough.
 ls -1d "$BASE"/*/ 2>/dev/null | sort -r | tail -n +11 | while read -r old; do
 	rm -rf "$old"

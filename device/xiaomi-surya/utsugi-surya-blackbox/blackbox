@@ -60,6 +60,14 @@ case "${1:-}" in
 	echo "Traces saved in $ARCHIVE:"
 	for d in "$ARCHIVE"/*/; do
 		[ -d "$d" ] || { echo "  (none yet)"; break; }
+		# Say when a directory holds nothing, instead of printing "0
+		# heartbeats" and letting it pass for a trace. Nine of those in a
+		# row is what a reboot loop leaves behind, and it is worth reading
+		# as such rather than as nine traces.
+		if [ -e "${d%/}/nothing-was-captured.txt" ]; then
+			printf '  %-20s nothing reached disk (hard reset)\n' "$(basename "$d")"
+			continue
+		fi
 		n="$(beats_of "${d%/}" | wc -l)"
 		printf '  %-20s %s heartbeats%s\n' "$(basename "$d")" "$n" \
 			"$([ -e "${d%/}/dmesg-ramoops-0" ] && echo ', WITH panic dump')"
