@@ -1,0 +1,50 @@
+# Maintainer: Dr. Utsugi <cidwel@gmail.com>
+#
+# Compass, and the instrument used to find out whether the phone's sensors
+# reach Linux at all.
+#
+# Its real job is to tell "there is no sensor" apart from "the sensor reads
+# zero", which look identical to the eye and are not the same thing. In Qt,
+# 'active: true' is a REQUEST: with no backend behind it, Qt sets 'active' back
+# to false by itself, and that is what the page watches -- rather than watching
+# whether the numbers move, which with the phone lying still would report a
+# false negative. A sensor that is active but silent shows amber, not green.
+#
+# Nothing is compiled: it is QML, and QtSensors with its iio-sensor-proxy
+# backend are already on the phone. It is in main/ and not device/ because
+# nothing in it is specific to the surya -- it is useful on any phone where the
+# question "does this sensor work?" comes up.
+pkgname=utsugi-compass
+pkgver=1
+pkgrel=0
+pkgdesc="Compass and sensor test bench"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="GPL-3.0-or-later"
+# qmlscene lives in qt6-qtdeclarative and the QtSensors QML module in
+# qt6-qtsensors; both checked against the image's package database rather than
+# assumed. Without either, the launcher opens a black window and closes, which
+# is the failure that says nothing.
+depends="qt6-qtdeclarative qt6-qtsensors"
+options="!check"  # no test suite: it is a QML page
+source="compass.qml
+	utsugi-compass.desktop
+	utsugi-compass.svg"
+
+package() {
+	install -Dm644 "$srcdir"/compass.qml \
+		-t "$pkgdir"/usr/share/utsugi-compass/
+	install -Dm644 "$srcdir"/utsugi-compass.desktop \
+		-t "$pkgdir"/usr/share/applications/
+	# By theme NAME, not by absolute path. The shell script this replaced had
+	# to use an absolute path because it installed into the user's own hicolor
+	# tree, which has no index.theme, so KDE never indexed it and the name did
+	# not resolve. Installed system-wide the name resolves normally.
+	install -Dm644 "$srcdir"/utsugi-compass.svg \
+		"$pkgdir"/usr/share/icons/hicolor/scalable/apps/utsugi-compass.svg
+}
+sha512sums="
+e05f23fe21d2f82cf206ef55758656dea01f60bc50304466c35020026a2001b3c92a4072646e7360804c2d91501a471a7989a2d3caa3b7874b4e7bae225b0265  compass.qml
+ea1b7def3c829a6c1dbbdd5b812b6ff4af32005c439c2524e4ef48a39fb0ac57ab7d11f8f963d9399dc972220bce308f05e0ab02c188e0282ba49620c7f022bc  utsugi-compass.desktop
+418fe6be6b5e0a5e8971c90745e3b6c21bccde24f9dcce16ca1d6fdf6ac3eb153e9c515d8d6f1dea87f2da0444598bf4e8f8ade0399ff6b56b7d49530cbf4533  utsugi-compass.svg
+"

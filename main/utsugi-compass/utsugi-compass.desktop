@@ -1,0 +1,17 @@
+[Desktop Entry]
+Type=Application
+Name=Compass
+Comment=Compass, and a test bench for the phone's sensors
+Exec=/usr/lib/qt6/bin/qmlscene /usr/share/utsugi-compass/compass.qml
+Icon=utsugi-compass
+Terminal=false
+StartupNotify=true
+# Qt builds the window identifier from the executable that opens it, and that
+# is qmlscene -- measured on the open window, not assumed.
+#
+# KNOWN COLLISION: poconav presents itself the same way, for the same reason,
+# so Plasma cannot tell the two windows apart and both inherit the icon of
+# whichever entry matches first. Cosmetic, and it goes away when each one is
+# its own binary instead of a qmlscene argument.
+StartupWMClass=org.qt-project.qmlscene
+Categories=Utility;Science;

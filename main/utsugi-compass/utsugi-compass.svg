@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Icono de Compass. Propio, y no un nombre del tema, por dos razones:
+
+    1. Breeze NO trae ningun icono de brujula. Lo comprobe: 'kstars_compass',
+       que es lo que puse primero, no existe. Un Icon= que no resuelve deja la
+       aplicacion sin icono en el cajon, que es justo el fallo que ya paso con
+       Telegram.
+    2. Los que si hay (rotation-allowed, osd-rotate-cw) son iconos de estado y
+       de OSD, de 22 a 48 px y pensados para la bandeja, no para el cajon.
+
+  Escalable, y con los colores del propio programa: aguja norte en rojo, sur en
+  blanco, sobre la esfera oscura.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <radialGradient id="esfera" cx="38%" cy="32%" r="72%">
+      <stop offset="0%"  stop-color="#2b2f3d"/>
+      <stop offset="100%" stop-color="#12131a"/>
+    </radialGradient>
+  </defs>
+
+  <!-- caja -->
+  <circle cx="32" cy="32" r="29" fill="url(#esfera)" stroke="#3ddc84" stroke-width="2.5"/>
+
+  <!-- marcas cardinales -->
+  <g fill="#8a8f9e">
+    <rect x="31" y="6"  width="2" height="6" rx="1"/>
+    <rect x="31" y="52" width="2" height="6" rx="1"/>
+    <rect x="6"  y="31" width="6" height="2" rx="1"/>
+    <rect x="52" y="31" width="6" height="2" rx="1"/>
+  </g>
+  <!-- marcas intermedias -->
+  <g fill="#5a5f6e">
+    <rect x="31.2" y="8" width="1.6" height="4" rx="0.8" transform="rotate(45 32 32)"/>
+    <rect x="31.2" y="8" width="1.6" height="4" rx="0.8" transform="rotate(135 32 32)"/>
+    <rect x="31.2" y="8" width="1.6" height="4" rx="0.8" transform="rotate(225 32 32)"/>
+    <rect x="31.2" y="8" width="1.6" height="4" rx="0.8" transform="rotate(315 32 32)"/>
+  </g>
+
+  <!-- la aguja, ligeramente girada para que se lea como instrumento vivo -->
+  <g transform="rotate(-24 32 32)">
+    <polygon points="32,13 27,32 32,29 37,32" fill="#ff5c5c"/>
+    <polygon points="32,51 27,32 32,35 37,32" fill="#e8e8ee"/>
+  </g>
+
+  <!-- eje -->
+  <circle cx="32" cy="32" r="4"   fill="#12131a"/>
+  <circle cx="32" cy="32" r="4"   fill="none" stroke="#8a8f9e" stroke-width="1.6"/>
+</svg>
