@@ -48,10 +48,24 @@
  * /dev/disk/by-partlabel/logdump -- so there is no offset to compute and
  * nothing else can be hit by an arithmetic slip.
  *
- * That works precisely because of what the freeze looked like: dm-0 had 51
+ * That works precisely because of what THAT freeze looked like: dm-0 had 51
  * requests stuck while the disk underneath sat idle and healthy, so a write
  * that skips the filesystem, the page cache and dm-crypt still lands. O_DIRECT
  * with an aligned buffer, straight to the block device.
+ *
+ * AND ON 2026-09-12 A DIFFERENT FREEZE PROVED THE LIMIT OF THAT. The stall was
+ * inside the UFS controller itself -- ufshcd_exception_event_handler waiting on
+ * a query command that never returned, with clock scaling and then every write
+ * in the system queued behind it. O_DIRECT dodges the filesystem and dm-crypt;
+ * it does not dodge the controller. The pwrite below never returned, so the
+ * sysrq('b') that follows it never ran, and the phone sat frozen for fifteen
+ * hours instead of rebooting in ten minutes.
+ *
+ * So the dump is now written by a CHILD, and the parent reboots on a deadline
+ * whether or not that child ever finishes. Losing the dump is a bad outcome;
+ * losing the reboot as well is the one this exists to prevent. When the write
+ * does land, nothing changes -- the child exits in well under a second and the
+ * reboot follows as before.
  *
  * What gets written: a magic header, the uptime, and the tail of /dev/kmsg --
  * which is RAM, so reading it needs no disk. Read it back after the reboot with
@@ -76,12 +90,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/mman.h>
+#include <sys/wait.h>
 #include <time.h>
 #include <unistd.h>
 
 /* The dump partition, by label. 64 MiB on this phone; we use one. */
 #define DUMP_DEV  "/dev/disk/by-partlabel/logdump"
 #define DUMP_SIZE (1024 * 1024)
+/* How long the parent waits for the dump child before rebooting without it.
+ * A write that lands takes well under a second here; ten gives a slow but
+ * healthy device room, and still reboots the phone inside the same minute. */
+#define DUMP_DEADLINE_S 10
 #define DUMP_MAGIC "UTSUGI-FREEZE-DUMP\n"
 
 
@@ -172,6 +191,9 @@ static void save_dump(const char *why)
 	char up[64] = "";
 	int fd_up;
 
+	pid_t child;
+	int waited;
+
 	if (fd_dump < 0 || !dump)
 		return;
 
@@ -203,13 +225,38 @@ static void save_dump(const char *why)
 		}
 	}
 
-	/* O_DIRECT: length and offset have to be block-aligned, so the whole
+	/* The write goes out in a child, and the caller carries on after
+	 * DUMP_DEADLINE_S whether or not it finished. A stall inside the UFS
+	 * controller wedges this pwrite with no way to interrupt it -- the task
+	 * sits in D -- and before this the reboot was on the next line and never
+	 * happened. The buffer is already filled here, so the child only writes:
+	 * no allocation, nothing to read from disk.
+	 *
+	 * O_DIRECT: length and offset have to be block-aligned, so the whole
 	 * buffer goes out. It is zeroed above, so the tail is clean. */
-	if (pwrite(fd_dump, dump, DUMP_SIZE, 0) != DUMP_SIZE)
-		say("could not write the dump partition");
-	else
-		say("dump written to " DUMP_DEV);
-	fsync(fd_dump);
+	child = fork();
+	if (child == 0) {
+		if (pwrite(fd_dump, dump, DUMP_SIZE, 0) == (ssize_t)DUMP_SIZE)
+			fsync(fd_dump);
+		_exit(0);
+	}
+	if (child < 0) {
+		say("could not fork to write the dump; carrying on");
+		return;
+	}
+	for (waited = 0; waited < DUMP_DEADLINE_S; waited++) {
+		if (waitpid(child, NULL, WNOHANG) == child) {
+			say("dump written to " DUMP_DEV);
+			return;
+		}
+		nap(1);
+	}
+	/* SIGKILL does not move a task that is in D, and it does not need to:
+	 * the caller is about to reboot. Saying it is what matters -- a dump
+	 * that could not be written is itself a measurement of where the
+	 * blockage was. */
+	kill(child, SIGKILL);
+	say("the dump write is stuck too: the block device is not answering");
 }
 
 int main(void)
