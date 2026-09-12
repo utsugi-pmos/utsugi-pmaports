@@ -121,6 +121,10 @@
 			<tr><td class="mono">libcamera-utsugi</td><td>The software ISP enabled, the
 			viewfinder sized to what it can sustain, and sensor helpers for the three
 			cameras of this phone.</td></tr>
+			<tr><td class="mono">plasma-camera-utsugi</td><td>A zoom bar and tap-to-focus,
+			neither of which upstream has. It is named as a dependency rather than left to
+			arithmetic, so the camera that ends up on the phone is guaranteed to be this
+			one.</td></tr>
 		</table>
 		</div>
 		<p>Plus what the hardware needs to be driven from a shell:
@@ -302,10 +306,13 @@
 		<div class="h"><span>04</span><h2>vayu &mdash; experimental</h2></div>
 		<p><code>utsugi-vayu-base</code> is the POCO X3 Pro set, and the honest summary is
 		one line: <b>the modem does not work, so it is not a phone.</b> It carries the
-		research kernel for the SM8150, the patched <code>qcom-diag</code> that measures
-		the modem, the kernel command line that turns a hung task into a panic instead of
-		a silent freeze, and a helper that extracts the IPA firmware from the vendor
-		partition of the phone you already own, because it cannot be redistributed.</p>
+		research kernel for the SM8150
+		(<code>linux-postmarketos-qcom-sm8150-utsugi</code>), the patched
+		<code>qcom-diag-utsugi</code> that measures the modem, and
+		<code>utsugi-vayu-boot</code>: the kernel command line that turns a hung task
+		into a panic instead of a silent freeze, plus a helper that extracts the IPA
+		firmware from the vendor partition of the phone you already own, because it
+		cannot be redistributed.</p>
 		<p>It is published so the investigation is installable by anyone who wants to
 		carry it further. See <a href="devices.html">Devices</a> for where it stands.</p>
 		<div class="next">

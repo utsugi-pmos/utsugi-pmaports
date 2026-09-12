@@ -55,6 +55,12 @@ sudo apk add utsugi-surya-extras</pre>
 		</div>
 		<p>Untagged, on purpose. A tagged line makes apk prefer upstream for every
 		dependency and the patched packages silently lose.</p>
+		<p>The first line is the only one that has to be trusted by hand, and only this
+		once: it is what lets <code>apk</code> verify everything afterwards. From then on
+		the key is kept up to date by a package of its own,
+		<code>utsugi-keys</code>, which <code>utsugi-surya-base</code> pulls in &mdash;
+		and which is already inside the flashable image, so a phone installed that way
+		never runs the <code>wget</code> at all.</p>
 		<div class="scroll">
 		<table>
 			<tr><th class="mono">utsugi-surya-base</th><td>The phone: kernel, hardware,
