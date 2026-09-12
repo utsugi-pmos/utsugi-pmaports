@@ -5,7 +5,7 @@ _flavor="postmarketos-qcom-sm7150"
 _orig=linux-$_flavor
 pkgname=$_orig-utsugi
 pkgver=7.1_rc3
-pkgrel=260
+pkgrel=261
 
 # FORK of linux-postmarketos-qcom-sm7150. _flavor is deliberately NOT renamed:
 # /boot/vmlinuz, /lib/modules/<release> and /usr/share/kernel/<flavor> must stay
@@ -122,6 +122,7 @@ source="
 	0115-sm7150-gcc-power-domain-cx.patch
 	0116-sm7150-gcc-qup-ahb-clocks-critical.patch
 	0117-sm7150-interconnect-qup0-keepalive.patch
+	0118-dw9807-the-subdev-outlives-the-unbind.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -238,4 +239,5 @@ ab177796c8bc5b3e253738a87a89ab137c2a8f7c96bb828eef47de916612304a89b8bc68ec58dcb5
 f6370551df970835272c7d50a2f5158e7a4ddc926f513b6f0f9fdd9fc2ed6848345e60bb91d456db5ba42e2fdcdb726606e918998209c876338cb3b9294d3838  0115-sm7150-gcc-power-domain-cx.patch
 a452de707f40bf1f660bd5465677979247da40c54c418dfb333c7a5263d5f7082ca4ad4d3e80dcff28250f5b691230e2609ed3d3de9dd79a75ab45d3841747e7  0116-sm7150-gcc-qup-ahb-clocks-critical.patch
 d6df0f7be10112bb0cafcc2a42ed68674874967aa6166101509cacb06c550f62fc3a4703385ab1374499a52bba377e06f6714c08307443428e24940fd0f8e162  0117-sm7150-interconnect-qup0-keepalive.patch
+3926a70c3b6ae5b20091ea6d1116b64a184fbac0f10d3224ba3de726ebf91f4cc18ab885c36efdc21a7c5bab571c9f43191d1de901059e9104ae9520428dbc8a  0118-dw9807-the-subdev-outlives-the-unbind.patch
 "
