@@ -108,7 +108,7 @@
 		<table>
 			<tr><th class="mono">Package</th><th>Why it is forked</th></tr>
 			<tr><td class="mono">linux-postmarketos-qcom-sm7150-utsugi</td><td>The kernel
-			with 78 patches: the three cameras with C-PHY in CAMSS and three sensor drivers,
+			with 80 patches: the three cameras with C-PHY in CAMSS and three sensor drivers,
 			voice in call through Q6VOICE, the amplifier byte order that booted the phone
 			mute, 60 Hz as well as 120, the power-off, the watchdog.</td></tr>
 			<tr><td class="mono">alsa-ucm-conf-qcom-sm7150-utsugi</td><td>The UCM with the
@@ -133,6 +133,22 @@
 <section id="session" class="panel">
 	<div class="wrap">
 		<div class="h"><span>02</span><h2>base &mdash; the session and the applications</h2></div>
+
+		<h3>utsugi-surya-first-password &mdash; the step before anything else</h3>
+		<p>A prebuilt image has to carry a password, and ours is printed on the install
+		page, which means anybody who can read knows the password of a phone that has not
+		changed it. postmarketOS mostly dodges this by not shipping prebuilt images:
+		<code>pmbootstrap</code> asks while installing. An image cannot ask &mdash; so the
+		first session opens full screen on a step that asks, and offers no way past it.
+		A four-digit PIN is a fine answer on a phone; nothing here imposes more.</p>
+		<p>It knows whether to ask without storing the shipped password anywhere it could
+		be read back: it takes the salt out of the account's own entry in
+		<code>/etc/shadow</code>, hashes the shipped password with that salt and compares.
+		Change the password and the salt changes with it, so the step stops appearing
+		&mdash; no state file to go stale, and nothing on disk saying what the password
+		is. The same password is the one for <code>sudo</code> and for
+		<code>ssh</code>, which the dialog says out loud, because that is the part nobody
+		can see.</p>
 
 		<h3>utsugi-surya-plasma &mdash; the fixes</h3>
 		<p>What a Plasma Mobile install on this phone is missing. None of it is a
@@ -177,7 +193,7 @@
 		</table>
 		</div>
 
-		<h3>The six applications</h3>
+		<h3>The seven applications</h3>
 		<p>Each one exists because Plasma Mobile does not ship it, each lives in its own
 		repository, and each is built here from a tagged tarball.</p>
 		<div class="grid">
@@ -222,6 +238,16 @@
 				volume even silenced, turns wifi and GPS on to let itself be found and
 				gives them back, says where it is, and can lock or power off the phone from
 				the panel.</p></a>
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/tree/main/main/utsugi-compass">
+				<div class="n">utsugi-compass</div>
+				<p><b>A compass, and the instrument that says whether the sensors work.</b>
+				Its real job is telling &ldquo;there is no sensor&rdquo; apart from
+				&ldquo;the sensor reads zero&rdquo;, which look identical and are not the
+				same thing. In Qt <code>active: true</code> is a request: with no backend
+				behind it Qt sets it back to false, and that is what the page watches,
+				rather than whether the numbers move &mdash; which with the phone lying
+				still would report a false negative. A sensor that is active but silent
+				shows amber, not green.</p></a>
 		</div>
 		<p>Between them they pull in what they need: <code>valhalla-utsugi</code> and
 		<code>maplibre-native-qt6</code> for the navigation, <code>espeak-ng</code> and
