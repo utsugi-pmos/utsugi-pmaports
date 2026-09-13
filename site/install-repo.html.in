@@ -31,7 +31,7 @@
 <section>
 	<div class="wrap">
 		<div class="h"><span>01</span><h2>Where you type this</h2></div>
-		<p>These commands run <b>on the phone</b>, not on your PC. Two ways to get
+		<p>These commands run <b>on the phone itself</b>. Two ways to get
 		a prompt there, either is fine:</p>
 		<ul>
 			<li>The <b>Terminal</b> app that comes with Plasma Mobile. Painful for

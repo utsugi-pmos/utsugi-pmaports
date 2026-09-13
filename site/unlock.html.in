@@ -100,7 +100,7 @@ miunlock</pre>
 			<li>Sign in with the <b>same Mi account</b> you bound the phone to.</li>
 			<li>It shows your account's region. Enter to accept.</li>
 			<li>It warns that unlocking <b>erases the phone</b>. That is Xiaomi's
-			behaviour, not the tool's.</li>
+			behaviour; the tool only reports it.</li>
 			<li>It gets the token and runs <code>fastboot stage</code> +
 			<code>fastboot oem unlock</code>. The phone wipes and reboots into
 			MIUI.</li>

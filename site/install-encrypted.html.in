@@ -33,7 +33,8 @@
 		<div class="h"><span>01</span><h2>Why there is no download</h2></div>
 		<p>A LUKS master key is created when the disk is formatted, which for an image
 		means on the machine that builds it. Changing the passphrase later replaces the
-		slot protecting that key, not the key. A shared encrypted image would give
+		slot protecting that key, and leaves the key itself untouched. A shared
+		encrypted image would give
 		whoever built it the master key of every phone flashed from it.</p>
 		<p>Yours has to be born on your machine. One command.</p>
 
