@@ -29,28 +29,76 @@ for c in cache_distfiles cache_ccache_aarch64; do
 	fi
 done
 
+title "pmbootstrap"
+# Cloned here rather than left as an instruction, because the encrypted-install
+# page documents four commands and this was a silent fifth: setup-workdir
+# finished happily and build-your-own-image then stopped on "pmbootstrap not
+# found". Anyone who already has one keeps it -- PMB= points wherever you like.
+PMBOOTSTRAP_URL=https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git
+if [ ! -f "$PMB" ]; then
+	PMB_DIR="$(dirname "$PMB")"
+	grey "  cloning pmbootstrap into $PMB_DIR"
+	mkdir -p "$(dirname "$PMB_DIR")"
+	git clone --quiet --depth 1 "$PMBOOTSTRAP_URL" "$PMB_DIR" ||
+		die "could not clone pmbootstrap from $PMBOOTSTRAP_URL"
+fi
+grey "  $PMB"
+
 title "pmaports checkout"
 [ -f "$REPO/upstream.lock" ] || die "no upstream.lock in $REPO"
 LOCK="$(tr -d ' \n' < "$REPO/upstream.lock")"
+PMAPORTS_URL=https://gitlab.postmarketos.org/postmarketOS/pmaports.git
 if [ ! -d "$APORTS/.git" ]; then
-	[ -d "$UPSTREAM_CLONE/.git" ] || die "no pmaports clone at $UPSTREAM_CLONE"
-	# --local hardlinks the objects and writes NOTHING into the source clone, so
-	# the user's own pmbootstrap keeps working exactly as before.
-	git clone --local --no-checkout "$UPSTREAM_CLONE" "$APORTS"
+	if [ -d "$UPSTREAM_CLONE/.git" ]; then
+		# --local hardlinks the objects and writes NOTHING into the source clone,
+		# so the user's own pmbootstrap keeps working exactly as before. Worth
+		# preferring: pmaports is a large history and this costs no download.
+		grey "  cloning from your existing pmbootstrap checkout"
+		git clone --local --no-checkout "$UPSTREAM_CLONE" "$APORTS"
+	else
+		# A machine that has never run pmbootstrap has no such checkout, and
+		# until 2026-09-13 this stopped there with "no pmaports clone at ..." --
+		# which reads like something is broken rather than like the perfectly
+		# ordinary case of a fresh machine. It was reported by someone following
+		# the encrypted-install page, whose four commands start with git clone.
+		grey "  no local pmbootstrap checkout; cloning pmaports from upstream"
+		git clone --quiet --no-checkout "$PMAPORTS_URL" "$APORTS" ||
+			die "could not clone pmaports from $PMAPORTS_URL"
+	fi
 fi
 # pmbootstrap refuses to work with a pmaports checkout whose origin is not the
 # official URL, and --local leaves origin pointing at the source clone. Nothing
 # is ever fetched from it: the checkout stays pinned to upstream.lock.
-git -C "$APORTS" remote set-url origin https://gitlab.postmarketos.org/postmarketOS/pmaports.git
+git -C "$APORTS" remote set-url origin "$PMAPORTS_URL"
 git -C "$APORTS" checkout -q --detach "$LOCK"
 grey "  $APORTS at $(git -C "$APORTS" rev-parse --short HEAD)"
 
 title "Signing key"
-KEY="$(basename "$(ls "$REPO"/keys/*.rsa.pub 2>/dev/null | head -1)" .pub 2>/dev/null || true)"
+# THE KEY IN keys/ IS OURS, AND ITS PRIVATE HALF IS NOT IN THIS REPOSITORY.
+#
+# It is committed so phones can verify what we publish. Anyone else who clones
+# this and builds -- which is the whole encrypted-install route, where the image
+# has to be born on your own machine -- has the public half and no way to sign
+# with it. Until 2026-09-13 that ended in "the private half ... is missing",
+# which reads like something went wrong rather than like the obvious truth: it
+# is not your key, so make your own.
+# Pick the first key we can actually SIGN with, not simply the first file in
+# keys/. Once a second key lands there -- and the branch below puts one there --
+# "ls | head -1" is alphabetical order deciding which identity every package is
+# signed with, which is no way to decide anything.
+KEY=""
+for pub in "$REPO"/keys/*.rsa.pub; do
+	[ -f "$pub" ] || continue
+	k="$(basename "$pub" .pub)"
+	if [ -f "$HOME/.abuild/$k" ]; then KEY="$k"; break; fi
+done
+if [ -z "$KEY" ] && ls "$REPO"/keys/*.rsa.pub >/dev/null 2>&1; then
+	grey "  the key in keys/ is not yours (its private half is not here)"
+fi
 if [ -z "$KEY" ] || [ ! -f "$REPO/keys/$KEY.pub" ]; then
 	# abuild keys are plain RSA-4096; abuild-keygen does exactly this, so there is
 	# no need for a container just to make one.
-	KEY="utsugi-pmaports-$(printf '%08x' "$(date +%s)").rsa"
+	KEY="$(id -un)-pmaports-$(printf '%08x' "$(date +%s)").rsa"
 	mkdir -p "$REPO/keys" "$HOME/.abuild"
 	openssl genrsa -out "$HOME/.abuild/$KEY" 4096 2>/dev/null
 	chmod 600 "$HOME/.abuild/$KEY"
@@ -105,11 +153,31 @@ build_pkgs_on_install = False
 CONF
 # The custom mirror is only added once something has been published: pmbootstrap
 # aborts on a 404 index, so pointing at an empty repository breaks every command.
-if curl -fsI "$REPO_URL/$CHANNEL_DIR/$ARCH/APKINDEX.tar.gz" >/dev/null 2>&1; then
+# Asked with python3, which is already a hard requirement, rather than curl,
+# which is not. With curl missing this check simply took the "nothing
+# published" branch -- in silence -- and left the machine building every
+# package from source instead of downloading them, with nothing to say why.
+# Caught on 2026-09-13 running the documented commands in a container that
+# happened not to have curl.
+index_is_live() {
+	python3 -c 'import sys,urllib.request
+req = urllib.request.Request(sys.argv[1], method="HEAD")
+try:
+    with urllib.request.urlopen(req, timeout=15) as r:
+        sys.exit(0 if r.status == 200 else 1)
+except Exception:
+    sys.exit(1)' "$1" 2>/dev/null
+}
+if index_is_live "$REPO_URL/$CHANNEL_DIR/$ARCH/APKINDEX.tar.gz"; then
 	echo "pmaports_custom = $REPO_URL" >> "$PMB_CFG"
 	grey "  pmaports_custom = $REPO_URL (index is live)"
 else
 	grey "  pmaports_custom NOT set: nothing published at $REPO_URL yet."
 	grey "  scripts/publish adds it once the first index is up."
 fi
-green "Ready. Next: scripts/build --all"
+# Two audiences reach this line. Whoever maintains the repository builds and
+# publishes; whoever followed the encrypted-install page wants one image and
+# never touches publish. Saying only the first left that person guessing.
+green "Ready."
+grey  "  to build one image for yourself:   scripts/build-your-own-image [--encrypted]"
+grey  "  to build and publish packages:     scripts/build --all"
