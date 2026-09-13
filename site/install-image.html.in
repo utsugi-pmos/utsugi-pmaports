@@ -105,14 +105,16 @@ sudo fastboot reboot</pre>
 				<pre>.\fastboot devices           <b># must print your phone</b>
 .\fastboot erase dtbo        <i># MIUI's overlay would fight U-Boot</i>
 .\fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
-.\fastboot reboot</pre>
+.\fastboot reboot
+<b># not tested by me: reports welcome</b></pre>
 			</div></div>
 			<div class="pane"><div class="sh">
 				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
 				<pre>fastboot devices             <b># must print your phone</b>
 fastboot erase dtbo          <i># MIUI's overlay would fight U-Boot</i>
 fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
-fastboot reboot</pre>
+fastboot reboot
+<b># not tested by me: reports welcome</b></pre>
 			</div></div>
 		</div>
 		<p>Power on: you should get a text console complaining it has nothing to
@@ -168,7 +170,8 @@ sudo fastboot reboot</pre>
 				<pre>7z x @IMG@.xz             <i># or any unzipper that knows .xz</i>
 
 .\fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
-.\fastboot reboot</pre>
+.\fastboot reboot
+<b># not tested by me: reports welcome</b></pre>
 			</div>
 			<p>Run it from the folder platform-tools unpacked into, and install the
 			<b>Google USB Driver</b> first or <code>fastboot devices</code> prints
@@ -179,7 +182,8 @@ sudo fastboot reboot</pre>
 				<pre>xz -d @IMG@.xz            <i># brew install xz, if you have none</i>
 
 fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
-fastboot reboot</pre>
+fastboot reboot
+<b># not tested by me: reports welcome</b></pre>
 			</div>
 			<p>No <code>sudo</code>: macOS needs no udev rules. Get the tools with
 			<code>brew install --cask android-platform-tools</code>, or unpack
