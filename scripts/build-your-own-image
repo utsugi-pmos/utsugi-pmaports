@@ -25,9 +25,49 @@ REPO="$(cd "$(dirname "$0")/.." && pwd)"
 . "$REPO/scripts/lib.sh"
 
 title "Checking what is here"
-for prog in python3 git rsync; do
-	command -v "$prog" >/dev/null || die "$prog is missing"
+
+# THIS ONLY RUNS ON LINUX.
+#
+# pmbootstrap builds inside chroots, on loop devices, with binfmt: none of that
+# exists on macOS or Windows, and pmbootstrap's own README says WSL does not
+# work either. A virtual machine with a Linux in it does.
+[ "$(uname -s)" = Linux ] || die "this needs Linux.
+pmbootstrap builds in chroots on loop devices, which macOS and Windows do not
+have, and WSL is explicitly not supported. Run a Linux virtual machine.
+Flashing a ready-made image works fine from any of the three."
+
+# The whole list, checked here rather than twenty minutes into a build. These
+# are pmbootstrap's requirements, not ours -- taken from its README -- plus
+# rsync, which the overlay uses.
+missing=""
+for prog in python3 git rsync openssl tar ps losetup kpartx; do
+	command -v "$prog" >/dev/null 2>&1 || missing="$missing $prog"
 done
+if [ -n "$missing" ]; then
+	red "missing:$missing"
+	grey "  Debian/Ubuntu:  sudo apt install python3 git rsync openssl multipath-tools util-linux procps tar"
+	grey "  Fedora:         sudo dnf install python3 git rsync openssl device-mapper-multipath util-linux procps-ng tar"
+	grey "  Arch:           sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar"
+	die "install those and run this again"
+fi
+
+# git 2.46 or newer: pmbootstrap uses features older ones do not have, and the
+# failure without it lands deep inside a clone rather than here.
+gitver="$(git --version | awk '{print $3}')"
+[ "$(printf '%s\n2.46\n' "$gitver" | sort -V | head -1)" = 2.46 ] ||
+	die "git $gitver is too old; pmbootstrap needs 2.46 or newer"
+
+# /tmp has to be executable. Hardened systems mount it noexec and pmbootstrap
+# breaks in ways that do not name the cause.
+printf '#!/bin/sh\nexit 0\n' > /tmp/.utsugi-exec-test.$$ 2>/dev/null || true
+chmod +x /tmp/.utsugi-exec-test.$$ 2>/dev/null || true
+if [ -f /tmp/.utsugi-exec-test.$$ ] && ! /tmp/.utsugi-exec-test.$$ 2>/dev/null; then
+	rm -f /tmp/.utsugi-exec-test.$$
+	die "/tmp is mounted noexec, which pmbootstrap cannot work with.
+Either remount it exec, or run this with TMPDIR pointing somewhere executable:
+    TMPDIR=\$HOME/.tmp $0 $*"
+fi
+rm -f /tmp/.utsugi-exec-test.$$
 [ -f "$PMB" ] || die "pmbootstrap not found at $PMB.
 Get it with:
     git clone --depth 1 https://gitlab.postmarketos.org/postmarketOS/pmbootstrap.git ~/src/pmbootstrap
