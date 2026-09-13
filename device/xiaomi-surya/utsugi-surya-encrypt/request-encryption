@@ -1,0 +1,36 @@
+#!/bin/sh
+# Take the passphrase from the first-boot assistant and hand it to the
+# initramfs, then reboot. Runs as root through pkexec (see the polkit rule).
+#
+#   request-encryption            reads the passphrase from stdin, one line
+#   request-encryption --decline  remembers "not now" so the step stops showing
+#
+# The passphrase is written to a root-only file inside the root filesystem.
+# That file exists for exactly one reboot: the initramfs hook reads it before
+# the filesystem is mounted, encrypts, and deletes it from inside the
+# now-encrypted volume. It is never on the disk in the clear beyond that.
+set -eu
+DIR=/var/lib/utsugi-surya
+REQUEST=$DIR/encrypt-request
+DECLINED=$DIR/encryption-declined
+
+[ "$(id -u)" = 0 ] || { echo "this has to run as root (through pkexec)" >&2; exit 1; }
+umask 077
+mkdir -p "$DIR"
+
+if [ "${1:-}" = "--decline" ]; then
+	: > "$DECLINED"
+	rm -f /run/utsugi-surya/disk-is-not-encrypted
+	exit 0
+fi
+
+IFS= read -r passphrase || passphrase=""
+if [ "${#passphrase}" -lt 8 ]; then
+	echo "the passphrase has to be at least 8 characters" >&2
+	exit 2
+fi
+printf '%s' "$passphrase" > "$REQUEST"
+sync
+# The step is done for this boot; the reboot is what starts the work.
+rm -f /run/utsugi-surya/disk-is-not-encrypted
+systemctl reboot

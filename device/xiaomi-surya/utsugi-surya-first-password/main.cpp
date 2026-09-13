@@ -14,6 +14,7 @@
 #include <KLocalizedString>
 
 #include "passwd.h"
+#include "encrypt.h"
 
 int main(int argc, char *argv[])
 {
@@ -23,6 +24,7 @@ int main(int argc, char *argv[])
     KLocalizedString::setApplicationDomain(QByteArrayLiteral("utsugi-first-password"));
 
     qmlRegisterType<Passwd>("org.utsugi.firstpassword", 1, 0, "Passwd");
+    qmlRegisterType<Encrypt>("org.utsugi.firstpassword", 1, 0, "Encrypt");
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextObject(new KLocalizedContext(&engine));

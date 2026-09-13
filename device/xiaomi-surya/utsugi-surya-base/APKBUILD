@@ -22,7 +22,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # and the package no longer exists; asking for a package that is gone makes apk
 # abort the WHOLE transaction and the rest ends up uninstalled without warning.
 pkgname=utsugi-surya-base
-pkgver=6
+pkgver=7
 pkgrel=0
 pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras, power, the Plasma Mobile fixes and six applications"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
@@ -49,6 +49,7 @@ depends="
 	utsugi-surya-blackbox
 	utsugi-surya-plasma
 	utsugi-surya-first-password
+	utsugi-surya-encrypt
 	poconav
 	screenglaze
 	keepalive

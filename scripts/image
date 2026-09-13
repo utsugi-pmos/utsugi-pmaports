@@ -55,6 +55,26 @@ pmb config service_manager systemd
 # afterwards, in Settings, by whoever owns it.
 pmb config locale en_US.UTF-8
 pmb config timezone UTC
+
+# THE IMAGE SHIPS THE REAL FDE UNLOCKER, ENCRYPTED OR NOT.
+#
+# pmbootstrap adds postmarketos-base-nofde to every image built without --fde:
+# a dummy that satisfies the initramfs' "postmarketos-fde-unlocker" dependency
+# so that unl0kr stays out and the initramfs stays small. It does that whenever
+# pmaports.cfg says supported_base_nofde=True, and nothing else decides it.
+#
+# We need unl0kr in: it is what puts cryptsetup, unl0kr and fde-unlock into the
+# initramfs, and utsugi-surya-encrypt encrypts the phone ON the phone with
+# exactly those, at the boot after the first-boot step asks. The two packages
+# conflict -- both provide the same virtual, with different versions -- so the
+# only way to get unl0kr into a non-FDE image is to stop pmbootstrap adding the
+# dummy. That flag is in our own pmaports checkout, pinned at upstream.lock, so
+# flipping it there touches nothing anybody else uses.
+sed -i 's/^supported_base_nofde=True/supported_base_nofde=False/' "$APORTS/pmaports.cfg"
+grep -q '^supported_base_nofde=False' "$APORTS/pmaports.cfg" ||
+	die "could not turn supported_base_nofde off in $APORTS/pmaports.cfg"
+grey "  postmarketos-base-nofde disabled: the image gets unl0kr (cryptsetup in the initramfs)"
+
 pmb zap
 # Not --no-local-pkgs: pmbootstrap refuses it while any locally built package
 # exists, and the only way to satisfy it is to delete the whole package store,

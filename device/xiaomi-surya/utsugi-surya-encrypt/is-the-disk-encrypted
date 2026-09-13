@@ -1,0 +1,27 @@
+#!/bin/sh
+# Decide, once per boot, whether to offer encryption -- and leave a flag in
+# /run saying so. The assistant is conditioned on that flag; the decision needs
+# root (blkid on the root device) and the drawing does not, so they are split
+# the same way the shipped-password check is.
+set -u
+DIR=/var/lib/utsugi-surya
+FLAG=/run/utsugi-surya/disk-is-not-encrypted
+rm -f "$FLAG"
+
+# Already asked and declined, or already requested: nothing to offer.
+[ -e "$DIR/encryption-declined" ] && exit 0
+[ -e "$DIR/encrypt-request" ] && exit 0
+
+src="$(findmnt -no SOURCE / 2>/dev/null)"
+case "$src" in
+	/dev/mapper/*) exit 0 ;;           # opened by the initramfs: encrypted
+esac
+[ -n "$src" ] || exit 0
+type="$(blkid -o value -s TYPE "$src" 2>/dev/null)"
+[ "$type" = "crypto_LUKS" ] && exit 0
+
+# Only a filesystem the hook knows how to encrypt.
+[ "$type" = "ext4" ] || exit 0
+
+mkdir -p /run/utsugi-surya
+: > "$FLAG"

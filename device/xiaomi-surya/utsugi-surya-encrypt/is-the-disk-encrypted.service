@@ -1,0 +1,15 @@
+[Unit]
+Description=Decide whether to offer disk encryption on this boot
+Before=graphical.target
+DefaultDependencies=no
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utsugi-surya/is-the-disk-encrypted
+ProtectSystem=strict
+ReadWritePaths=/run
+PrivateTmp=yes
+
+[Install]
+WantedBy=graphical.target

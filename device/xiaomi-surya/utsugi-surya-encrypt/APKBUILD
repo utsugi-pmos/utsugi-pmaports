@@ -1,0 +1,77 @@
+# Maintainer: Dr. Utsugi <cidwel@gmail.com>
+#
+# Encrypt the phone on the phone: a first-boot step asks, and the initramfs
+# does it in place at the next boot. The image people download stays an
+# ordinary unencrypted one, and the LUKS master key is born on the device that
+# will use it -- which is the only place it should ever exist.
+#
+# Three pieces, split by what needs privilege:
+#
+#   50-utsugi-encrypt.sh     the initramfs hook. Runs before the root is
+#                            mounted, which is the only time it can be
+#                            encrypted. cryptsetup reencrypt, in place,
+#                            resumable if interrupted.
+#   request-encryption       root, through pkexec: writes the passphrase where
+#                            the hook reads it and reboots. One file, one
+#                            reboot, deleted from inside the encrypted volume.
+#   is-the-disk-encrypted    root, once per boot: leaves a flag in /run that
+#                            the assistant (utsugi-surya-first-password) is
+#                            conditioned on.
+#
+# unl0kr is a hard dependency and not a suggestion: it is what puts cryptsetup,
+# unl0kr and fde-unlock INTO the initramfs (its 30-unl0kr.files list), and
+# without them the hook has nothing to encrypt with and the next boot has
+# nothing to draw the keyboard with. The unencrypted image used to install
+# postmarketos-base-nofde instead, a dummy that keeps unl0kr out; scripts/image
+# turns that off, and the two conflict, so a phone flashed before this needs
+# 'apk del postmarketos-base-nofde' once (surya-setup --upgrade does it).
+pkgname=utsugi-surya-encrypt
+pkgver=1
+pkgrel=0
+pkgdesc="Encrypt the phone's storage from the first-boot assistant"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+depends="unl0kr cryptsetup e2fsprogs-extra polkit util-linux-misc"
+options="!check"
+subpackages="$pkgname-systemd"
+source="50-utsugi-encrypt.sh
+	request-encryption
+	is-the-disk-encrypted
+	org.utsugi.surya.encrypt.policy
+	50-utsugi-surya-encrypt.rules
+	is-the-disk-encrypted.service
+	80-utsugi-surya-encrypt.preset
+	"
+
+package() {
+	# The hook. /usr/share/mkinitfs/* is a trigger directory: installing this
+	# regenerates the initramfs, so the hook is in place at the next boot.
+	install -Dm755 "$srcdir"/50-utsugi-encrypt.sh \
+		-t "$pkgdir"/usr/share/mkinitfs/hooks-extra/
+	install -Dm755 "$srcdir"/request-encryption "$srcdir"/is-the-disk-encrypted \
+		-t "$pkgdir"/usr/libexec/utsugi-surya/
+	install -Dm644 "$srcdir"/org.utsugi.surya.encrypt.policy \
+		-t "$pkgdir"/usr/share/polkit-1/actions/
+	# /usr/share, not /etc: /etc/polkit-1/rules.d is the administrator's.
+	install -Dm644 "$srcdir"/50-utsugi-surya-encrypt.rules \
+		-t "$pkgdir"/usr/share/polkit-1/rules.d/
+}
+
+systemd() {
+	pkgdesc="$pkgdesc (system unit)"
+	install_if="$pkgname=$pkgver-r$pkgrel systemd"
+	install -Dm644 "$srcdir"/is-the-disk-encrypted.service \
+		-t "$subpkgdir"/usr/lib/systemd/system/
+	install -Dm644 "$srcdir"/80-utsugi-surya-encrypt.preset \
+		-t "$subpkgdir"/usr/lib/systemd/system-preset/
+}
+sha512sums="
+4c5f490b5fa8c2c7dfa30bac9a9ab8a255dee7e747cd13e6da38651e49e02be7179870f4779a981ecc66380cd3a5e7d57ce615a5f22ea77606eb4b20ce600588  50-utsugi-encrypt.sh
+a289bac64f77eec7910a70ab796d552b77122c80db3ee8acb1c953d813312baf8d6d4ef2f7bbbea034ec477c2c76f1c17ee3baaa7a90920c3bd00d52c95bd948  request-encryption
+d61b5cc3282d3f2ed6356c869f21217b4d4eff80fba4c2a258b2c4110f65f54ed7aee74da69ddca34b09615cfad9784259ce270ae8f3e2dcf9623d1acc2e3d98  is-the-disk-encrypted
+979b1284d64d962a5619bccb489a46b5645979199812e807afb3fc0df951051b338a984d1a0ea612d2ab53884c1bd43da7bdf75ec17ebd72b77b4b964355b157  org.utsugi.surya.encrypt.policy
+bc3e42867c4313ef2f51b691fedfb43f7775f81d30e356d4b98cd42ccc205d35ad385b53986c8bca3bbf590d8e6f5b2beebc7c1dc731a0b41b5e60ca1badeee7  50-utsugi-surya-encrypt.rules
+09ba0d343ca2f223c417b46d05af2aa6bf4f5d433ac1a29845904e8b55a42ce8671c8360cd4c6bca9a19ba11b3be3068777b55d8b198ae7371b9e5a1cca3566a  is-the-disk-encrypted.service
+7d67ac90182e56c4394e3d5f337ced3bdd6ed3d049cf2f96830cc32cb3def6c43ed2a4059e3a2bfff8f64e4d7141e01c8664ef588e6749b685843c937e51fa12  80-utsugi-surya-encrypt.preset
+"
