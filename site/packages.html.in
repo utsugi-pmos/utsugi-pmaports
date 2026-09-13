@@ -87,13 +87,6 @@
 			you plug in a phone that is off, the hardware watchdog so a hang does not need
 			a person, the USB-C direction switch (the connector was source-only and the
 			phone fed the laptop), and the power-saving profile.</td></tr>
-			<tr><td class="mono">utsugi-surya-wifi</td><td>The country's radio rules, so
-			5 GHz works. With none set, cfg80211 uses the world domain, where the
-			channels of UNII-1 (36-48) may not be transmitted on -- so an active scan
-			never probes them and the networks are simply absent. From the outside that
-			is indistinguishable from a phone with no 5 GHz radio. The country is read
-			from the timezone, which is the one setting that already says where the
-			phone is, and is re-read when you change it.</td></tr>
 			<tr><td class="mono">utsugi-surya-camera</td><td>The rear autofocus, as a
 			user-space engine against a measured curve. It has to be a service: the driver
 			returns the lens to origin and powers the chip off the moment the node is
