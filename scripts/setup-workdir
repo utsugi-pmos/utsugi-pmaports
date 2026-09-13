@@ -119,12 +119,6 @@ fi
 # thing, below: handing the signing key to the uid that builds inside the
 # chroot. pmbootstrap will want it again later for chroots and loop devices --
 # none of this flow works without it.
-if ! sudo -n true 2>/dev/null; then
-	grey "  sudo, once, for a single chown: the signing key has to belong to the"
-	grey "  uid that builds inside the chroot (12345), and giving a file to"
-	grey "  another user is the one thing only root can do. Everything else here"
-	grey "  is yours already. pmbootstrap asks again later, for the chroots."
-fi
 # No sudo for the copies. On a re-run the previous ones are owned by uid 12345
 # and cannot be written over -- but this directory belongs to you, and in a
 # directory you own you may delete anything regardless of who owns it. Remove
@@ -150,10 +144,33 @@ for pub in "$REPO"/keys/*.rsa.pub; do
 	[ -f "$pub" ] || continue
 	install -m644 "$pub" "$WORK/config_apk_keys/$(basename "$pub")"
 done
-# abuild signs as the chroot's "pmos" user, which is uid 12345, not ours. A key
-# readable only by the host user fails at the very last step of the build, after
-# everything has already compiled: "failed to sign ... Permission denied".
-sudo chown 12345:12345 "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+# LETTING THE CHROOT'S BUILD USER READ THE SIGNING KEY.
+#
+# abuild signs as "pmos" inside the chroot, which is uid 12345 and not you. The
+# private key is mode 600, so that uid cannot read it, and the build then fails
+# at its very last step -- after everything has compiled -- with
+# "failed to sign ... Permission denied".
+#
+# An ACL says "this one uid may read this one file" and a user can set that on
+# their own file, no root involved. The key stays unreadable to everybody else:
+#
+#   user::rw-   user:pmos:r--   group::---   other::---
+#
+# chown needs root because giving a file AWAY is privileged; granting read
+# access to it is not. Preferred for that reason alone.
+#
+# The fallback is there because ACLs need filesystem support: ext4, btrfs and
+# xfs have it on by default, and something exotic or a filesystem mounted
+# noacl does not.
+if command -v setfacl >/dev/null 2>&1 &&
+   setfacl -m u:12345:r "$WORK/config_abuild/$KEY" 2>/dev/null; then
+	setfacl -m u:12345:r "$WORK/config_abuild/$KEY.pub" 2>/dev/null || true
+	grey "  build user granted read access to the key by ACL (no root needed)"
+else
+	grey "  no usable ACL here, so the key is handed over with chown, which"
+	grey "  needs root. This is the only thing sudo is used for."
+	sudo chown 12345:12345 "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+fi
 # Written before the first build on purpose: pmbootstrap only generates its own
 # throwaway pmos@local key when this file does not exist.
 cat > "$WORK/config_abuild/abuild.conf" <<CONF
