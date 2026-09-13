@@ -37,9 +37,26 @@
 		whoever built it the master key of every phone flashed from it.</p>
 		<p>Yours has to be born on your machine. One command.</p>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>Build it</h2></div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>What you need</h2></div>
+		<p><b>A Linux PC.</b> Not macOS, not Windows, and not WSL &mdash; pmbootstrap
+		builds inside chroots on loop devices, which those do not have, and its own
+		documentation rules WSL out. A Linux virtual machine works. (Flashing a
+		ready-made image needs none of this and works from all three.)</p>
+		<p>About <b>15 GB free</b> and <b>an hour</b>, most of it the kernel. And these,
+		which the script checks before it starts rather than twenty minutes in:</p>
+		<div class="scroll">
+		<table>
+			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl multipath-tools util-linux procps tar</td></tr>
+			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl device-mapper-multipath util-linux procps-ng tar</td></tr>
+			<tr><th>Arch</th><td class="mono">sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar</td></tr>
+		</table>
+		</div>
+		<p>Nothing else has to be set up first: <code>setup-workdir</code> fetches
+		pmbootstrap and pmaports itself, and makes you a signing key of your own.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>Build it</h2></div>
 		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<div class="bar"><i></i><span>ON YOUR LINUX PC</span></div>
 			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
 cd utsugi-pmaports
 scripts/setup-workdir
@@ -51,7 +68,7 @@ scripts/build-your-own-image --encrypted</pre>
 		loop file on <code>userdata</code>, and <code>unl0kr</code> draws its keyboard
 		on this panel.</p>
 
-		<div class="h" style="margin-top:34px"><span>03</span><h2>What it costs</h2></div>
+		<div class="h" style="margin-top:34px"><span>04</span><h2>What it costs</h2></div>
 		<div class="note"><i></i><div>
 			<b>A stuck kernel workqueue takes the whole filesystem with it.</b>
 			On 2026-09-10 an ADSP crash whose recovery deadlocked left this phone frozen
