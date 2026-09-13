@@ -1,20 +1,56 @@
 #!/bin/sh
-# pmbootstrap runs this instead of sudo (PMB_SUDO). It adds -A so sudo goes
-# through SUDO_ASKPASS rather than demanding a terminal.
+# pmbootstrap runs this instead of sudo (PMB_SUDO).
 #
-# And with UTSUGI_SHOW_ROOT=1 it prints every command before running it. That is
-# the honest answer to "what is this thing doing as root on my machine?": not a
-# promise, a transcript. A build prints a few hundred lines of it -- mounts,
-# chroots, losetup, mkfs -- and every one of them is visible before it runs.
+# Three behaviours, and the default is the ordinary one:
 #
-#     UTSUGI_SHOW_ROOT=1 scripts/build-your-own-image --encrypted
+#   (nothing set)        sudo -A, so sudo can ask through SUDO_ASKPASS rather
+#                        than demanding a terminal pmbootstrap does not give it.
 #
-# UTSUGI_ROOT_LOG=<file> appends them instead, which is easier to read
-# afterwards than a build's worth of scrollback.
+#   UTSUGI_SHOW_ROOT=1   print each command before running it. A transcript of
+#                        what ran as root beats a promise about what will.
+#                        UTSUGI_ROOT_LOG=<file> appends them with timestamps.
+#
+#   UTSUGI_NO_SUDO=1     never call sudo. Print the command, wait for you to run
+#                        it in another terminal, and carry on when you press
+#                        enter. Nothing touches root without you typing it.
+#
+# The last one is for people who would rather not hand a downloaded script their
+# password at all. It works, and it is a lot of work: measured on 2026-09-13, a
+# build reaches the partitioning step after **366** privileged commands -- 74
+# mounts, 56 mkdirs, 41 touches, 14 mknods -- and each has to happen at its own
+# moment in the sequence. Pasting all of them by hand is possible and nobody
+# will do it twice.
+#
+# UTSUGI_SHOW_ROOT is the practical version of the same wish: you see all 366,
+# you just do not type them.
+set -u
+
 if [ -n "${UTSUGI_SHOW_ROOT:-}" ]; then
 	printf '\033[90m  [root] %s\033[0m\n' "$*" >&2
 fi
 if [ -n "${UTSUGI_ROOT_LOG:-}" ]; then
 	printf '%s  %s\n' "$(date -Is)" "$*" >> "$UTSUGI_ROOT_LOG"
 fi
+
+if [ -n "${UTSUGI_NO_SUDO:-}" ]; then
+	# /dev/tty and not stdin: pmbootstrap has piped this process's stdin, so
+	# reading from it would return immediately and answer nothing.
+	# Opened, not merely tested for: /dev/tty exists as a character device even
+	# where there is no controlling terminal behind it, and "-c /dev/tty" is
+	# true right up until the open fails.
+	if ! { exec 3<>/dev/tty; } 2>/dev/null; then
+		printf '\033[31m  UTSUGI_NO_SUDO needs a terminal to ask on, and this\n' >&2
+		printf '  process has none. Run the build from a terminal.\033[0m\n' >&2
+		exit 1
+	fi
+	{
+		printf '\n\033[1m  This has to run as root. Run it yourself:\033[0m\n\n'
+		printf '      sudo %s\n\n' "$*"
+		printf '\033[90m  Then press enter here to carry on.\033[0m '
+	} >&3
+	read -r _ <&3 || true
+	exec 3>&-
+	exit 0
+fi
+
 exec sudo -A "$@"

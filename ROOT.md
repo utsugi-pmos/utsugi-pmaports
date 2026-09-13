@@ -114,6 +114,23 @@ scrollback.
 It is not a promise about what the tool does. It is a transcript of what it
 did.
 
+### Or refuse sudo entirely
+
+```sh
+UTSUGI_NO_SUDO=1 scripts/build-your-own-image --encrypted
+```
+
+Nothing calls `sudo`. Each privileged command is printed, and the build waits
+while you run it in another terminal and press enter.
+
+**Know what you are choosing.** Measured on 2026-09-13, a build reaches the
+partitioning step after **366** privileged commands: 74 mounts, 62 environment
+wrappers, 56 `mkdir`, 41 `touch`, 18 `umount`, 14 `mknod`. Each has to happen at
+its own moment in the sequence. It works, and nobody will do it twice.
+
+`UTSUGI_SHOW_ROOT` is the practical version of the same wish: you see all 366,
+you just do not type them.
+
 ---
 
 ## 2. The build environment — `chroot`, `mount`, `mknod`

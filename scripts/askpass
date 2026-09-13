@@ -6,7 +6,12 @@
 # The password lives in .local/credentials (gitignored), never in this file.
 [ -n "${PMB_PW:-}" ] || {
 	D="$(cd "$(dirname "$0")/.." && pwd)"
-	for f in "$D/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credentials.local"; do
+	# UTSUGI_CREDENTIALS points at your own file; the default lives beside this
+	# repository and is gitignored. A path into one particular person's home
+	# directory used to be hardcoded here, which is no business of a public
+	# repository.
+	for f in "${UTSUGI_CREDENTIALS:-}" "$D/.local/credentials"; do
+		[ -n "$f" ] || continue
 		[ -f "$f" ] && . "$f" && break
 	done
 }

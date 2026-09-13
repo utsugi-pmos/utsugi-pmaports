@@ -47,7 +47,7 @@ if [ -n "$KERNEL" ]; then
   Have the way back in ARMED BEFORE rebooting:
 
       systemd-run --user --unit=rescue \
-          ~/projects/vayu-postmarketos/surya/boot/rescue-over-usb
+          <the research repository>/surya/boot/rescue-over-usb
       journalctl --user -u rescue -f
 
 WARN
