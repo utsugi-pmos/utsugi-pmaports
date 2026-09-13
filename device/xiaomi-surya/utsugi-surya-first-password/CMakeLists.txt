@@ -18,7 +18,7 @@ include(KDEInstallDirs)
 include(KDECMakeSettings)
 include(KDECompilerSettings NO_POLICY_SCOPE)
 
-find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core Gui Qml Quick QuickControls2 Widgets)
+find_package(Qt6 ${QT_MIN_VERSION} REQUIRED COMPONENTS Core DBus Gui Qml Quick QuickControls2 Widgets)
 find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS I18n Kirigami)
 
 qt_standard_project_setup(REQUIRES 6.6)
@@ -35,6 +35,7 @@ qt_add_qml_module(utsugi-first-password
 # pipe, so a real terminal is not optional here.
 target_link_libraries(utsugi-first-password PRIVATE
 	Qt::Core
+	Qt::DBus
 	Qt::Gui
 	Qt::Quick
 	Qt::QuickControls2
