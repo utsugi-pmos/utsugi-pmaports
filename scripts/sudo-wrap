@@ -1,4 +1,20 @@
 #!/bin/sh
-# pmbootstrap runs this instead of sudo (PMB_SUDO). It only adds -A, so sudo
-# goes through SUDO_ASKPASS rather than demanding a terminal.
+# pmbootstrap runs this instead of sudo (PMB_SUDO). It adds -A so sudo goes
+# through SUDO_ASKPASS rather than demanding a terminal.
+#
+# And with UTSUGI_SHOW_ROOT=1 it prints every command before running it. That is
+# the honest answer to "what is this thing doing as root on my machine?": not a
+# promise, a transcript. A build prints a few hundred lines of it -- mounts,
+# chroots, losetup, mkfs -- and every one of them is visible before it runs.
+#
+#     UTSUGI_SHOW_ROOT=1 scripts/build-your-own-image --encrypted
+#
+# UTSUGI_ROOT_LOG=<file> appends them instead, which is easier to read
+# afterwards than a build's worth of scrollback.
+if [ -n "${UTSUGI_SHOW_ROOT:-}" ]; then
+	printf '\033[90m  [root] %s\033[0m\n' "$*" >&2
+fi
+if [ -n "${UTSUGI_ROOT_LOG:-}" ]; then
+	printf '%s  %s\n' "$(date -Is)" "$*" >> "$UTSUGI_ROOT_LOG"
+fi
 exec sudo -A "$@"
