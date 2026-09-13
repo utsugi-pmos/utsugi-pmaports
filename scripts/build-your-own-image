@@ -45,8 +45,8 @@ for prog in python3 git rsync openssl tar ps losetup kpartx; do
 done
 if [ -n "$missing" ]; then
 	red "missing:$missing"
-	grey "  Debian/Ubuntu:  sudo apt install python3 git rsync openssl multipath-tools util-linux procps tar"
-	grey "  Fedora:         sudo dnf install python3 git rsync openssl device-mapper-multipath util-linux procps-ng tar"
+	grey "  Debian/Ubuntu:  sudo apt install python3 git rsync openssl kpartx util-linux procps tar"
+	grey "  Fedora:         sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar"
 	grey "  Arch:           sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar"
 	die "install those and run this again"
 fi
