@@ -13,7 +13,7 @@
 # nothing could have.
 pkgname=utsugi-surya-wifi
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Apply the country's radio rules so 5 GHz works"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -43,7 +43,7 @@ systemd() {
 		-t "$subpkgdir"/usr/lib/systemd/system-preset/
 }
 sha512sums="
-bfec439ba85408ef4436a3cd0b35b60081088ad8c0b26412201d34fb6847844cf3a8f3e6391d7136d8efbe7347213d59358071765fcbb4738ff418c6d50dfae5  set-wifi-country
+93107f248a56df0a303973924ac2fb2e9edc2f69388d23c207f10c5b10aa64d8e22f9aa413a5140f94465dff21faf1f8ed98c46ca1f9d7bcb0c8f8b41aa242a9  set-wifi-country
 463c1ddbea16808ae6e11a46b587e9bb950dc88b42c7f1db28282772b15845d54dbe901b2d6f4e7da9a6de7d748b03f86e01cdf89b8befcca8d99f767dde2ca7  wifi-country.service
 2946e918929b8d33d2dad576633d8369238b03a568283549e33bfd9a17f7a4a4e772a0791d5f8943288e66a21f4e91727cffa3e6355e7c8a0022e6eb2d5550d1  wifi-country.path
 fa66975563627401022eea8e94a1d851e952cd3d05a05aacaf203c171f8b5c572f5181ed33dd322dc509d5dc2fec857c6c7f303bb9a96cf967eba308b762521f  80-utsugi-surya-wifi.preset
