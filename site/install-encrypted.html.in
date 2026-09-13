@@ -48,9 +48,9 @@
 		which the script checks before it starts:</p>
 		<div class="scroll">
 		<table>
-			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl kpartx util-linux procps tar</td></tr>
-			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar</td></tr>
-			<tr><th>Arch</th><td class="mono">sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar</td></tr>
+			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl kpartx util-linux procps tar xz-utils</td></tr>
+			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar xz</td></tr>
+			<tr><th>Arch</th><td class="mono">sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar xz</td></tr>
 		</table>
 		</div>
 		<p>Nothing else has to be set up first: <code>setup-workdir</code> fetches
@@ -72,7 +72,10 @@ scripts/build-your-own-image --encrypted</pre>
 
 		<div class="h" style="margin-top:34px"><span>04</span><h2>Why it asks for your password</h2></div>
 		<p>A script you cloned five minutes ago asking for <code>sudo</code> is a
-		fair reason to stop. Here is every use of it, at a glance;
+		fair reason to stop. Four kinds of thing need it, listed here &mdash; and a
+		build runs them <b>366 times</b> before it reaches partitioning, which
+		<code>UTSUGI_SHOW_ROOT=1</code> will show you one line at a time.
+		At a glance;
 		<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/ROOT.md">ROOT.md</a>
 		explains each one properly, including what happens if you refuse. Check it
 		against <code>grep -n sudo scripts/*</code> and against
