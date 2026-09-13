@@ -1,0 +1,10 @@
+// The person at the screen, in the phone's own group, may ask for the disk to
+// be encrypted without typing a password: they just chose one, in the step
+// right before this one, and the request is a file plus a reboot -- nothing
+// the phone's owner cannot already do from the power menu.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.utsugi.surya.encrypt" &&
+        subject.local && subject.active && subject.isInGroup("wheel")) {
+        return polkit.Result.YES;
+    }
+});

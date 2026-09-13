@@ -1,0 +1,187 @@
+#!/bin/sh
+# Encrypt the root filesystem in place, on the phone, at boot.
+#
+# Runs from the initramfs as /hooks-extra/50-utsugi-encrypt.sh: after
+# mount_subpartitions has found the root partition and BEFORE anything unlocks
+# or mounts it. That is the only moment a root filesystem can be encrypted --
+# it cannot be done while it is mounted, and once init_2nd continues it will be.
+#
+# WHY HERE AND NOT ON A PC
+# ------------------------
+# The LUKS master key is generated when the container is formatted. Doing that
+# on a PC means the person who built the image holds the key of every phone
+# flashed from it, so an encrypted image cannot be handed out. Doing it here
+# means the key is born on the phone that will use it, the image downloaded is
+# an ordinary unencrypted one, and nobody's PC needs Linux, pmbootstrap or root.
+#
+# HOW IT IS ASKED FOR
+# -------------------
+# The first-boot assistant writes the chosen passphrase to
+# /var/lib/utsugi-surya/encrypt-request (root, 0600) and reboots. This hook
+# mounts the root read-only, takes that file, and does the work. The file is
+# removed afterwards from inside the now-encrypted filesystem, so it never sits
+# on an unencrypted disk past this boot.
+#
+# WHAT IT DOES, IN ORDER
+# ----------------------
+#   1. refuse politely if the battery is low and the charger is out: an
+#      interrupted encryption is resumable, but why start one that way
+#   2. e2fsck, because resize2fs refuses a filesystem it has not checked
+#   3. shrink the filesystem by 32 MiB to make room for the LUKS2 header
+#      (cryptsetup's own documented figure)
+#   4. cryptsetup reencrypt --encrypt: the data is encrypted in place
+#   5. open it as /dev/mapper/root, so init_2nd's unlock step finds it already
+#      open and does not ask for the passphrase again this boot
+#   6. delete the request and write /etc/crypttab, from inside
+#
+# From the next boot on, the stock initramfs sees TYPE=crypto_LUKS, calls
+# fde-unlock, and unl0kr draws the keyboard on this panel. Nothing here has to
+# be remembered by anyone.
+#
+# IF IT IS INTERRUPTED
+# --------------------
+# LUKS2 online reencryption keeps its own journal. If the phone dies halfway,
+# the partition is already LUKS with a "reencrypt in progress" flag; the next
+# boot lands in the crypto_LUKS branch below, asks for the passphrase, and
+# resumes. The watchdog is no danger during this: the kernel keeps it fed
+# until userspace opens it (CONFIG_WATCHDOG_HANDLE_BOOT_ENABLED), and nothing
+# in the initramfs does.
+#
+# Plain POSIX sh: the initramfs shell is busybox.
+
+. /init_functions.sh
+
+REQUEST=var/lib/utsugi-surya/encrypt-request
+MNT=/tmp/utsugi-encrypt-root
+PW=/tmp/utsugi-encrypt-passphrase
+
+say() { echo "utsugi-encrypt: $*"; splash_set_message "$1"; }
+
+cleanup() {
+	umount "$MNT" 2>/dev/null
+	rm -f "$PW"
+}
+
+find_root_partition ROOT
+[ -n "$ROOT" ] || exit 0
+
+TYPE="$(get_partition_type "$ROOT")"
+
+case "$TYPE" in
+crypto_LUKS)
+	# Already encrypted. The only thing to do is finish an interrupted one.
+	if cryptsetup luksDump "$ROOT" 2>/dev/null | grep -q "online-reencrypt"; then
+		say "Finishing the encryption that was interrupted.\nEnter the passphrase you chose."
+		splash_hide
+		until unl0kr | cryptsetup reencrypt --resume-only --batch-mode --key-file - "$ROOT"; do
+			echo "utsugi-encrypt: resume failed, asking again"
+		done
+		say "Encryption complete."
+	fi
+	exit 0
+	;;
+ext4)
+	;;
+*)
+	# Not something this knows how to encrypt. Leave it alone.
+	exit 0
+	;;
+esac
+
+# Is there a request? Look inside the filesystem, read-only, and get out.
+mkdir -p "$MNT"
+modprobe ext4 2>/dev/null
+mount -o ro "$ROOT" "$MNT" 2>/dev/null || exit 0
+if [ -f "$MNT/$REQUEST" ]; then
+	umask 077
+	cat "$MNT/$REQUEST" > "$PW"
+fi
+umount "$MNT"
+[ -s "$PW" ] || { rm -f "$PW"; exit 0; }
+
+# Power. Encrypting a few gigabytes on a phone takes a while, and a phone that
+# dies halfway through is recoverable (see above) but it is not a good start.
+cap="$(cat /sys/class/power_supply/qcom_qg/capacity 2>/dev/null || echo 100)"
+online="$(cat /sys/class/power_supply/pm8150b-charger/online 2>/dev/null || echo 0)"
+if [ "$online" != 1 ] && [ "${cap:-100}" -lt 40 ]; then
+	say "Not encrypting yet: battery at ${cap}% and no charger.\nPlug it in and restart, and it will start."
+	sleep 6
+	cleanup
+	exit 0
+fi
+
+modprobe dm-crypt 2>/dev/null
+modprobe dm-mod 2>/dev/null
+
+say "Encrypting this phone.\nDo not turn it off. This takes a while."
+
+# 2. Check first: resize2fs refuses to touch a filesystem that has not been.
+e2fsck -fy "$ROOT" >/dev/null 2>&1
+rc=$?
+if [ "$rc" -ge 4 ]; then
+	say "Cannot encrypt: the filesystem check failed (code $rc).\nStarting normally."
+	sleep 6; cleanup; exit 0
+fi
+
+# 3. Shrink by 32 MiB. The device size comes from sysfs in 512-byte sectors
+#    whatever the disk's logical sector size is, which matters on this phone
+#    (UFS, 4096). resize2fs takes K without ambiguity.
+name="$(basename "$ROOT")"
+sectors="$(cat "/sys/class/block/$name/size" 2>/dev/null)"
+if [ -z "$sectors" ]; then
+	# A device-mapper path: resolve the dm-N name
+	dm="$(readlink -f "$ROOT")"; name="$(basename "$dm")"
+	sectors="$(cat "/sys/class/block/$name/size" 2>/dev/null)"
+fi
+if [ -z "$sectors" ]; then
+	say "Cannot encrypt: could not read the device size.\nStarting normally."
+	sleep 6; cleanup; exit 0
+fi
+newk=$(( sectors / 2 - 32768 ))
+if ! resize2fs "$ROOT" "${newk}K" >/dev/null 2>&1; then
+	say "Cannot encrypt: making room for the header failed.\nStarting normally."
+	sleep 6; cleanup; exit 0
+fi
+
+# 4. The encryption itself. Progress goes to a file and from there to the
+#    splash every few seconds; busybox sh has no PIPESTATUS, so the exit code
+#    is taken from wait rather than from a pipeline.
+PROG=/tmp/utsugi-encrypt-progress
+: > "$PROG"
+cryptsetup reencrypt --encrypt --reduce-device-size 32M --batch-mode \
+	--progress-frequency 5 --key-file "$PW" "$ROOT" > "$PROG" 2>&1 &
+pid=$!
+while kill -0 "$pid" 2>/dev/null; do
+	pct="$(tr '\r' '\n' < "$PROG" | grep -o '[0-9.]*%' | tail -1)"
+	[ -n "$pct" ] && splash_set_message "Encrypting this phone: $pct\nDo not turn it off."
+	sleep 5
+done
+wait "$pid"
+rc=$?
+if [ "$rc" -ne 0 ]; then
+	say "Encryption failed (cryptsetup: $rc).\nThe phone will start; try again from Settings."
+	echo "utsugi-encrypt: cryptsetup output:"; cat "$PROG"
+	sleep 8; cleanup; exit 0
+fi
+
+# 5. Open it, the same way fde-unlock does, so the unlock step sees it open.
+cryptsetup --perf-no_read_workqueue --perf-no_write_workqueue \
+	open "$ROOT" root --key-file "$PW" || {
+	say "Encrypted, but could not open it now.\nRestart and enter the passphrase."
+	sleep 6; cleanup; reboot -f
+}
+
+# 6. From inside: forget the request, record the volume. resize2fs is left to
+#    init_2nd, which grows the filesystem to fill the container on this boot.
+mount /dev/mapper/root "$MNT" && {
+	rm -f "$MNT/$REQUEST"
+	uuid="$(cryptsetup luksUUID "$ROOT")"
+	if ! grep -qs "^root " "$MNT/etc/crypttab"; then
+		printf 'root UUID=%s none luks\n' "$uuid" >> "$MNT/etc/crypttab"
+	fi
+	: > "$MNT/var/lib/utsugi-surya/encrypted-on-first-boot"
+	umount "$MNT"
+}
+rm -f "$PW" "$PROG"
+say "Encrypted. Starting up."
+exit 0

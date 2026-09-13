@@ -154,6 +154,18 @@
 		<code>ssh</code>, which the dialog says out loud, because that is the part nobody
 		can see.</p>
 
+		<h3>utsugi-surya-encrypt &mdash; encrypt it on the phone</h3>
+		<p>The second first-boot step, right after the password: <i>encrypt this
+		phone?</i> Say yes, choose a passphrase, and at the next restart the
+		initramfs encrypts the storage in place, before anything mounts it. From
+		then on the boot asks for the passphrase on the screen, before the PIN.</p>
+		<p>This is why there is no encrypted image to download and never will be:
+		a LUKS master key is made when the volume is formatted, and here that
+		happens on the phone that will use it &mdash; the only place it should ever
+		exist. The image you flash is the ordinary one. Nobody's PC is involved.</p>
+		<p>It refuses politely on a low battery with no charger, resumes by itself if
+		the phone dies halfway, and "not now" is for good.</p>
+
 		<h3>utsugi-surya-plasma &mdash; the fixes</h3>
 		<p>What a Plasma Mobile install on this phone is missing. None of it is a
 		preference: every item was something that did not work, and it lands in
