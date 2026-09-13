@@ -113,20 +113,36 @@ apkbuild_version() {
 }
 
 # pmbootstrap needs sudo and runs without a terminal, so sudo must be able to ask
-# for the password through SUDO_ASKPASS. Only wired up when a password is
-# actually available; otherwise the normal interactive sudo is left alone.
+# for the password through SUDO_ASKPASS.
 setup_sudo() {
+	# ALWAYS route pmbootstrap's privileged calls through the wrapper.
+	#
+	# It used to be wired up only when sudo was not already cached, which meant
+	# UTSUGI_SHOW_ROOT and UTSUGI_NO_SUDO -- the two things that let somebody
+	# watch or withhold what runs as root -- did nothing in the ordinary case,
+	# where sudo IS cached. The wrapper is a pass-through unless one of those is
+	# set, so there is no cost to always using it.
+	PMB_SUDO="$REPO/scripts/sudo-wrap"
+	export PMB_SUDO
+
+	[ -n "${UTSUGI_NO_SUDO:-}" ] && { grey "  root commands will be printed for you to run (UTSUGI_NO_SUDO)"; return 0; }
 	sudo -n true 2>/dev/null && return 0
-	for f in "$REPO/.local/credentials" "$HOME/projects/vayu-postmarketos/surya/audio/credentials.local"; do
+
+	# A password file, if there is one. UTSUGI_CREDENTIALS points at it; the
+	# default lives beside this repository and is gitignored. There used to be a
+	# second path hardcoded here into one particular person's home directory,
+	# which is no business of a public repository.
+	for f in "${UTSUGI_CREDENTIALS:-}" "$REPO/.local/credentials"; do
+		[ -n "$f" ] || continue
 		if [ -f "$f" ] && grep -q '^PMB_PW=' "$f"; then
 			SUDO_ASKPASS="$REPO/scripts/askpass"
-			PMB_SUDO="$REPO/scripts/sudo-wrap"
-			export SUDO_ASKPASS PMB_SUDO
+			export SUDO_ASKPASS
 			grey "  sudo through SUDO_ASKPASS (pmbootstrap has no tty)"
 			return 0
 		fi
 	done
-	grey "  note: no cached sudo and no PMB_PW; pmbootstrap may block asking for it"
+	grey "  note: sudo is not cached. pmbootstrap will ask for it, or run with"
+	grey "  UTSUGI_NO_SUDO=1 to be given each command to run yourself."
 }
 
 # The platform to run containers on: the host's own, computed rather than
