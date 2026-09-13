@@ -48,6 +48,10 @@ for a in $EMPTY_ARCHES; do mkdir -p "$SITE/$CHANNEL_DIR/$a"; done
 # commit touched, so everything else would be missing. Indexing only what is
 # there would publish an index of three packages and silently drop the other
 # sixty-six -- and phones would find their kernel gone on the next apk update.
+# The gh-pages commit the live site is at RIGHT NOW, before anything is read
+# from it. Checked again before pushing: see below.
+LIVE_AT_START="$(git ls-remote "$GH_REMOTE" refs/heads/gh-pages 2>/dev/null | cut -f1)"
+
 n=0; carried=0; missing=""
 for pkg in $(all_aports); do
 	ver="$(apkbuild_version "$pkg")"
@@ -164,6 +168,29 @@ if [ "$PUSH" = 1 ]; then
 	# with what was being pushed, and a build worth forty minutes should not be
 	# thrown away by a 500. Force-pushing a snapshot branch is idempotent, so a
 	# retry is safe in a way retrying a normal push would not be.
+	# REFUSE TO PUBLISH ON TOP OF SOMETHING NEWER THAN WHAT WE READ.
+	#
+	# The site is assembled by merging what was built here with what the LIVE
+	# site has. If the live site changes between that read and this push, the
+	# merge is stale and force-pushing it puts packages BACK to older versions
+	# -- silently, with a green "pushed" and a phone that finds its kernel gone
+	# on the next apk update.
+	#
+	# It happened on 2026-09-13: a kernel published from the laptop was replaced
+	# by the previous one minutes later, when a re-run of CI assembled its site
+	# from the live version it had read before that push. Nothing failed. The
+	# only sign was 'apk policy' on the phone still offering r261.
+	#
+	# Retrying the push does not help, because the problem is not the push.
+	LIVE_NOW="$(git ls-remote "$GH_REMOTE" refs/heads/gh-pages 2>/dev/null | cut -f1)"
+	if [ "$LIVE_NOW" != "$LIVE_AT_START" ]; then
+		die "the live site moved while this one was being assembled
+  read at:  ${LIVE_AT_START:-(empty)}
+  now at:   ${LIVE_NOW:-(empty)}
+  Something else published in between -- CI, or another machine. Pushing this
+  would put its packages back to the versions read before it. Run publish again."
+	fi
+
 	pushed=0
 	for attempt in 1 2 3; do
 		if git push --force "$GH_REMOTE" gh-pages; then
