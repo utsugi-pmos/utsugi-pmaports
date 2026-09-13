@@ -159,8 +159,10 @@ fastboot reboot
 			</div>
 			<div>
 				<div class="t">Is the image encrypted?</div>
-				<p>No, and you should not want one that is: the master key would be born
-				on my machine. <a href="install-encrypted.html">Build your own &rarr;</a></p>
+				<p>Not when you download it, and you should not want one that is: the
+				master key would be born on my machine. It encrypts itself on the phone
+				on the first boot, if you say yes when it asks.
+				<a href="install-image.html#encrypt">How &rarr;</a></p>
 			</div>
 			<div>
 				<div class="t">Do I need to trust your binaries?</div>
