@@ -69,10 +69,16 @@ pmb config timezone UTC
 # conflict -- both provide the same virtual, with different versions -- so the
 # only way to get unl0kr into a non-FDE image is to stop pmbootstrap adding the
 # dummy. That flag is in our own pmaports checkout, pinned at upstream.lock, so
-# flipping it there touches nothing anybody else uses.
-sed -i 's/^supported_base_nofde=True/supported_base_nofde=False/' "$APORTS/pmaports.cfg"
-grep -q '^supported_base_nofde=False' "$APORTS/pmaports.cfg" ||
-	die "could not turn supported_base_nofde off in $APORTS/pmaports.cfg"
+# changing it there touches nothing anybody else uses.
+#
+# REMOVED, not set to False. pmbootstrap reads the file with configparser and
+# tests the value with a bare "if": the string "False" is true. The first run
+# of this set it to False, built for a minute, and died on exactly the conflict
+# it was meant to avoid.
+sed -i '/^supported_base_nofde=/d' "$APORTS/pmaports.cfg"
+if grep -q '^supported_base_nofde=' "$APORTS/pmaports.cfg"; then
+	die "could not remove supported_base_nofde from $APORTS/pmaports.cfg"
+fi
 grey "  postmarketos-base-nofde disabled: the image gets unl0kr (cryptsetup in the initramfs)"
 
 pmb zap
