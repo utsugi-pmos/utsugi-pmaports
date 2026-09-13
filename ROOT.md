@@ -186,6 +186,12 @@ born where you are.
 
 ## The short version
 
+**Four kinds of thing, and hundreds of calls.** The table below lists the four
+*kinds*; a build runs them 366 times before it even reaches the partitioning
+step — 74 mounts, 56 `mkdir`, 41 `touch`, 14 `mknod`. Saying "four" and meaning
+"four categories" is misleading, so: four categories, hundreds of invocations,
+all of them visible with `UTSUGI_SHOW_ROOT=1`.
+
 | | |
 |---|---|
 | `setup-workdir` | usually **no root**: one ACL granting one uid read access to one file. Root only where ACLs are unavailable |

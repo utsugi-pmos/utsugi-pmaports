@@ -40,14 +40,14 @@ Flashing a ready-made image works fine from any of the three."
 # are pmbootstrap's requirements, not ours -- taken from its README -- plus
 # rsync, which the overlay uses.
 missing=""
-for prog in python3 git rsync openssl tar ps losetup kpartx; do
+for prog in python3 git rsync openssl tar xz ps losetup kpartx; do
 	command -v "$prog" >/dev/null 2>&1 || missing="$missing $prog"
 done
 if [ -n "$missing" ]; then
 	red "missing:$missing"
-	grey "  Debian/Ubuntu:  sudo apt install python3 git rsync openssl kpartx util-linux procps tar"
-	grey "  Fedora:         sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar"
-	grey "  Arch:           sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar"
+	grey "  Debian/Ubuntu:  sudo apt install python3 git rsync openssl kpartx util-linux procps tar xz-utils"
+	grey "  Fedora:         sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar xz"
+	grey "  Arch:           sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar xz"
 	die "install those and run this again"
 fi
 
