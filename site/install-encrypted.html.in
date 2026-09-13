@@ -72,18 +72,22 @@ scripts/build-your-own-image --encrypted</pre>
 
 		<div class="h" style="margin-top:34px"><span>04</span><h2>Why it asks for your password</h2></div>
 		<p>A script you cloned five minutes ago asking for <code>sudo</code> is a
-		fair reason to stop. Here is every use of it, and you can check each one
-		with <code>grep -n sudo scripts/*</code> and in
+		fair reason to stop. Here is every use of it, at a glance;
+		<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/ROOT.md">ROOT.md</a>
+		explains each one properly, including what happens if you refuse. Check it
+		against <code>grep -n sudo scripts/*</code> and against
 		<a href="https://gitlab.postmarketos.org/postmarketOS/pmbootstrap">pmbootstrap</a>'s
 		own source.</p>
 		<div class="scroll">
 		<table>
 			<tr><th>Who</th><th>What</th><th>Why it cannot be done as you</th></tr>
-			<tr><td class="mono">setup-workdir</td><td>one <code>chown</code> of the
-			signing key to uid 12345</td><td>Giving a file to another user is the one
-			thing only root can do. Builds run as <code>pmos</code> (uid 12345) inside
-			the chroot; a key only you can read fails at the last step, after
-			everything has compiled.</td></tr>
+			<tr><td class="mono">setup-workdir</td><td><b>usually nothing.</b> One ACL
+			granting uid 12345 read access to your signing key</td><td>Builds sign as
+			<code>pmos</code> (uid 12345) inside the chroot, and a key only you can read
+			fails at the last step, after everything has compiled. Granting one uid read
+			access to your own file needs no root. Only where the filesystem has no
+			ACLs does it fall back to <code>chown</code>, which does &mdash; giving a
+			file away is privileged, letting someone read it is not.</td></tr>
 			<tr><td class="mono">pmbootstrap</td><td><code>chroot</code>,
 			<code>mount</code>, <code>mknod</code></td><td>The build environment is a
 			directory with a real <code>/proc</code>, <code>/sys</code> and device
