@@ -112,6 +112,19 @@ else
 fi
 [ -f "$HOME/.abuild/$KEY" ] || die "the private half $HOME/.abuild/$KEY is missing"
 
+# ASKING FOR sudo HERE, AND SAYING WHY.
+#
+# A password prompt with no explanation is a good reason to stop and wonder
+# what a script from the internet is about to do. This one needs it for one
+# thing, below: handing the signing key to the uid that builds inside the
+# chroot. pmbootstrap will want it again later for chroots and loop devices --
+# none of this flow works without it.
+if ! sudo -n true 2>/dev/null; then
+	grey "  sudo is needed once here: the signing key has to be handed to the"
+	grey "  user that builds inside the chroot (uid 12345), and only root can"
+	grey "  give a file to another user. pmbootstrap asks again later for the"
+	grey "  chroots themselves."
+fi
 # sudo, because the copies are owned by the chroot user (see below) and a plain
 # install(1) cannot replace them on a re-run.
 sudo install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
