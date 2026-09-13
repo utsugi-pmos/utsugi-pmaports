@@ -48,8 +48,8 @@
 		which the script checks before it starts:</p>
 		<div class="scroll">
 		<table>
-			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl multipath-tools util-linux procps tar</td></tr>
-			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl device-mapper-multipath util-linux procps-ng tar</td></tr>
+			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl kpartx util-linux procps tar</td></tr>
+			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar</td></tr>
 			<tr><th>Arch</th><td class="mono">sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar</td></tr>
 		</table>
 		</div>
