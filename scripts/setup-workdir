@@ -116,7 +116,24 @@ fi
 # install(1) cannot replace them on a re-run.
 sudo install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
 sudo install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
-install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_apk_keys/$KEY.pub"
+# EVERY public key in keys/, not only the one we sign with.
+#
+# The key we sign with is what makes OUR packages verifiable. The key already
+# committed here is what makes the PUBLISHED ones verifiable -- and an image is
+# built by downloading those. Installing only the signing key left the chroot
+# unable to trust the published index:
+#
+#   WARNING: ... APKINDEX.tar.gz: UNTRUSTED signature
+#   ERROR: unable to select packages:
+#     utsugi-surya-base (no such package)
+#
+# which reads as a missing package and is a missing key. It broke every build
+# on any machine that was not the one that owns the signing key, which is to
+# say: everyone else's.
+for pub in "$REPO"/keys/*.rsa.pub; do
+	[ -f "$pub" ] || continue
+	install -m644 "$pub" "$WORK/config_apk_keys/$(basename "$pub")"
+done
 # abuild signs as the chroot's "pmos" user, which is uid 12345, not ours. A key
 # readable only by the host user fails at the very last step of the build, after
 # everything has already compiled: "failed to sign ... Permission denied".
@@ -127,7 +144,7 @@ cat > "$WORK/config_abuild/abuild.conf" <<CONF
 PACKAGER_PRIVKEY="/home/pmos/.abuild/$KEY"
 PACKAGER="$PACKAGER"
 CONF
-grey "  key installed into config_abuild and config_apk_keys"
+grey "  signing key in config_abuild; $(ls "$REPO"/keys/*.rsa.pub 2>/dev/null | wc -l | tr -d ' ') public key(s) in config_apk_keys"
 
 title "pmbootstrap config"
 mkdir -p "$(dirname "$PMB_CFG")"
