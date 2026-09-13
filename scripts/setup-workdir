@@ -123,9 +123,23 @@ fi
 # and cannot be written over -- but this directory belongs to you, and in a
 # directory you own you may delete anything regardless of who owns it. Remove
 # and recreate, and only the chown below needs root.
-rm -f "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
-install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
-install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
+# IF THE BUILD USER ALREADY OWNS IT, LEAVE IT ALONE.
+#
+# A re-run used to delete and recreate these unconditionally, undoing the chown
+# from the run before -- which made "run that command, then run setup-workdir
+# again" advice that could never work.
+#
+# The test is ownership and not a content comparison, because once the file
+# belongs to uid 12345 with mode 600 you cannot read it to compare: cmp fails,
+# and a failed comparison looks exactly like a stale copy.
+if [ "$(stat -c %u "$WORK/config_abuild/$KEY" 2>/dev/null)" = 12345 ]; then
+	KEY_ALREADY_HANDED_OVER=1
+else
+	KEY_ALREADY_HANDED_OVER=0
+	rm -f "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+	install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
+	install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
+fi
 # EVERY public key in keys/, not only the one we sign with.
 #
 # The key we sign with is what makes OUR packages verifiable. The key already
@@ -162,14 +176,50 @@ done
 # The fallback is there because ACLs need filesystem support: ext4, btrfs and
 # xfs have it on by default, and something exotic or a filesystem mounted
 # noacl does not.
-if command -v setfacl >/dev/null 2>&1 &&
+if [ "$KEY_ALREADY_HANDED_OVER" = 1 ]; then
+	grey "  the build user already owns the key; leaving it alone"
+elif command -v setfacl >/dev/null 2>&1 &&
    setfacl -m u:12345:r "$WORK/config_abuild/$KEY" 2>/dev/null; then
 	setfacl -m u:12345:r "$WORK/config_abuild/$KEY.pub" 2>/dev/null || true
 	grey "  build user granted read access to the key by ACL (no root needed)"
 else
-	grey "  no usable ACL here, so the key is handed over with chown, which"
-	grey "  needs root. This is the only thing sudo is used for."
-	sudo chown 12345:12345 "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+	# NO ACL HERE, SO THE KEY HAS TO CHANGE HANDS -- AND YOU DECIDE HOW.
+	#
+	# Running sudo behind someone's back is what makes a downloaded script worth
+	# distrusting. If sudo is already cached this is silent and harmless; if it
+	# would prompt, the command is printed instead and you run it yourself, in
+	# your own terminal, having read it.
+	CMD="chown 12345:12345 $WORK/config_abuild/$KEY $WORK/config_abuild/$KEY.pub"
+	if sudo -n true 2>/dev/null; then
+		grey "  no usable ACL here; handing the key over with chown (sudo is cached)"
+		sudo $CMD
+	else
+		echo
+		red   "  This filesystem has no ACLs, so one command has to run as root."
+		grey  "  It gives your signing key to the uid that builds inside the"
+		grey  "  chroot. Nothing else here needs root."
+		echo
+		printf '      sudo %s\n' "$CMD"
+		echo
+		grey  "  Run it in another terminal, then press enter. Or press enter to"
+		grey  "  let this script run it, or Ctrl-C to stop."
+		read -r _ || true
+		if [ "$(stat -c %u "$WORK/config_abuild/$KEY" 2>/dev/null)" = 12345 ]; then
+			grey "  done already, thank you"
+		elif sudo $CMD 2>/dev/null; then
+			grey "  done"
+		else
+			# Refused, no terminal to ask on, or no sudo rights at all. None of
+			# those is an error worth a stack trace: the work directory is built,
+			# and one command is left. Say which, and stop.
+			echo
+			red "  That command has not run, so the key still belongs to you and a"
+			red "  build would fail at its last step when it tries to sign."
+			grey "  Everything else is ready. Run the line above, then run"
+			grey "  scripts/setup-workdir again -- it will pick up where this left off."
+			exit 1
+		fi
+	fi
 fi
 # Written before the first build on purpose: pmbootstrap only generates its own
 # throwaway pmos@local key when this file does not exist.

@@ -78,8 +78,41 @@ sudo chown 12345:12345 config_abuild/<your key>
 and root is required for one reason: **giving a file away is privileged, while
 granting read access to it is not.** The script says which of the two it did.
 
-**If you refuse:** the build compiles for the better part of an hour and then
-cannot sign the result.
+**If you refuse:** nothing happens behind your back. The exact command is
+printed, and you can run it in your own terminal after reading it:
+
+```
+  This filesystem has no ACLs, so one command has to run as root.
+  It gives your signing key to the uid that builds inside the chroot.
+  Nothing else here needs root.
+
+      sudo chown 12345:12345 ~/.local/var/pmbootstrap-utsugi/config_abuild/<key> ...
+
+  Run it in another terminal, then press enter.
+```
+
+Run `setup-workdir` again afterwards and it sees the key is already handed over
+and leaves it alone. Refuse entirely and the work directory is still built --
+only that one step is missing, and the build would fail when it tries to sign.
+
+---
+
+## Watching every root command as it happens
+
+`sudo` prompts tell you something is about to happen and not what. This does:
+
+```sh
+UTSUGI_SHOW_ROOT=1 scripts/build-your-own-image --encrypted
+```
+
+Every privileged command pmbootstrap runs is printed before it runs &mdash;
+mounts, chroots, `losetup`, `mkfs`, all of it. A build produces a few hundred
+lines of that, so `UTSUGI_ROOT_LOG=/tmp/root.log` writes them to a file instead,
+timestamped, which is easier to read afterwards than a build's worth of
+scrollback.
+
+It is not a promise about what the tool does. It is a transcript of what it
+did.
 
 ---
 
