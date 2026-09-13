@@ -119,4 +119,18 @@ if [ "$RELEASE" = 1 ]; then
 		die "the release exists but $img_name did not upload: retry with
   gh release upload $TAG-$DEVICE --repo $GH_REPO --clobber $OUT/*.xz"
 	green "  https://github.com/$GH_REPO/releases/tag/$TAG-$DEVICE"
+
+	# REPUBLISH THE SITE, or the download button points at the previous image.
+	#
+	# The install pages carry the image's real file name, not a wildcard, and
+	# publish is what writes it: it reads the newest release and substitutes
+	# @IMG@. So between creating this release and the next publish, the button
+	# on the live site names a file the latest release does not have, and
+	# /releases/latest/download/<old name> is a 404.
+	#
+	# Measured on 2026-09-13: the release was correct, the image uploaded, the
+	# checksum verified, and the page still offered v2026.09.12.4. Nothing
+	# failed anywhere -- the only way to notice was to follow the link.
+	title "Pointing the site at this image"
+	"$REPO"/scripts/publish --push
 fi
