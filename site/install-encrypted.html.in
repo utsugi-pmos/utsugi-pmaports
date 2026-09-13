@@ -18,7 +18,7 @@
 </div></header>
 <section class="panel">
 	<div class="wrap">
-		<div class="eyebrow">Route 4 &middot; you build it</div>
+		<div class="eyebrow">About encryption</div>
 		<h1>Encrypted</h1>
 		<p class="lede">Full-disk encryption with an on-screen keyboard at boot. It
 		works on this phone, and there is no image to download.</p>
@@ -30,7 +30,7 @@
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>The phone does it</h2></div>
+		<div class="h"><span>01</span><h2>The phone does it, on the first boot</h2></div>
 		<p>Flash the <a href="install-image.html">ordinary image</a>. On the first
 		boot, right after choosing a password, the phone asks: <b>encrypt this
 		phone?</b> Say yes and choose a passphrase. It restarts, and before anything

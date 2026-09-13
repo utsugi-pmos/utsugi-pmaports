@@ -209,6 +209,14 @@ fastboot reboot
 			with it, so the step never appears again &mdash; with no state file to
 			go stale, and nothing on disk that says what the password is.
 		</div></div>
+		<div class="note" id="encrypt"><i></i><div>
+			<b>Then it asks whether to encrypt the phone.</b> Say yes and choose a
+			passphrase, plug the charger in, and it restarts and encrypts the storage
+			in place before anything is mounted. From then on every start asks for the
+			passphrase on the screen, before the PIN. It is done on the phone, so the
+			key is born there and no computer is involved. &ldquo;Not now&rdquo; is for
+			good. Details: <a href="install-encrypted.html">encryption</a>.
+		</div></div>
 	</div>
 </section>
 
