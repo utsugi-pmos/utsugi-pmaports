@@ -135,7 +135,7 @@ elif command -v docker >/dev/null 2>&1; then
 	# nobody notices is missing. publish already signs the index in a container
 	# for the same reason; this borrows the same alpine:edge.
 	title "apkbuild-lint (in a container)"
-	docker run --rm -v "$REPO":/repo:ro -w /repo \
+	docker run --rm --platform "$DOCKER_PLATFORM" -v "$REPO":/repo:ro -w /repo \
 		-e CUSTOM_VALID_OPTIONS="$CUSTOM_VALID_OPTIONS" \
 		alpine:edge sh -ec '
 			apk add --quiet --no-cache atools >/dev/null 2>&1

@@ -80,7 +80,13 @@ green "  $n built here, $carried carried from the live site"
 title "Index and signature"
 # apk and abuild come from a throwaway Alpine container: exactly the tools
 # pmbootstrap uses inside its own chroot, without needing one here.
-docker run --rm \
+# --platform pinned, and not for portability: docker caches an image by TAG.
+# Pulling alpine:edge for another architecture -- a container test of the
+# phone's own aarch64, say -- replaces what "alpine:edge" means on this
+# machine, and the next publish runs "exec /bin/sh: no such file or
+# directory" with no hint as to why. That happened on 2026-09-13 and left the
+# install page pointing at an image the latest release did not have.
+docker run --rm --platform "$DOCKER_PLATFORM" \
 	-v "$SITE/$CHANNEL_DIR:/c" -v "$DIR:/r" -v "$WORK/config_abuild:/k:ro" \
 	-e EMPTY_ARCHES="$EMPTY_ARCHES" \
 	-e KEY="$KEY" -e UID="$(id -u)" -e GID="$(id -g)" \

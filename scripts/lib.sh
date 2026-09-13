@@ -128,3 +128,14 @@ setup_sudo() {
 	done
 	grey "  note: no cached sudo and no PMB_PW; pmbootstrap may block asking for it"
 }
+
+# The platform to run containers on: the host's own, computed rather than
+# assumed. Not for portability -- docker caches an image by TAG, so pulling
+# alpine:edge for another architecture (a container test of the phone's own
+# aarch64, say) silently replaces what "alpine:edge" means on this machine, and
+# the next run dies with "exec /bin/sh: no such file or directory" and no hint.
+# That happened on 2026-09-13 and left the install page pointing at an image the
+# latest release did not have. A fixed "linux/amd64" would have been worse: CI
+# builds images on an arm64 runner, and that call would have been emulated.
+DOCKER_PLATFORM="linux/$(docker version -f '{{.Server.Arch}}' 2>/dev/null || uname -m | sed 's/x86_64/amd64/;s/aarch64/arm64/')"
+export DOCKER_PLATFORM
