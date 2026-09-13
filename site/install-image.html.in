@@ -52,8 +52,9 @@
 		<p>From MIUI, with USB debugging on (the developer options you turned on
 		while unlocking) and <code>adb</code> installed:</p>
 		<div class="sh">
-			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
-			<pre>adb shell cat /proc/cmdline | tr ' ' '\n' | grep -i dsi</pre>
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC</span></div>
+			<pre>adb shell cat /proc/cmdline | tr ' ' '\n' | grep -i dsi
+<i># Windows PowerShell: .\adb shell "cat /proc/cmdline" , then look for dsi</i></pre>
 		</div>
 		<p>Xiaomi's kernel names the panel in there: the line carries
 		<code>tianma</code> or <code>huaxing</code>. If nothing useful comes out,
@@ -83,12 +84,36 @@
 		<p>Take the image for your panel from
 		<a href="https://github.com/sm7150-mainline/u-boot/releases">sm7150-mainline/u-boot</a>,
 		put the phone in fastboot &mdash; off, then volume-down + power &mdash; and:</p>
-		<div class="sh">
-			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
-			<pre>sudo fastboot devices        <b># must print your phone</b>
+		<div class="os">
+			<input type="radio" name="uboot-os" id="uboot-linux" checked>
+			<input type="radio" name="uboot-os" id="uboot-win">
+			<input type="radio" name="uboot-os" id="uboot-mac">
+			<div class="tabs">
+				<label for="uboot-linux">Linux</label>
+				<label for="uboot-win">Windows</label>
+				<label for="uboot-mac">macOS</label>
+			</div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>sudo fastboot devices        <b># must print your phone</b>
 sudo fastboot erase dtbo     <i># MIUI's overlay would fight U-Boot</i>
 sudo fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
 sudo fastboot reboot</pre>
+			</div></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN POWERSHELL</span></div>
+				<pre>.\fastboot devices           <b># must print your phone</b>
+.\fastboot erase dtbo        <i># MIUI's overlay would fight U-Boot</i>
+.\fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
+.\fastboot reboot</pre>
+			</div></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>fastboot devices             <b># must print your phone</b>
+fastboot erase dtbo          <i># MIUI's overlay would fight U-Boot</i>
+fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
+fastboot reboot</pre>
+			</div></div>
 		</div>
 		<p>Power on: you should get a text console complaining it has nothing to
 		boot. That complaint is the good outcome &mdash; there is no system on
@@ -120,12 +145,45 @@ sudo fastboot reboot</pre>
 		<div class="h"><span>06</span><h2>Flash it</h2></div>
 		<p><b>Your data is gone from here on:</b> this writes the whole system
 		partition.</p>
-		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR PC</span></div>
-			<pre>xz -d @IMG@.xz            <i># a half-downloaded file fails right here</i>
+		<div class="os">
+			<input type="radio" name="flash-os" id="flash-linux" checked>
+			<input type="radio" name="flash-os" id="flash-win">
+			<input type="radio" name="flash-os" id="flash-mac">
+			<div class="tabs">
+				<label for="flash-linux">Linux</label>
+				<label for="flash-win">Windows</label>
+				<label for="flash-mac">macOS</label>
+			</div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>xz -d @IMG@.xz            <i># a half-downloaded file fails right here</i>
 
 sudo fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
 sudo fastboot reboot</pre>
+			</div>
+			<p><code>sudo</code> because without udev rules the device belongs to
+			root. Install <code>android-udev-rules</code> and you can drop it.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN POWERSHELL</span></div>
+				<pre>7z x @IMG@.xz             <i># or any unzipper that knows .xz</i>
+
+.\fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
+.\fastboot reboot</pre>
+			</div>
+			<p>Run it from the folder platform-tools unpacked into, and install the
+			<b>Google USB Driver</b> first or <code>fastboot devices</code> prints
+			nothing. Windows has no <code>xz</code>: <a
+			href="https://www.7-zip.org/">7-Zip</a> opens it.</p></div>
+			<div class="pane"><div class="sh">
+				<div class="bar"><i></i><span>IN A TERMINAL</span></div>
+				<pre>xz -d @IMG@.xz            <i># brew install xz, if you have none</i>
+
+fastboot flash userdata @IMG@   <b># userdata. never boot.</b>
+fastboot reboot</pre>
+			</div>
+			<p>No <code>sudo</code>: macOS needs no udev rules. Get the tools with
+			<code>brew install --cask android-platform-tools</code>, or unpack
+			platform-tools and call it as <code>./fastboot</code>.</p></div>
 		</div>
 		<p>The phone boots to the desktop. First boot takes a minute longer.</p>
 		<div class="note"><i></i><div>
