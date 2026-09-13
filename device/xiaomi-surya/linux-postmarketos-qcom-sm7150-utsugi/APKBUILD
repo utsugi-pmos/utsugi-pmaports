@@ -5,7 +5,7 @@ _flavor="postmarketos-qcom-sm7150"
 _orig=linux-$_flavor
 pkgname=$_orig-utsugi
 pkgver=7.1_rc3
-pkgrel=261
+pkgrel=262
 
 # FORK of linux-postmarketos-qcom-sm7150. _flavor is deliberately NOT renamed:
 # /boot/vmlinuz, /lib/modules/<release> and /usr/share/kernel/<flavor> must stay
@@ -159,7 +159,7 @@ package() {
 
 sha512sums="
 bb837959e337c66ff374d8f3aac6593723c4f4eb69fb18f9ff25c5c096c6656fd71149e105255c0f97c83e0bf547b0b0e94ca23eabde7b5f88308e9ecd784e3d  linux-postmarketos-qcom-sm7150-v7.1_rc3.tar.gz
-e0e5e4c8f0a28b6801d2606e5dbc329b27a614421c1b1001e17eeefb8d3122e49f9ca052acb28c617b3b28d539a3ef3028248f0b8b5281528a60f8a08612812d  config-postmarketos-qcom-sm7150.aarch64
+cc468b303296177b4ea9251a06a12ac72c3b34d8cd28e24288a327db7827b50c43ae5cab70f7bf753d11948e34d607a6285937a3d8c04fdc1803e81b7ff9ce42  config-postmarketos-qcom-sm7150.aarch64
 c6133d1eaafc623c94c4ec93732f633fb7d534d2300cf10ff002a65d3faf4e50f60032710169e1f0f469a493bb9c86122ff9f2e9084c0a179d51c764eb4126dd  0001-tas2562-dvc-write-order.patch
 22818a03c41a56806ffeb5f84f1a054bda840606dc014dc4fd27ab48594ac436888ed67410de8d2be41f4dcf33cb894fef7256623c25974b816b5e2596c0c78d  0035-soundwire-rx-second-data-line.patch
 26062057d84ab1af7c900d15636fcc067ebdcbf240b1e27cb2fd868096ec6ebf0210f4ec415a0b9436f293619738aef47f8e33c2eff1ea5bc30eff1312678c4d  0036-media-format-wrote-to-the-wrong-member.patch
