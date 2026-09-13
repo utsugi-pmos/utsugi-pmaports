@@ -27,7 +27,7 @@
 # 'apk del postmarketos-base-nofde' once (surya-setup --upgrade does it).
 pkgname=utsugi-surya-encrypt
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Encrypt the phone's storage from the first-boot assistant"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -67,7 +67,7 @@ systemd() {
 		-t "$subpkgdir"/usr/lib/systemd/system-preset/
 }
 sha512sums="
-4c5f490b5fa8c2c7dfa30bac9a9ab8a255dee7e747cd13e6da38651e49e02be7179870f4779a981ecc66380cd3a5e7d57ce615a5f22ea77606eb4b20ce600588  50-utsugi-encrypt.sh
+85b0d84e0c607b0c1ac8a93e111fd1b56b1eb010e977ef67d17e83c9bb19cf53362691856f38f3e1f83d1adb61169309fba9765695803670d2dec6b7ec613ea7  50-utsugi-encrypt.sh
 cd3bb81f38f4de2270af3ec573519b19a36d10d0b9fe1aa64e18e6d81815a0836cdfba351590ce0bcaf4b8bf1e0a26cd2d89090713e6ac6d35e17a67d18ee6b9  request-encryption
 d61b5cc3282d3f2ed6356c869f21217b4d4eff80fba4c2a258b2c4110f65f54ed7aee74da69ddca34b09615cfad9784259ce270ae8f3e2dcf9623d1acc2e3d98  is-the-disk-encrypted
 979b1284d64d962a5619bccb489a46b5645979199812e807afb3fc0df951051b338a984d1a0ea612d2ab53884c1bd43da7bdf75ec17ebd72b77b4b964355b157  org.utsugi.surya.encrypt.policy

@@ -143,18 +143,42 @@ if ! resize2fs "$ROOT" "${newk}K" >/dev/null 2>&1; then
 	sleep 6; cleanup; exit 0
 fi
 
-# 4. The encryption itself. Progress goes to a file and from there to the
-#    splash every few seconds; busybox sh has no PIPESTATUS, so the exit code
-#    is taken from wait rather than from a pipeline.
+# 4. The encryption itself, with a percentage that does not come from
+#    cryptsetup. Measured on 2026-09-14: with no terminal attached, cryptsetup
+#    prints NO progress at all -- not with --progress-frequency, and with
+#    --progress-json only a single line when it is already done. The first
+#    real run sat on "Encrypting this phone" for ten minutes and looked hung.
+#
+#    What does move is the block device's own I/O counters in sysfs:
+#    reencrypt reads every sector once and writes it once, so sectors read (or
+#    written) over the device size is the fraction done. The counters are in
+#    512-byte units whatever the disk's logical sector size, and so is the
+#    size, so the ratio needs no unit juggling. The journal adds a little on
+#    top, hence the clamp at 99 until it really finishes.
+#
+#    busybox sh has no PIPESTATUS, so the exit code is taken from wait.
 PROG=/tmp/utsugi-encrypt-progress
 : > "$PROG"
+stat_file="/sys/class/block/$name/stat"
+r0="$(awk '{print $3}' "$stat_file" 2>/dev/null || echo 0)"
+w0="$(awk '{print $7}' "$stat_file" 2>/dev/null || echo 0)"
 cryptsetup reencrypt --encrypt --reduce-device-size 32M --batch-mode \
-	--progress-frequency 5 --key-file "$PW" "$ROOT" > "$PROG" 2>&1 &
+	--key-file "$PW" "$ROOT" > "$PROG" 2>&1 &
 pid=$!
+last=-1
 while kill -0 "$pid" 2>/dev/null; do
-	pct="$(tr '\r' '\n' < "$PROG" | grep -o '[0-9.]*%' | tail -1)"
-	[ -n "$pct" ] && splash_set_message "Encrypting this phone: $pct\nDo not turn it off."
-	sleep 5
+	if [ -r "$stat_file" ]; then
+		r="$(awk '{print $3}' "$stat_file")"; w="$(awk '{print $7}' "$stat_file")"
+		done_r=$((r - r0)); done_w=$((w - w0))
+		[ "$done_w" -gt "$done_r" ] && done_r=$done_w
+		pct=$(( done_r * 100 / sectors ))
+		[ "$pct" -gt 99 ] && pct=99
+		if [ "$pct" != "$last" ]; then
+			splash_set_message "Encrypting this phone: ${pct}%\nDo not turn it off."
+			last=$pct
+		fi
+	fi
+	sleep 3
 done
 wait "$pid"
 rc=$?
