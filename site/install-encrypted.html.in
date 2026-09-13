@@ -30,15 +30,29 @@
 
 <section>
 	<div class="wrap">
-		<div class="h"><span>01</span><h2>Why there is no download</h2></div>
-		<p>A LUKS master key is created when the disk is formatted, which for an image
-		means on the machine that builds it. Changing the passphrase later replaces the
-		slot protecting that key, and leaves the key itself untouched. A shared
-		encrypted image would give
-		whoever built it the master key of every phone flashed from it.</p>
-		<p>Yours has to be born on your machine. One command.</p>
+		<div class="h"><span>01</span><h2>The phone does it</h2></div>
+		<p>Flash the <a href="install-image.html">ordinary image</a>. On the first
+		boot, right after choosing a password, the phone asks: <b>encrypt this
+		phone?</b> Say yes and choose a passphrase. It restarts, and before anything
+		is mounted the initramfs encrypts the storage in place. From then on every
+		start asks for the passphrase on the screen, before the PIN.</p>
+		<p>That is the whole route. No PC is involved in the encryption, nothing on
+		your computer needs root, and there is no image to build. A LUKS master key
+		is made when the volume is formatted, and here that happens on the phone
+		that will use it &mdash; the only place it should ever exist. It is also why
+		no encrypted image will ever be offered for download: one made on somebody
+		else's machine would carry a key that machine had seen.</p>
+		<p>Plug the charger in first; it takes a while and it says so. If the battery
+		is low and there is no charger it postpones itself and tells you. If the
+		phone dies halfway, the next boot asks for the passphrase and finishes.
+		&ldquo;Not now&rdquo; is for good; it can still be done later from a
+		terminal, with the same script the first boot uses.</p>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>What you need</h2></div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Or build it yourself</h2></div>
+		<p>The rest of this page is for whoever would rather generate the encrypted image on a
+		computer they control. It is no longer the only way, and for most people the
+		step above is the better one.</p>
+		<h3>What you need</h3>
 		<p><b>A Linux PC.</b> pmbootstrap builds inside chroots on loop devices,
 		which only Linux has, and its own documentation rules out the Windows
 		subsystem for Linux by name. On a Mac or a Windows machine, run a Linux

@@ -61,6 +61,14 @@ be read back: it takes the salt out of this account's own entry in
 the password and the salt changes with it, so the step stops appearing -- with
 no state file to go stale, and nothing on disk that says what the password is.
 
+## Encrypting it
+
+The first boot asks, right after the password: *encrypt this phone?* Say yes,
+choose a passphrase, plug the charger in, and it restarts and encrypts the
+storage in place before anything is mounted. Every start from then on asks for
+the passphrase on the screen, before the PIN. There is nothing to build and no
+PC is involved: the key is made on the phone.
+
 ## What language the phone comes up in
 
 `en_US.UTF-8`, clock in UTC. An image does not know where it is going. Both are

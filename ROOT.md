@@ -10,8 +10,10 @@ short. The rest belongs to
 postmarketOS's own tool and whose source is public.
 
 **Flashing a ready-made image asks for none of this.** It is `fastboot` and
-nothing else. What it cannot give you is an encrypted disk, because the
-encryption key has to be made on your machine.
+nothing else &mdash; and since 2026-09-14 that includes an encrypted phone: the
+first-boot step asks, and the phone encrypts itself. Everything below is only
+for building the image on your own computer, which is now a choice, not the
+price of encryption.
 
 ---
 
