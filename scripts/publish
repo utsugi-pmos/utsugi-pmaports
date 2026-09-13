@@ -157,7 +157,24 @@ if [ "$PUSH" = 1 ]; then
 	git -c user.email=cidwel@gmail.com -c user.name="Dr. Utsugi" \
 		commit -qm "publish $(cat VERSION)"
 	# One orphan commit, force-pushed: the branch is a snapshot, not a history.
-	git push --force "$GH_REMOTE" gh-pages
+	#
+	# Retried, because the failure that actually happens is GitHub answering
+	# "Internal Server Error" -- which it did on 2026-09-13, when CI and a local
+	# publish pushed this branch within seconds of each other. Nothing was wrong
+	# with what was being pushed, and a build worth forty minutes should not be
+	# thrown away by a 500. Force-pushing a snapshot branch is idempotent, so a
+	# retry is safe in a way retrying a normal push would not be.
+	pushed=0
+	for attempt in 1 2 3; do
+		if git push --force "$GH_REMOTE" gh-pages; then
+			pushed=1
+			break
+		fi
+		[ "$attempt" = 3 ] && break
+		grey "  push failed, retrying in $((attempt * 10))s (attempt $attempt of 3)"
+		sleep $((attempt * 10))
+	done
+	[ "$pushed" = 1 ] || die "could not push gh-pages after three attempts"
 	green "  pushed to $GH_REMOTE"
 else
 	grey "  not pushed (pass --push)"
