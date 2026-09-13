@@ -111,22 +111,43 @@ for pkg in $(all_aports); do
 	esac
 done
 
+# atools does not know postmarketOS' own options and rejects them as invalid.
+# This is the list pmaports' CI passes (.ci/lib/apkbuild_linting.py), plus the
+# kconfigcheck categories this tree actually uses. Defined out here because both
+# ways of running the linter need it -- it lived inside the first branch, and
+# the container branch died on "parameter not set" the first time it ran.
+CUSTOM_VALID_OPTIONS="!pmb:crossdirect !pmb:kconfigcheck pmb:cross-native
+	pmb:cross-native2 pmb:drm pmb:generic-kernel pmb:strict pmb:systemd
+	pmb:systemd-never pmb:kconfigcheck-community
+	pmb:kconfigcheck-nftables"
+export CUSTOM_VALID_OPTIONS
+
 if command -v apkbuild-lint >/dev/null 2>&1; then
 	title "apkbuild-lint"
-	# atools does not know postmarketOS' own options and rejects them as invalid.
-	# This is the list pmaports' CI passes (.ci/lib/apkbuild_linting.py), plus the
-	# kconfigcheck categories this tree actually uses.
-	CUSTOM_VALID_OPTIONS="!pmb:crossdirect !pmb:kconfigcheck pmb:cross-native
-		pmb:cross-native2 pmb:drm pmb:generic-kernel pmb:strict pmb:systemd
-		pmb:systemd-never pmb:kconfigcheck-community
-		pmb:kconfigcheck-nftables"
-	export CUSTOM_VALID_OPTIONS
 	for pkg in $(all_aports); do
 		d="$(aport_dir "$pkg")"
 		apkbuild-lint "$d/APKBUILD" || rc=1
 	done
+elif command -v docker >/dev/null 2>&1; then
+	# atools is an Alpine package and this laptop is not Alpine, so the check
+	# was simply skipped -- with one grey line, on every run, for as long as
+	# this script has existed. A check that announces it did not run is a check
+	# nobody notices is missing. publish already signs the index in a container
+	# for the same reason; this borrows the same alpine:edge.
+	title "apkbuild-lint (in a container)"
+	docker run --rm -v "$REPO":/repo:ro -w /repo \
+		-e CUSTOM_VALID_OPTIONS="$CUSTOM_VALID_OPTIONS" \
+		alpine:edge sh -ec '
+			apk add --quiet --no-cache atools >/dev/null 2>&1
+			rc=0
+			for f in $(find main device -name APKBUILD | sort); do
+				apkbuild-lint "$f" || rc=1
+			done
+			exit $rc
+		' || rc=1
 else
-	grey "apkbuild-lint not installed (apk add atools); skipped"
+	red "apkbuild-lint cannot run: neither atools nor docker is here"
+	rc=1
 fi
 
 # THE SHIPPED PASSWORD IS ONE CONSTANT IN FIVE FILES.
