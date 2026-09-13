@@ -140,7 +140,15 @@ CSSV="$(sha256sum "$REPO/site/style.css" | cut -c1-8)"
 # @IMG@ is the real name of the image the pages tell people to flash. A "*.img"
 # in the instructions is one more thing for the reader to work out, and it does
 # not even work in PowerShell, which does not expand it in an argument.
-IMG="$(gh release list --limit 20 --json tagName -q '.[].tagName' 2>/dev/null \
+# --repo given explicitly. Without it gh infers the repository from the current
+# directory's git remote, which works from a shell in this checkout and did not
+# work from inside scripts/image running under systemd-run on 2026-09-14: the
+# release was created fine and this lookup then failed, so the site kept naming
+# the previous image and its download button was a 404 for the ten minutes
+# until a hand-run publish. The stderr is kept, so the next such failure says
+# what gh actually objected to.
+GH_REPO="$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')"
+IMG="$(gh release list --repo "$GH_REPO" --limit 20 --json tagName -q '.[].tagName' \
 	| grep -m1 -- -surya || true)"
 # If this cannot be resolved the pages must not be published: a hardcoded name
 # would point "releases/latest/download/..." at a file the latest release does
