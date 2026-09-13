@@ -120,15 +120,18 @@ fi
 # chroot. pmbootstrap will want it again later for chroots and loop devices --
 # none of this flow works without it.
 if ! sudo -n true 2>/dev/null; then
-	grey "  sudo is needed once here: the signing key has to be handed to the"
-	grey "  user that builds inside the chroot (uid 12345), and only root can"
-	grey "  give a file to another user. pmbootstrap asks again later for the"
-	grey "  chroots themselves."
+	grey "  sudo, once, for a single chown: the signing key has to belong to the"
+	grey "  uid that builds inside the chroot (12345), and giving a file to"
+	grey "  another user is the one thing only root can do. Everything else here"
+	grey "  is yours already. pmbootstrap asks again later, for the chroots."
 fi
-# sudo, because the copies are owned by the chroot user (see below) and a plain
-# install(1) cannot replace them on a re-run.
-sudo install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
-sudo install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
+# No sudo for the copies. On a re-run the previous ones are owned by uid 12345
+# and cannot be written over -- but this directory belongs to you, and in a
+# directory you own you may delete anything regardless of who owns it. Remove
+# and recreate, and only the chown below needs root.
+rm -f "$WORK/config_abuild/$KEY" "$WORK/config_abuild/$KEY.pub"
+install -m600 "$HOME/.abuild/$KEY" "$WORK/config_abuild/$KEY"
+install -m644 "$REPO/keys/$KEY.pub" "$WORK/config_abuild/$KEY.pub"
 # EVERY public key in keys/, not only the one we sign with.
 #
 # The key we sign with is what makes OUR packages verifiable. The key already
