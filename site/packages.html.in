@@ -187,7 +187,7 @@
 			<tr><td>120 Hz in the browser</td><td>Gecko does not detect this panel's
 			refresh rate in a Wayland session and falls back to 60, half of what the
 			screen gives: measured 59.7 fps against 115.8. The preference travels
-			<b>with the browser</b>, not with this package:
+			<b>with the browser</b>:
 			<code>utsugi-surya-plasma-firefox</code> and
 			<code>-librewolf</code> are <code>install_if</code> subpackages, so apk
 			adds one the moment firefox or librewolf is installed and drops it when
@@ -252,7 +252,7 @@
 				behind it Qt sets it back to false, and that is what the page watches,
 				rather than whether the numbers move &mdash; which with the phone lying
 				still would report a false negative. A sensor that is active but silent
-				shows amber, not green.</p></a>
+				shows amber.</p></a>
 		</div>
 		<p>Between them they pull in what they need: <code>valhalla-utsugi</code> and
 		<code>maplibre-native-qt6</code> for the navigation, <code>espeak-ng</code> and
@@ -264,7 +264,7 @@
 
 <section id="extras">
 	<div class="wrap">
-		<div class="h"><span>03</span><h2>extras &mdash; eight choices, not fixes</h2></div>
+		<div class="h"><span>03</span><h2>extras &mdash; eight choices</h2></div>
 		<p>These are applications anybody could pick for themselves. They are here as one
 		<code>apk add</code> for a phone that has just been flashed, and every one of them
 		can be installed or removed on its own.</p>
@@ -289,8 +289,8 @@
 		<p>Offline maps and the podcast reader were in this list until 2026-09-10, and
 		came out for the same reason: Pure Maps needs <code>osmscout-server</code> holding
 		the maps and <code>geoclue</code> answering "where am I", plus a download of your
-		own region to be useful at all. That is a decision to make, not a set to
-		preselect. <code>apk add pure-maps osmscout-server geoclue</code> and
+		own region to be useful at all. Which region is yours to choose, so none of
+		it is preselected here. <code>apk add pure-maps osmscout-server geoclue</code> and
 		<code>apk add kasts</code> are one command each.</p>
 		<div class="note"><i></i><div>
 			<b>One thing to know before installing the set.</b>
@@ -306,7 +306,7 @@
 	<div class="wrap">
 		<div class="h"><span>04</span><h2>vayu &mdash; experimental</h2></div>
 		<p><code>utsugi-vayu-base</code> is the POCO X3 Pro set, and the honest summary is
-		one line: <b>the modem does not work, so it is not a phone.</b> It carries the
+		one line: <b>the modem does not work, so it makes no calls.</b> It carries the
 		research kernel for the SM8150
 		(<code>linux-postmarketos-qcom-sm8150-utsugi</code>), the patched
 		<code>qcom-diag-utsugi</code> that measures the modem, and

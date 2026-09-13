@@ -155,7 +155,7 @@ fastboot reboot
 				<div class="t">Will an update break it?</div>
 				<p>The patched packages are forks with their own names, so an upstream
 				release cannot silently replace them. The kernel comes with updates, so
-				reboot deliberately, not in a hurry.</p>
+				reboot when you have a minute to watch it come back.</p>
 			</div>
 			<div>
 				<div class="t">Is the image encrypted?</div>

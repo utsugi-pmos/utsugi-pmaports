@@ -21,7 +21,7 @@
 		<div class="eyebrow">Nothing rounded up</div>
 		<h1>What does not work</h1>
 		<p class="lede">Read this before flashing. One phone is a daily driver; the
-		other has no modem, which means it is not a phone.</p>
+		other has no modem, so it cannot make a call.</p>
 		<div class="scroll">
 		<table>
 			<tr><th>Device</th><th>State</th><th>Not supported</th><th>Known issues</th></tr>
@@ -51,7 +51,7 @@
 		replaying the transfers, the pre-TrustZone window, the vendor blob. Getting past
 		it needs a TrustZone exploit.</p>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>Stereo: kernel work, not configuration</h2></div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Stereo needs kernel work</h2></div>
 		<p>Both speakers play, and they play the same thing. The I2S bus to the
 		amplifiers carries one channel. Splitting it means changing
 		<code>TERT_MI2S_RX</code> in the kernel; nothing in user space can produce a
@@ -76,7 +76,7 @@
 		</div>
 
 		<div class="h" style="margin-top:34px"><span>04</span><h2>POCO X3 Pro</h2></div>
-		<p><b>The modem does not work, so it is not a phone.</b> It boots, the screen
+		<p><b>The modem does not work: no calls, no SMS, no mobile data.</b> It boots, the screen
 		and touch work. The fault is pinned to one firmware assertion
 		(<code>rflm_qlnk_ls_retry_cnt &lt; 2</code>): the modem asserts and takes
 		itself down 2&ndash;4&nbsp;s after the RF comes on. Published so the research

@@ -48,7 +48,7 @@
 		<div class="h" style="margin-top:34px"><span>02</span><h2>Find out which screen you have</h2></div>
 		<p>The POCO X3 NFC shipped with two panels, <b>Tianma</b> and <b>Huaxing</b>,
 		and U-Boot comes as one build per panel. The wrong one boots fine and draws
-		nothing &mdash; a black screen, not a brick.</p>
+		nothing at all.</p>
 		<p>From MIUI, with USB debugging on (the developer options you turned on
 		while unlocking) and <code>adb</code> installed:</p>
 		<div class="sh">
