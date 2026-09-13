@@ -25,8 +25,8 @@ if [ "${1:-}" = "--decline" ]; then
 fi
 
 IFS= read -r passphrase || passphrase=""
-if [ "${#passphrase}" -lt 8 ]; then
-	echo "the passphrase has to be at least 8 characters" >&2
+if [ "${#passphrase}" -lt 4 ]; then
+	echo "the passphrase has to be at least 4 characters" >&2
 	exit 2
 fi
 printf '%s' "$passphrase" > "$REQUEST"

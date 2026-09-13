@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # unit that leaves a flag in /run.
 pkgname=utsugi-surya-first-password
 pkgver=1
-pkgrel=8
+pkgrel=9
 pkgdesc="Choose a password before using a phone flashed from the image"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="aarch64"
@@ -77,7 +77,7 @@ sha512sums="
 1eae24b1170b8480a2c85790c7d2a1aa3d9372fa5551fe1dfe923c71fd0836e4397bc62d23ccd093ac1a7e7b480ca7015641409335d06b541db26528d197b0ba  passwd.h
 332b6a93deee50f6044d1db2ce9d99a2e69944f22b447839f6dae2881003aee70ae3866a75c3a597dc003edd695b552c53f5a0d03f29a5ff287af8fb3c8ffc32  encrypt.cpp
 6f52e3ec07160a26101b107189356b16944a8e913c7c4a86e9d01e4a41cd92f005f91343a64015a1e658a4d366685542587d498d62c982c8c2ec9b65ffc0b0f0  encrypt.h
-43716733f072ac07bf02f59a32b786e2df638f91b797933f9bd6d4a942c4f722ed362fb8fdfc8937e03100486e47b2ef5affc66e4b5d5bdf88abf0f04932b2db  Main.qml
+0f0188ea681262999f5f41f6707178bf82290d6286c3136c715c44d7d35bf23ee9b8d48183f9fcf95f29add5bc4b671b932244bbea773eb5777604c767d03f0f  Main.qml
 bd4fdfd5116407086ca07bf052cb7cd25b96d2257a0d0867a5e503b3ad76c817ba5de3cc0b32a67939c7fe4b960fefe2b30c4aedc7fd9f769e232e470c4739a4  first-password.service
 7a6457b1bcd8515192f30da3b975271b1a647d35194b6989a3cecf9d6a02a1ffeabdbe1dce74f0c1067f39971acbcd5428259af804b6983c6f375102a9b5c6e6  80-utsugi-surya-first-password.preset
 "

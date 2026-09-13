@@ -80,8 +80,8 @@ Kirigami.ApplicationWindow {
         if (working) {
             return;
         }
-        if (first.text.length < 8) {
-            root.error = "Use at least 8 characters. You will type this at every start.";
+        if (first.text.length < 4) {
+            root.error = "Use at least 4 characters. You will type this at every start.";
             return;
         }
         if (first.text !== second.text) {
@@ -176,7 +176,6 @@ Kirigami.ApplicationWindow {
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                     horizontalAlignment: TextInput.AlignHCenter
                     onAccepted: pwSecond.forceActiveFocus()
-                    focus: true
                 }
                 QQC2.Label {
                     text: "Type it again"
@@ -250,7 +249,8 @@ Kirigami.ApplicationWindow {
                 }
                 QQC2.Label {
                     text: "There is no way to recover it. Forget the passphrase and the "
-                        + "phone is a brick with your things inside."
+                        + "phone is a brick with your things inside. Four characters are "
+                        + "allowed; a thief with the phone can try them all, so longer is safer."
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.6
@@ -272,7 +272,6 @@ Kirigami.ApplicationWindow {
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.4
                     horizontalAlignment: TextInput.AlignHCenter
                     onAccepted: encSecond.forceActiveFocus()
-                    focus: true
                 }
                 QQC2.Label {
                     text: "Type it again"
