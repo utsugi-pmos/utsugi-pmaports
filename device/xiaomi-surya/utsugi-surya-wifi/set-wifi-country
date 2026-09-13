@@ -22,6 +22,26 @@
 # /etc/utsugi-surya/wifi-country wins over it, for anyone whose clock and radio
 # do not agree.
 #
+# DOES THIS BREAK THE PHONE IN ANOTHER COUNTRY?  No, and it was checked in the
+# kernel this package ships against rather than assumed:
+#
+#   net/wireless/reg.c, __reg_process_hint_country_ie()
+#       "if (lr->initiator != NL80211_REGDOM_SET_BY_COUNTRY_IE) return REG_REQ_OK"
+#       -- an access point that broadcasts its country (802.11d) is obeyed even
+#       when a country was already set here.
+#
+#   drivers/net/wireless/ath/regd.c
+#       sets REGULATORY_STRICT_REG | REGULATORY_CUSTOM_REG, and
+#       REGULATORY_COUNTRY_IE_FOLLOW_POWER. It never sets
+#       REGULATORY_COUNTRY_IE_IGNORE, so those hints reach it, and STRICT means
+#       the radio will not exceed what its own board file allows anyway.
+#
+# So: the access point wins where it says anything, the timezone answers where
+# it does not, and the card refuses to go beyond its own limits either way. The
+# only case left is travelling to a country whose access points say nothing AND
+# not touching the clock -- and then the rules are one country's instead of
+# another's, both of them real.
+#
 # The image ships UTC, which maps to no country at all. That is correct: an
 # image does not know where it is going, and claiming a country it cannot know
 # is how a radio ends up transmitting where it may not.
