@@ -70,7 +70,44 @@ scripts/build-your-own-image --encrypted</pre>
 		loop file on <code>userdata</code>, and <code>unl0kr</code> draws its keyboard
 		on this panel.</p>
 
-		<div class="h" style="margin-top:34px"><span>04</span><h2>What it costs</h2></div>
+		<div class="h" style="margin-top:34px"><span>04</span><h2>Why it asks for your password</h2></div>
+		<p>A script you cloned five minutes ago asking for <code>sudo</code> is a
+		fair reason to stop. Here is every use of it, and you can check each one
+		with <code>grep -n sudo scripts/*</code> and in
+		<a href="https://gitlab.postmarketos.org/postmarketOS/pmbootstrap">pmbootstrap</a>'s
+		own source.</p>
+		<div class="scroll">
+		<table>
+			<tr><th>Who</th><th>What</th><th>Why it cannot be done as you</th></tr>
+			<tr><td class="mono">setup-workdir</td><td>one <code>chown</code> of the
+			signing key to uid 12345</td><td>Giving a file to another user is the one
+			thing only root can do. Builds run as <code>pmos</code> (uid 12345) inside
+			the chroot; a key only you can read fails at the last step, after
+			everything has compiled.</td></tr>
+			<tr><td class="mono">pmbootstrap</td><td><code>chroot</code>,
+			<code>mount</code>, <code>mknod</code></td><td>The build environment is a
+			directory with a real <code>/proc</code>, <code>/sys</code> and device
+			nodes bind-mounted into it. Entering it, and creating those, are
+			privileged operations on every Linux.</td></tr>
+			<tr><td class="mono">pmbootstrap</td><td><code>losetup</code>,
+			<code>parted</code>, <code>partprobe</code></td><td>The image is a file
+			treated as a disk: attaching it as a loop device and writing a partition
+			table to it go through the kernel's block layer.</td></tr>
+			<tr><td class="mono">pmbootstrap</td><td><code>cryptsetup luksFormat</code>,
+			<code>mkfs</code>, <code>dd</code></td><td>Creating the encrypted container
+			and the filesystems inside it, and writing the boot image. This is the step
+			that generates <b>your</b> master key, on <b>your</b> machine.</td></tr>
+		</table>
+		</div>
+		<p>What none of it does: install anything on your system, write outside
+		<code>~/.local/var/pmbootstrap-utsugi</code>, or touch your
+		<code>/etc</code>. The work directory is ordinary files you can delete with
+		<code>rm -rf</code> when you are done, and the loop devices go away with it.</p>
+		<p>If you would rather not grant any of this, the ready-made image needs
+		none of it &mdash; only <code>fastboot</code>. What it cannot give you is an
+		encrypted disk, for the reason in step 01.</p>
+
+		<div class="h" style="margin-top:34px"><span>05</span><h2>What it costs</h2></div>
 		<div class="note"><i></i><div>
 			<b>A stuck kernel workqueue takes the whole filesystem with it.</b>
 			On 2026-09-10 an ADSP crash whose recovery deadlocked left this phone frozen
