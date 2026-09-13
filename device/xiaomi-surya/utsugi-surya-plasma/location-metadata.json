@@ -4,7 +4,7 @@
         "Description": "Location quick setting for Plasma Mobile",
         "Description[es]": "Ajuste rápido de la localización para Plasma Mobile",
         "Icon": "gps",
-        "Id": "org.kde.plasma.quicksetting.location",
+        "Id": "org.utsugi.quicksetting.location",
         "License": "LGPL-2.0-or-later",
         "Name": "Location",
         "Name[es]": "Localización",
