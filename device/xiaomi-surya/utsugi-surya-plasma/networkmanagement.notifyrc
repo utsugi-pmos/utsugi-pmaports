@@ -13,10 +13,19 @@
 # <app>.notifyrc from the data dirs and then merges any copy found in the
 # config dirs, and /etc/xdg is a config dir.
 #
-# Only the two noisy ones. Every failure event keeps its popup: a phone that
-# quietly fails to join a network is worse than a chatty one.
+# The four noisy state changes: connect, disconnect, and the two connectivity
+# nags a phone throws as it moves between networks. Every actual FAILURE event
+# keeps its popup (a phone that quietly fails to join is worse than a chatty
+# one), and CaptivePortal keeps its own -- that is the "sign in to this wifi"
+# prompt, which is useful.
 [Event/ConnectionActivated]
 Action=None
 
 [Event/ConnectionDeactivated]
+Action=None
+
+[Event/LimitedConnectivity]
+Action=None
+
+[Event/NoLongerConnected]
 Action=None
