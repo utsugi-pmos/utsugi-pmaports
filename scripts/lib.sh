@@ -34,6 +34,14 @@ PKGS="$WORK/packages/edge/$ARCH"
 REPO_URL="${REPO_URL:-https://utsugi-pmos.github.io/utsugi-pmaports}"
 GH_REMOTE="${GH_REMOTE:-git@github.com:utsugi-pmos/utsugi-pmaports.git}"
 
+# owner/repo, the form the gh CLI wants for --repo. In CI, $GITHUB_REPOSITORY is
+# already exactly that; otherwise derive it from the remote. The derivation must
+# handle BOTH git@host:owner/repo.git AND https://host/owner/repo.git -- the old
+# 's|.*:||' only stripped to the last colon, so the https remote CI uses turned
+# into //host/owner/repo and gh answered 422, failing every packages run.
+GH_REPO="${GITHUB_REPOSITORY:-$(printf '%s' "$GH_REMOTE" | \
+	sed -E 's#^[a-z]+://[^/]+/##; s#^[^/]*:##; s#\.git$##')}"
+
 red()  { printf '\033[31m%s\033[0m\n' "$*" >&2; }
 green(){ printf '\033[32m%s\033[0m\n' "$*"; }
 grey() { printf '\033[90m%s\033[0m\n' "$*"; }
