@@ -203,19 +203,34 @@ fastboot reboot
 			else. Plasma Mobile ships no onboarding wizard, so this is one, and it
 			is the whole of it.
 			<br><br>
-			It stores nothing to know when to appear: a unit reads the salt out of
-			your own entry in <code>/etc/shadow</code>, hashes the shipped password
-			with that salt and compares. Change the password and the salt changes
-			with it, so the step never appears again &mdash; with no state file to
-			go stale, and nothing on disk that says what the password is.
+			Whether it appears is a plain yes/no fact, not a guess: once you go
+			through it, it drops a marker and never asks again &mdash; whatever
+			password you chose, even one equal to the factory value. It does not
+			compare your password to the shipped one, so you can set anything you
+			like, keep it, and never be nagged.
 		</div></div>
 		<div class="note" id="encrypt"><i></i><div>
 			<b>Then it asks whether to encrypt the phone.</b> Say yes and choose a
 			passphrase, plug the charger in, and it restarts and encrypts the storage
 			in place before anything is mounted. From then on every start asks for the
-			passphrase on the screen, before the PIN. It is done on the phone, so the
-			key is born there and no computer is involved. &ldquo;Not now&rdquo; is for
-			good. Details: <a href="install-encrypted.html">encryption</a>.
+			passphrase on the screen, before the PIN.
+			<br><br>
+			It is done on the phone, so the LUKS key is born there and no computer is
+			involved &mdash; which is also why no encrypted image is offered for
+			download: one made on someone else's machine would carry a key that machine
+			had seen. It reads and writes every sector once, so it takes twenty to forty
+			minutes with a percentage on screen; <b>keep the charger in and do not turn
+			it off</b>. If it dies halfway the next boot asks for the passphrase and
+			finishes what was left, and nothing is lost. The passphrase cannot be
+			recovered: forget it and the data is gone.
+			<br><br>
+			<b>&ldquo;Not now&rdquo; is for good</b> &mdash; the question does not come
+			back &mdash; but you can still encrypt later from a terminal on the phone,
+			which runs the same thing the assistant would:
+			<div class="sh">
+				<div class="bar"><i></i><span>ON THE PHONE</span></div>
+				<pre>printf 'your passphrase' | pkexec /usr/libexec/utsugi-surya/request-encryption</pre>
+			</div>
 		</div></div>
 	</div>
 </section>

@@ -37,11 +37,11 @@
 			<a href="install-pmos.html">
 				<div class="n">3 &middot; Phone that has never run Linux</div>
 				<p>Unlock it at Xiaomi, U-Boot, pmbootstrap, then route 2.</p></a>
-			<a href="install-image.html#encrypt">
-				<div class="n">Encryption comes with route 1</div>
-				<p>The first boot asks whether to encrypt the phone, and the phone does
-				it itself. Nothing to build.</p></a>
 		</div>
+		<p class="muted" style="margin-top:18px">Encryption is not a route of its own:
+		the ready image asks whether to encrypt on its first boot and the phone does it
+		itself, and any install can do it later from a terminal &mdash;
+		<a href="install-image.html#encrypt">how it works</a>.</p>
 	</div>
 </section>
 <footer><div>
