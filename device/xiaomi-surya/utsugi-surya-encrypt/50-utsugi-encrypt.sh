@@ -69,7 +69,17 @@ TYPE="$(get_partition_type "$ROOT")"
 
 case "$TYPE" in
 crypto_LUKS)
-	# Already encrypted. The only thing to do is finish an interrupted one.
+	# Already encrypted. Make sure the header carries the UUID the cmdline
+	# expects -- repairs a phone encrypted by the version that did not set it,
+	# which otherwise never gets past "Waiting for root partition". Reads the
+	# wanted UUID from the cmdline, since the ext4 UUID is no longer visible.
+	want="$(cat /proc/cmdline | tr ' ' '\n' | sed -n 's/^pmos.\?root_uuid=//p' | head -1)"
+	have="$(blkid -o value -s UUID "$ROOT" 2>/dev/null)"
+	if [ -n "$want" ] && [ "$want" != "$have" ]; then
+		cryptsetup luksUUID "$ROOT" --uuid "$want" --batch-mode 2>/dev/null &&
+			echo "utsugi-encrypt: set LUKS UUID to $want (cmdline)"
+	fi
+	# The only other thing to do is finish an interrupted encryption.
 	if cryptsetup luksDump "$ROOT" 2>/dev/null | grep -q "online-reencrypt"; then
 		say "Finishing the encryption that was interrupted.\nEnter the passphrase you chose."
 		splash_hide
@@ -97,6 +107,16 @@ if [ -f "$MNT/$REQUEST" ]; then
 	cat "$MNT/$REQUEST" > "$PW"
 fi
 umount "$MNT"
+
+# The UUID the kernel cmdline was built with (pmos_root_uuid=), which is this
+# ext4 filesystem's UUID. After encryption the partition is crypto_LUKS with a
+# random UUID, and the stock find_partition looks for the OLD one and refuses
+# to fall back -- so the next boot cannot find its own root and stops at
+# "Waiting for root partition". Captured here while it is still ext4, and put
+# back on the LUKS header below. This is the difference between a phone that
+# boots after encryption and one that does not; found the hard way on
+# 2026-09-14, on a phone that encrypted fine and then could not boot.
+OLD_UUID="$(blkid -o value -s UUID "$ROOT" 2>/dev/null)"
 [ -s "$PW" ] || { rm -f "$PW"; exit 0; }
 
 # Power. Encrypting a few gigabytes on a phone takes a while, and a phone that
@@ -186,6 +206,14 @@ if [ "$rc" -ne 0 ]; then
 	say "Encryption failed (cryptsetup: $rc).\nThe phone will start; try again from Settings."
 	echo "utsugi-encrypt: cryptsetup output:"; cat "$PROG"
 	sleep 8; cleanup; exit 0
+fi
+
+# 4b. Give the LUKS header the filesystem's old UUID, so the stock initramfs
+#     finds it by the pmos_root_uuid= on the cmdline. Without this the phone
+#     encrypts and then cannot find its root.
+if [ -n "$OLD_UUID" ]; then
+	cryptsetup luksUUID "$ROOT" --uuid "$OLD_UUID" --batch-mode 2>/dev/null ||
+		echo "utsugi-encrypt: warning: could not set the LUKS UUID to $OLD_UUID"
 fi
 
 # 5. Open it, the same way fde-unlock does, so the unlock step sees it open.
