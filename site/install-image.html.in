@@ -21,7 +21,7 @@
 		<div class="eyebrow">Route 1 &middot; recommended</div>
 		<h1>Flash the ready image</h1>
 		<p class="lede">One download, everything inside: kernel, hardware fixes, the
-		six own applications, browser, mail, maps, photos. About 1&nbsp;GB
+		six own applications, browser, mail, maps, photos. About 1.2&nbsp;GB
 		compressed.</p>
 		<p><a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/@IMG@.xz">Download @IMG@.xz &mdash; 1.2 GB</a></p>
 		<div class="note"><i></i><div>
@@ -200,14 +200,8 @@ fastboot reboot
 			<br><br>
 			The phone asks you to, and it does not ask politely: the first session
 			opens full screen on a step that wants a new password before anything
-			else. Plasma Mobile ships no onboarding wizard, so this is one, and it
-			is the whole of it.
-			<br><br>
-			Whether it appears is a plain yes/no fact, not a guess: once you go
-			through it, it drops a marker and never asks again &mdash; whatever
-			password you chose, even one equal to the factory value. It does not
-			compare your password to the shipped one, so you can set anything you
-			like, keep it, and never be nagged.
+			else. Pick anything you like, a 4-digit PIN included; once you set it the
+			step never comes back.
 		</div></div>
 		<div class="note" id="encrypt"><i></i><div>
 			<b>Then it asks whether to encrypt the phone.</b> Say yes and choose a
