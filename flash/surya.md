@@ -43,7 +43,7 @@ The image ships one account:
 
 ```
 user: user
-password: 1111
+password: 147147
 ```
 
 It has to ship a password -- an image cannot ask for one the way pmbootstrap
