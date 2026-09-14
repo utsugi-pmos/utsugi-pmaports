@@ -150,17 +150,16 @@ else
 	rc=1
 fi
 
-# THE SHIPPED PASSWORD IS ONE CONSTANT IN FIVE FILES.
+# THE SHIPPED PASSWORD IS ONE CONSTANT IN FOUR FILES.
 #
-# scripts/image passes it to pmbootstrap, change-the-password hashes it to
-# decide whether to ask, the dialog sends it as the current password, and the
-# release notes and the install page tell people what it is. Drift between any
-# two of them ships an image whose first-run step either never appears or
-# cannot authenticate -- and nothing fails at build time, because each file is
-# correct on its own.
+# scripts/image passes it to pmbootstrap, the dialog sends it as the current
+# password when driving passwd, and the release notes and the install page tell
+# people what it is. Drift between any two of them ships an image whose
+# first-run step cannot authenticate -- and nothing fails at build time,
+# because each file is correct on its own. (change-the-password no longer holds
+# the value: it decides by a boolean flag, not by comparing to the shipped one.)
 title "the shipped password agrees everywhere"
 _pw_files="scripts/image
-device/xiaomi-surya/utsugi-surya-plasma/change-the-password
 device/xiaomi-surya/utsugi-surya-first-password/passwd.cpp
 flash/surya.md
 site/install-image.html.in"
