@@ -48,102 +48,27 @@
 		&ldquo;Not now&rdquo; is for good; it can still be done later from a
 		terminal, with the same script the first boot uses.</p>
 
-		<div class="h" style="margin-top:34px"><span>02</span><h2>Or build it yourself</h2></div>
-		<p>The rest of this page is for whoever would rather generate the encrypted image on a
-		computer they control. It is no longer the only way, and for most people the
-		step above is the better one.</p>
-		<h3>What you need</h3>
-		<p><b>A Linux PC.</b> pmbootstrap builds inside chroots on loop devices,
-		which only Linux has, and its own documentation rules out the Windows
-		subsystem for Linux by name. On a Mac or a Windows machine, run a Linux
-		virtual machine and work inside it. Flashing a ready-made image is a
-		different matter and works from all three.</p>
-		<p>About <b>15 GB free</b> and <b>an hour</b>, most of it the kernel. And these,
-		which the script checks before it starts:</p>
-		<div class="scroll">
-		<table>
-			<tr><th>Debian, Ubuntu</th><td class="mono">sudo apt install python3 git rsync openssl kpartx util-linux procps tar xz-utils</td></tr>
-			<tr><th>Fedora</th><td class="mono">sudo dnf install python3 git rsync openssl kpartx util-linux procps-ng tar xz</td></tr>
-			<tr><th>Arch</th><td class="mono">sudo pacman -S python git rsync openssl multipath-tools util-linux procps-ng tar xz</td></tr>
-		</table>
-		</div>
-		<p>Nothing else has to be set up first: <code>setup-workdir</code> fetches
-		pmbootstrap and pmaports itself, and makes you a signing key of your own.</p>
-
-		<div class="h" style="margin-top:34px"><span>03</span><h2>Build it</h2></div>
+		<div class="h" style="margin-top:34px"><span>02</span><h2>What it costs</h2></div>
+		<p>Encrypting the whole partition takes a while &mdash; the phone reads and
+		writes every sector once. Twenty to forty minutes is normal, and the screen
+		shows a percentage the whole time. <b>Plug the charger in and do not turn it
+		off.</b> If it does die halfway, the next boot asks for the passphrase and
+		finishes what was left; nothing is lost.</p>
+		<p>The passphrase cannot be recovered. Forget it and the phone is a brick
+		with your data inside &mdash; there is no back door and no reset that keeps the
+		data.</p>
+		<p><b>&ldquo;Not now&rdquo; is for good:</b> the question does not come back. You
+		can still encrypt later from a terminal on the phone, which runs the same
+		thing the first boot would have:</p>
 		<div class="sh">
-			<div class="bar"><i></i><span>ON YOUR LINUX PC</span></div>
-			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
-cd utsugi-pmaports
-scripts/setup-workdir
-scripts/build-your-own-image --encrypted</pre>
+			<div class="bar"><i></i><span>ON THE PHONE</span></div>
+			<pre>printf 'your passphrase' | pkexec /usr/libexec/utsugi-surya/request-encryption</pre>
 		</div>
-		<p>pmbootstrap asks <b>you</b> for the passphrase during the install. Then
-		flash it like any other image, to <code>userdata</code>.</p>
-		<p>Verified end to end here: the initramfs opens a LUKS that lives inside a
-		loop file on <code>userdata</code>, and <code>unl0kr</code> draws its keyboard
-		on this panel.</p>
+		<p>It writes the passphrase where the initramfs reads it and restarts, exactly
+		as the assistant does.</p>
 
-		<div class="h" style="margin-top:34px"><span>04</span><h2>Why it asks for your password</h2></div>
-		<p>A script you cloned five minutes ago asking for <code>sudo</code> is a
-		fair reason to stop. Four kinds of thing need it, listed here &mdash; and a
-		build runs them <b>366 times</b> before it reaches partitioning, which
-		<code>UTSUGI_SHOW_ROOT=1</code> will show you one line at a time.
-		At a glance;
-		<a href="https://github.com/utsugi-pmos/utsugi-pmaports/blob/main/ROOT.md">ROOT.md</a>
-		explains each one properly, including what happens if you refuse. Check it
-		against <code>grep -n sudo scripts/*</code> and against
-		<a href="https://gitlab.postmarketos.org/postmarketOS/pmbootstrap">pmbootstrap</a>'s
-		own source.</p>
-		<div class="scroll">
-		<table>
-			<tr><th>Who</th><th>What</th><th>Why it cannot be done as you</th></tr>
-			<tr><td class="mono">setup-workdir</td><td><b>usually nothing.</b> One ACL
-			granting uid 12345 read access to your signing key</td><td>Builds sign as
-			<code>pmos</code> (uid 12345) inside the chroot, and a key only you can read
-			fails at the last step, after everything has compiled. Granting one uid read
-			access to your own file needs no root. Only where the filesystem has no
-			ACLs does it fall back to <code>chown</code>, which does &mdash; giving a
-			file away is privileged, letting someone read it is not.</td></tr>
-			<tr><td class="mono">pmbootstrap</td><td><code>chroot</code>,
-			<code>mount</code>, <code>mknod</code></td><td>The build environment is a
-			directory with a real <code>/proc</code>, <code>/sys</code> and device
-			nodes bind-mounted into it. Entering it, and creating those, are
-			privileged operations on every Linux.</td></tr>
-			<tr><td class="mono">pmbootstrap</td><td><code>losetup</code>,
-			<code>parted</code>, <code>partprobe</code></td><td>The image is a file
-			treated as a disk: attaching it as a loop device and writing a partition
-			table to it go through the kernel's block layer.</td></tr>
-			<tr><td class="mono">pmbootstrap</td><td><code>cryptsetup luksFormat</code>,
-			<code>mkfs</code>, <code>dd</code></td><td>Creating the encrypted container
-			and the filesystems inside it, and writing the boot image. This is the step
-			that generates <b>your</b> master key, on <b>your</b> machine.</td></tr>
-		</table>
-		</div>
-		<p>What none of it does: install anything on your system, write outside
-		<code>~/.local/var/pmbootstrap-utsugi</code>, or touch your
-		<code>/etc</code>. The work directory is ordinary files you can delete with
-		<code>rm -rf</code> when you are done, and the loop devices go away with it.</p>
-		<p>If you would rather not grant any of this, the ready-made image needs
-		none of it &mdash; only <code>fastboot</code>. What it cannot give you is an
-		encrypted disk, for the reason in step 01.</p>
-
-		<div class="h" style="margin-top:34px"><span>05</span><h2>What it costs</h2></div>
-		<div class="note"><i></i><div>
-			<b>A stuck kernel workqueue takes the whole filesystem with it.</b>
-			On 2026-09-10 an ADSP crash whose recovery deadlocked left this phone frozen
-			for seven hours with the root inside dm-crypt. The trigger is fixed, and a
-			watchdog now reboots and saves the kernel log to a partition, but the cause
-			is still open.
-		</div></div>
-		<div class="note"><i></i><div>
-			<b>Encrypting an install you already have is not offered.</b>
-			It needs the filesystem shrunk, cannot run on the mounted root, and ends with
-			initramfs, <code>fstab</code> and <code>crypttab</code> rewritten by hand.
-			Back up, reinstall encrypted, restore.
-		</div></div>
 		<div class="next">
-			<a href="install-image.html"><b>Simpler</b><span>The ready image</span></a>
+			<a href="install-image.html"><b>Start here</b><span>Flash the image</span></a>
 			<a href="devices.html"><b>Read</b><span>What does not work</span></a>
 		</div>
 	</div>
