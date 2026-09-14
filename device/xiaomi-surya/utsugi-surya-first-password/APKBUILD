@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # unit that leaves a flag in /run.
 pkgname=utsugi-surya-first-password
 pkgver=1
-pkgrel=9
+pkgrel=10
 pkgdesc="Choose a password before using a phone flashed from the image"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="aarch64"
@@ -73,7 +73,7 @@ systemd() {
 sha512sums="
 905d1fa6e7c7f206f65aae6733bb5fea157d501f24b4d292853d0d1227639027c1970273484e7696e5555a16b0914be0276eb93971d461a3a42be31972ce66dc  CMakeLists.txt
 1fc8a2fe2f3f38c873b957d2f0aa63f708e56708afa95e18422dfaed1d4ef60d6d403caa6e689e0babdbbc3557e7b87e6287d669391e092573578181662f2cd5  main.cpp
-07713494a1d8c3aded8441d1efe27e6b8f656f92adb72f05dcda8ade764e4b26b77f5107197cf900913893ee2597c81beefa53a33248ab53894e7462e4db0592  passwd.cpp
+d72aacdc87d82668271619ccda5e338e1faab708e71a47cf45633c5618b76f334e33c400552531eee31037c4b28ee9acc9382d14ecdd72044d68bef3940afefe  passwd.cpp
 1eae24b1170b8480a2c85790c7d2a1aa3d9372fa5551fe1dfe923c71fd0836e4397bc62d23ccd093ac1a7e7b480ca7015641409335d06b541db26528d197b0ba  passwd.h
 332b6a93deee50f6044d1db2ce9d99a2e69944f22b447839f6dae2881003aee70ae3866a75c3a597dc003edd695b552c53f5a0d03f29a5ff287af8fb3c8ffc32  encrypt.cpp
 6f52e3ec07160a26101b107189356b16944a8e913c7c4a86e9d01e4a41cd92f005f91343a64015a1e658a4d366685542587d498d62c982c8c2ec9b65ffc0b0f0  encrypt.h
