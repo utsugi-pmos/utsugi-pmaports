@@ -157,6 +157,12 @@ IMG="$(gh release list --repo "$GH_REPO" --limit 20 --json tagName -q '.[].tagNa
 [ -n "$IMG" ] || die "could not read the latest -surya release: is 'gh' logged in?"
 IMG="utsugi-surya-${IMG%-surya}.img"
 green "  image in the instructions: $IMG"
+# Clear the rendered pages first. $SITE carries the live site over (for the apk
+# index and keys), so a page whose template was DELETED would otherwise survive
+# here for ever -- as install-encrypted.html did after encryption folded into
+# the generic guide. Only top-level *.html are pages; the index (main/), keys/
+# and style.css are untouched.
+rm -f "$SITE"/*.html
 for page in "$REPO"/site/*.html.in; do
 	name="$(basename "$page" .in)"
 	sed -e "s|@KEY@|$KEY.pub|g" -e "s|@URL@|$REPO_URL|g" -e "s|@ARCH@|$ARCH|g" \
