@@ -26,6 +26,8 @@ jobs:
   build:
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 300
+    outputs:
+      apks: ${{ steps.check.outputs.has }}
     steps:
       - uses: actions/checkout@v4
         with: { fetch-depth: 0 }
@@ -60,14 +62,23 @@ jobs:
           if-no-files-found: warn
           retention-days: 14
 
+      # Did the build produce any apk? A commit touching only site/ or scripts/
+      # builds none, and that is not a failure -- publish still runs to re-render
+      # the pages. This flag lets publish skip the download instead of letting it
+      # fail, which kept the run clean but flagged a red 'artifact not found'.
+      - name: any apks?
+        id: check
+        run: |
+          if ls ~/.local/var/pmbootstrap-utsugi/packages/edge/aarch64/*.apk >/dev/null 2>&1; then
+            echo "has=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "has=false" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/upload-artifact@v4
         with:
           name: apks
           path: ~/.local/var/pmbootstrap-utsugi/packages/edge/aarch64/*.apk
           retention-days: 14
-          # A commit that only touches site/ or scripts/ builds nothing, and
-          # that is not a failure: publish still has to run to re-render the
-          # pages, carrying every package from the live site.
           if-no-files-found: ignore
 
   publish:
@@ -76,9 +87,10 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
-        # Missing when the commit built nothing. The job used to die here with
-        # "Artifact not found for name: apks" on a site-only commit.
-        continue-on-error: true
+        # Only when the build produced apks. A site- or scripts-only commit
+        # builds none, and publish then carries every package from the live
+        # site; skipping the download keeps the run green with no red annotation.
+        if: needs.build.outputs.apks == 'true'
         with: { name: apks, path: apks }
       - run: mkdir -p apks
       - name: sign and push
