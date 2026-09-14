@@ -56,12 +56,12 @@ ONLY_SAY=0
 # they meant to leave charging. Charge mode would only make them press power a
 # second time for the desktop they already asked for by unlocking.
 #
-# A device-mapper root means it came through cryptsetup.
-if [ "$ONLY_SAY" != 1 ]; then
-	case "$(findmnt -no SOURCE / 2>/dev/null)" in
-		/dev/mapper/*) echo "encrypted root, unlocked by hand: full session"; exit 0 ;;
-	esac
-fi
+# A device-mapper root means it came through cryptsetup. Applies in --say too,
+# since that must report what the real run would decide, and this touches no
+# state -- it only reports and exits.
+case "$(findmnt -no SOURCE / 2>/dev/null)" in
+	/dev/mapper/*) echo "encrypted root, unlocked by hand: full session"; exit 0 ;;
+esac
 
 n=$(reason) || { echo "cannot read PON_REASON1: normal boot"; exit 0; }
 
