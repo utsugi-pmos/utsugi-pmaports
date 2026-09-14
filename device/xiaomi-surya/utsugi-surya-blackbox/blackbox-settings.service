@@ -19,14 +19,13 @@ RemainAfterExit=yes
 # are read with 'blackbox'.
 ExecStart=/bin/sh -c 'echo N > /sys/module/printk/parameters/console_suspend'
 
-# 2. Let more than just errors reach the console.
-#
-# The boot line carries 'quiet', which leaves the console level at 4: only
-# warning and worse. The drivers' messages on suspend are 'info' (6) and were
-# being lost. Only the console is raised to 7; the journal does not change.
-#
-# It costs little: the console is RAM, not a serial port.
-ExecStart=/sbin/sysctl -q -w kernel.printk="7 4 1 7"
+# Raising the console to level 7 used to live here too, at multi-user. It was
+# moved to blackbox-console-verbose.service, which waits for the compositor to
+# own the screen first: at level 7 every driver's chatter was painted on the
+# framebuffer for the few seconds between unlocking and the desktop, because
+# the boot console (loglevel=3) is still on screen until kwin takes over.
+# Keeping console_suspend here (it matters at the first suspend, well after the
+# desktop) and the raise there keeps the boot quiet without losing anything.
 
 [Install]
 WantedBy=multi-user.target

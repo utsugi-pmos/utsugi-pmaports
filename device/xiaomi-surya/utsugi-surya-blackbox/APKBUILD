@@ -7,7 +7,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # enough room not to rotate it away.
 pkgname=utsugi-surya-blackbox
 pkgver=1
-pkgrel=15
+pkgrel=16
 pkgdesc="Keep evidence across the reboots this phone does not survive"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 # Not noarch any more: freeze-watchdog is a C program on purpose. A shell
@@ -27,6 +27,7 @@ source="blackbox
 	blackbox-archive
 	journal-sync
 	blackbox-settings.service
+	blackbox-console-verbose.service
 	blackbox-archive.service
 	blackbox-heartbeat.service
 	blackbox-heartbeat.timer
@@ -56,7 +57,8 @@ package() {
 		"$pkgdir"/etc/default/utsugi-surya-freeze-watchdog
 
 	local unit
-	for unit in blackbox-settings.service blackbox-archive.service \
+	for unit in blackbox-settings.service blackbox-console-verbose.service \
+	            blackbox-archive.service \
 	            blackbox-heartbeat.service blackbox-heartbeat.timer \
 	            journal-sync.service freeze-watchdog.service; do
 		install -Dm644 "$srcdir/$unit" -t "$pkgdir"/usr/lib/systemd/system/
@@ -78,11 +80,12 @@ cfeb9accad2f6538e6a1669d0945fa2e28fcdb5273e7a4f9d5a565df547aee2ff910ec8e7d5a936c
 4937630971bdc11bbea5c93fb87d5101d9febf77213593593350df9728e57c525e099e76d8c903674e8df1e7084cee03d59615abc0b19bb47db52570fbf18531  blackbox-heartbeat
 4d468b94955b2bcce22eb79c57e2976812dd55e617f51cde0cf5644b820ec089bcd37764430b908b2e6332061f2eb7db47dc8d242a90d6ed3aeb89584e700fa7  blackbox-archive
 601d4cc34ba6eae5bffc82eeeb39d657a2f3af527d9e65c832a3bd9c9403112e3dc460b74b286b4610454e23a0a5fd886be31a2936d22c03e65b0e44079b94e9  journal-sync
-df450003de074048f85be0301d12f14afe3de5fb7204a6ec65fee479662ce67a384771837065e1c3211ebf4b0a3a4cfe330bcd6ce93807b06a5b3666ea317678  blackbox-settings.service
+55031eb1b426014b53e21d1c8246f47c63addfcb0bb3b3ac67318ca0a6e9bcd74c70c2baeccb6990e2a18b269a8ba54c5fd8a097b6f960af0798b8243b47c335  blackbox-settings.service
+07af31df6808938bc999e59797ea6519a9710effab152f5614cd6844f0268b4d5fbb5895a57d80a4768dbd1be30ca0bfc1a40cbae2aa49f6f0ff0160841322bc  blackbox-console-verbose.service
 cacf47223a718cca93e8174243daa770548e6c88b0fe1da9ee5f126cd78ce829b4115b117b07ad9cb9f1c65182f1a567b27cb1cc9ee0f3a01443ab11293a226f  blackbox-archive.service
 8a4348266114421743cb306d6e79adc44d74f93083eb7ab3f3a67713ae462305b525c391929fe4adfeb0158d8c03364dabf2a03da459ce88ab052a10bd8aab89  blackbox-heartbeat.service
 3a940b00e70117b8d8f73fb4c07263f39fa44dffa4b3711e9b0e675a087c4e23e5544a588ced2e439fe698b959b9aa155e46f534b88b97749b40adff03321a5d  blackbox-heartbeat.timer
 aa829deeab37b468aac90f8061e4a8f8389cd57e5eefeea9ca594ab8dfd8e0c2bda8fe68716e98d2d3937113ccf76fb90f828a1019ba41951f604847d682610a  journal-sync.service
 07a90f91efe797a1a3611028e17aac781d7a4c83e05b50d9b70ad8018586667b3fb9d4a770f3cac7ec29760bb9b7995fdcddfe1d0c56827d42b85d1169ffcfc6  50-utsugi-blackbox.conf
-78c59c97ab61d2f2abb1f67ce9dc04e3c12d195e1156b247d53d8d75e5403649311f65666267ec9634941737065d7b8e4c7d7492c7aba095064452300a4e4082  80-utsugi-surya-blackbox.preset
+9b58f590e3552ef1b0eed1b8ac194a6b194659985414d999a17f93b1624342d2c27728fae53ef3d636439734d3069b3dc129a81890e73360b406027ed70895e5  80-utsugi-surya-blackbox.preset
 "
