@@ -192,7 +192,7 @@ fastboot reboot
 		<p>The phone boots to the desktop. First boot takes a minute longer.</p>
 		<div class="note"><i></i><div>
 			<b>Log in and change the password.</b>
-			The image ships user <code>user</code> with password <code>1111</code>,
+			The image ships user <code>user</code> with password <code>147147</code>,
 			because an image has to have one and it is printed on this page &mdash; so
 			anybody who can read knows the password of a phone that has not changed it.
 			Change it in <b>Settings &rarr; Users</b>, or in a terminal:
