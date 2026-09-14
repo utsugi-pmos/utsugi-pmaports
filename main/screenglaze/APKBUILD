@@ -14,7 +14,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 #                    theme.
 pkgname=screenglaze
 pkgver=1.3
-pkgrel=0
+pkgrel=1
 pkgdesc="Screenshot with volume-down + power on Plasma Mobile, Android-style"
 url="https://github.com/utsugi-pmos/screenglaze"
 arch="all"
@@ -58,6 +58,21 @@ package() {
 	install -Dm644 71-screenglaze.rules -t "$pkgdir"/usr/lib/udev/rules.d/
 	install -Dm644 screenglaze.service -t "$pkgdir"/usr/lib/systemd/user/
 	install -Dm644 "$srcdir"/80-screenglaze.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
+
+	# Keep it out of the app drawer. The buttons (volume-down + power) are the
+	# way this is used; a launcher tile for a screenshot utility is clutter, not
+	# a feature. NoDisplay hides the entry while leaving the service, the udev
+	# rule and the .desktop's StartupWMClass binding intact -- the tile was only
+	# ever a manual shutter, and that is a niche worth losing for a clean grid.
+	# The sed is idempotent: a NoDisplay the upstream .desktop might gain later
+	# is dropped first, so this never doubles it.
+	local desktop="$pkgdir"/usr/share/applications/screenglaze.desktop
+	if [ -e "$desktop" ]; then
+		sed -i '/^NoDisplay=/d; /^\[Desktop Entry\]/a NoDisplay=true' "$desktop"
+	else
+		error "screenglaze.desktop not where expected -- did the install path change?"
+		return 1
+	fi
 }
 
 systemd() {
