@@ -1,0 +1,65 @@
+maintainer="Dr. Utsugi <cidwel@gmail.com>"
+# phone-keyconfig: what the power and volume buttons do, and the app to change
+# it. One daemon owns the three buttons (grabbed at the evdev device, replayed
+# through uinput) and runs a configurable action per gesture: screen toggle on
+# release, power menu on a 3 s hold, an action per volume key while power is
+# held (volume-down = screenshot via screenglaze), an action on a double tap.
+#
+# The decisions are a state machine in plain C++ with a test per rule
+# (tests/gesture_test.cpp); the daemon around it only moves bytes.
+#
+# It replaces the button handling screenglaze used to do itself: two processes
+# cannot grab the same evdev device, and the one that owns the buttons has to
+# be the one that knows every gesture.
+pkgname=phone-keyconfig
+pkgver=1.0
+pkgrel=0
+pkgdesc="Configurable power and volume button actions for Plasma Mobile"
+url="https://github.com/utsugi-pmos/phone-keyconfig"
+arch="all"
+license="GPL-2.0-or-later"
+options="!check"
+subpackages="$pkgname-systemd"
+depends="
+	qt6-qtdeclarative
+	kirigami
+	kirigami-addons
+	breeze-icons
+	kcmutils
+	plasma-settings
+	screenglaze
+	layer-shell-qt
+	"
+makedepends="
+	cmake
+	samurai
+	extra-cmake-modules
+	qt6-qtbase-dev
+	qt6-qtdeclarative-dev
+	kcmutils-dev
+	kconfig-dev
+	kcoreaddons-dev
+	ki18n-dev
+	"
+source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz"
+
+build() {
+	cmake -B build -G Ninja \
+		-DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DCMAKE_INSTALL_PREFIX=/usr \
+		-DCMAKE_INSTALL_LIBDIR=lib
+	cmake --build build
+	# The state machine's own tests, natively: they need no Qt and no device.
+	./build/bin/gesture_test
+}
+
+package() {
+	DESTDIR="$pkgdir" cmake --install build
+}
+
+systemd() {
+	default_systemd
+}
+sha512sums="
+454efc7fdcc686b03fcdb77ea394680f4a6ef2119698e129d566db77e48683c871337f8ffabcfd23c8f5534393b9c2964d74a04ee61b5e889b874217dfda17f3  phone-keyconfig-1.0.tar.gz
+"

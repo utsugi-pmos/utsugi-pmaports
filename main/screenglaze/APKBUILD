@@ -1,6 +1,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
-# Screenglaze: volume-down + power takes a screenshot, and a sheet follows to
-# share, save or crop it.
+# Screenglaze: a screenshot sheet to share, save or crop. Since 1.4 it no longer
+# touches the buttons: phone-keyconfig owns them and calls org.surya.Screenglaze
+# shoot() over D-Bus (volume-down + power by default).
 #
 # Three dependencies that are NOT optional:
 #
@@ -13,9 +14,9 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 #   feedbackd        the shutter click and the vibration, from the device's own
 #                    theme.
 pkgname=screenglaze
-pkgver=1.3
-pkgrel=1
-pkgdesc="Screenshot with volume-down + power on Plasma Mobile, Android-style"
+pkgver=1.4
+pkgrel=0
+pkgdesc="Screenshot sheet for Plasma Mobile: share, save or crop, triggered over D-Bus"
 url="https://github.com/utsugi-pmos/screenglaze"
 arch="all"
 license="LGPL-2.0-or-later"
@@ -55,30 +56,15 @@ build() {
 
 package() {
 	DESTDIR="$pkgdir" cmake --install build
-	install -Dm644 71-screenglaze.rules -t "$pkgdir"/usr/lib/udev/rules.d/
 	install -Dm644 screenglaze.service -t "$pkgdir"/usr/lib/systemd/user/
 	install -Dm644 "$srcdir"/80-screenglaze.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
 
-	# Keep it out of the app drawer. The buttons (volume-down + power) are the
-	# way this is used; a launcher tile for a screenshot utility is clutter, not
-	# a feature. NoDisplay hides the entry while leaving the service, the udev
-	# rule and the .desktop's StartupWMClass binding intact -- the tile was only
-	# ever a manual shutter, and that is a niche worth losing for a clean grid.
-	# The sed is idempotent: a NoDisplay the upstream .desktop might gain later
-	# is dropped first, so this never doubles it.
-	local desktop="$pkgdir"/usr/share/applications/screenglaze.desktop
-	if [ -e "$desktop" ]; then
-		sed -i '/^NoDisplay=/d; /^\[Desktop Entry\]/a NoDisplay=true' "$desktop"
-	else
-		error "screenglaze.desktop not where expected -- did the install path change?"
-		return 1
-	fi
 }
 
 systemd() {
 	default_systemd
 }
 sha512sums="
-a266b7d8267df3d87d936647f83722e2d01a131169c018d9f10496b1ec97c1579cea5f2692b09180b90287bd476a6d7ec89a69bb57d1d666ec719ddbb5fc7f7c  screenglaze-1.3.tar.gz
+977b8d21a29ea570aa52572fa7b198d4ca222c5cdd85bab4a1f38deb756585e7f098acaecf8509055ef830125e46836dfc577dffdd23f69b62b6e44c3a316555  screenglaze-1.4.tar.gz
 b11f764b600261069ca26f2d41b997c4c359e1fa63bb067a842e868ad3c70823522c47cb498bac99d58f3689233254b6438b4837d03d6082ddf0f3d248b6425e  80-screenglaze.preset
 "
