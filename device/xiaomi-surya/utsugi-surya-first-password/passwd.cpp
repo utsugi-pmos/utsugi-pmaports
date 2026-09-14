@@ -3,6 +3,8 @@
 #include "passwd.h"
 
 #include <QDebug>
+#include <QDir>
+#include <QFile>
 
 #include <cerrno>
 #include <csignal>
@@ -138,6 +140,35 @@ bool talkToPasswd(const QByteArray &newPassword, QByteArray *transcript)
     return step == stepCount && WIFEXITED(status) && WEXITSTATUS(status) == 0;
 }
 
+// Record that the user has been through this step. This is the whole basis on
+// which the phone decides never to ask again (change-the-password reads it as
+// root): a boolean fact, not a comparison of the live password to the shipped
+// one. It is why a person can pick 1111, or any value including the factory
+// one, and keep it without being nagged.
+//
+// The path is pinned to ~/.local/state rather than XDG_STATE_HOME so it agrees
+// with the system unit, which reads /home/<user>/.local/state/ directly.
+void markConfigured()
+{
+    const QByteArray home = qgetenv("HOME");
+    if (home.isEmpty()) {
+        qWarning("cannot mark the password configured: HOME is unset");
+        return;
+    }
+    const QString dir =
+        QString::fromLocal8Bit(home) + QStringLiteral("/.local/state/utsugi-surya");
+    if (!QDir().mkpath(dir)) {
+        qWarning("cannot create %s", qPrintable(dir));
+        return;
+    }
+    QFile marker(dir + QStringLiteral("/password-configured"));
+    if (!marker.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        qWarning("cannot write %s", qPrintable(marker.fileName()));
+        return;
+    }
+    marker.close();
+}
+
 } // namespace
 
 QString Passwd::change(const QString &newPassword)
@@ -157,6 +188,7 @@ QString Passwd::change(const QString &newPassword)
 
     QByteArray transcript;
     if (talkToPasswd(newPassword.toUtf8(), &transcript)) {
+        markConfigured();
         return QString();
     }
 
