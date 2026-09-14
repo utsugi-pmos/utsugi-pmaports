@@ -1,7 +1,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=utsugi-surya-boot
 pkgver=1
-pkgrel=3
+pkgrel=4
 pkgdesc="Kernel command line for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -21,7 +21,7 @@ package() {
 		-t "$pkgdir"/usr/lib/udev/rules.d/
 }
 sha512sums="
-ca71f54a7817ed0b7ae9815ec3433cdc5dd9fce1776a03b483f077d7172a7b47f820626763b6ab5d7f24892870a179b490f9edd86cdf66d802be8381b9e990a7  60-utsugi-surya.conf
+7972c3ac6f231382cfd3a347fd3197d86d1f9f8c6df9652ed4762f766f9d84815be34897450cb3664ec43ddf942bd6a345755d3900769cf0fd87b54415d6ebdd  60-utsugi-surya.conf
 aca4b10cd9f720a377e81fa85bbd7822e857f158b18109c8fd44c87319acb84f9e256f2de29e62122619aa0b469a453b5743c32a9ba2bc5d249aff155f1a7631  10-utsugi-no-ab-slots.conf
 66bd1abb28d1315663ea553d3ceeef7f3022f264f1971195721625e98311956029b952b37bdbb0d7b001ebfbfc0cef4d1d680e38982461cffe83fe901905aa80  60-utsugi-ufs-no-clock-scaling.rules
 "
