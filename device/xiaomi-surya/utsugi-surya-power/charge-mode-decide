@@ -47,6 +47,21 @@ ONLY_SAY=0
 [ "${1:-}" = --say ] && ONLY_SAY=1
 
 [ "$ONLY_SAY" = 1 ] || rm -f "$RUN"
+# AN ENCRYPTED PHONE CANNOT AUTO-BOOT TO CHARGE MODE, SO IT NEVER SHOULD.
+#
+# To reach this point the boot had to get past unl0kr, which BLOCKS for the
+# passphrase. A phone left plugged in and off sits on the unlock screen for
+# ever and never gets here. So if we are running at all on an encrypted phone,
+# a person was present and typed the passphrase -- which nobody does to a phone
+# they meant to leave charging. Charge mode would only make them press power a
+# second time for the desktop they already asked for by unlocking.
+#
+# A device-mapper root means it came through cryptsetup.
+if [ "$ONLY_SAY" != 1 ]; then
+	case "$(findmnt -no SOURCE / 2>/dev/null)" in
+		/dev/mapper/*) echo "encrypted root, unlocked by hand: full session"; exit 0 ;;
+	esac
+fi
 
 n=$(reason) || { echo "cannot read PON_REASON1: normal boot"; exit 0; }
 
