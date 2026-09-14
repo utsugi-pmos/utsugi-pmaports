@@ -5,3 +5,7 @@
 # The private half of the signing key must never be committed.
 *.rsa
 !keys/*.rsa.pub
+
+# dev tarballs placed next to an APKBUILD while iterating before a tag exists
+main/*/*.tar.gz
+device/*/*/*.tar.gz

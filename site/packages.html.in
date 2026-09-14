@@ -166,6 +166,23 @@
 		<p>It refuses politely on a low battery with no charger, resumes by itself if
 		the phone dies halfway, and "not now" is for good.</p>
 
+		<h3>phone-keyconfig &mdash; the power and volume buttons</h3>
+		<p>One daemon owns the three buttons and runs a configurable action per
+		gesture: a short press toggles the screen, a three-second hold brings the
+		power menu, a volume key held with power runs its own action (volume-down
+		takes a screenshot), a double tap is the flashlight. It grabs the keys so
+		the shell never blanks the screen mid-chord, and replays through
+		<code>uinput</code> whatever should pass; if it dies, the buttons fall back
+		to normal.</p>
+		<p>Because Plasma Mobile's logout greeter does not render on this shell, the
+		power menu is one it draws itself &mdash; a layer-shell overlay you configure
+		(reorder, enable, add, list or grid). Two modules in <b>Settings &rarr;
+		Hardware</b> &mdash; <i>Phone keys</i> and <i>Power menu</i> &mdash; edit it
+		all, sharing one library of named actions (open an app, or a command) reused
+		by gestures and menu buttons alike. The decisions are a state machine in
+		plain C++ with a test per rule.
+		<a href="https://github.com/utsugi-pmos/phone-keyconfig">phone-keyconfig</a>.</p>
+
 		<h3>utsugi-surya-plasma &mdash; the fixes</h3>
 		<p>What a Plasma Mobile install on this phone is missing. None of it is a
 		preference: every item was something that did not work, and it lands in
