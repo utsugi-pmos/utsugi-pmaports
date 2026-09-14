@@ -133,6 +133,27 @@ fi
 modprobe dm-crypt 2>/dev/null
 modprobe dm-mod 2>/dev/null
 
+# THE ENCRYPTION SECTOR SIZE MUST MATCH THE DISK, OR THE PHONE IS UNUSABLE.
+#
+# cryptsetup defaults to 512-byte encryption sectors even on a 4096-byte disk.
+# This phone's UFS is 4096 native, and a 512-sector dm-crypt on it turns every
+# 4096 write into read-decrypt-modify-encrypt of eight sectors -- read-modify-
+# write amplification. Unencrypted the desktop loads at load ~3; through a
+# 512-sector dm-crypt the same startup I/O saturated all four cores and the
+# session never came up. Measured on 2026-09-14: encrypted, the phone unlocked
+# and mounted but never reached the desktop; unencrypted it was fine.
+#
+# So pass the disk's own sector size. blockdev --getss reports the logical
+# sector; fall back through sysfs; last resort 512, which is always valid.
+SECSZ="$(blockdev --getss "$ROOT" 2>/dev/null)"
+if [ -z "$SECSZ" ]; then
+	# a loop partition has no queue/ of its own; the parent loop device does
+	q="/sys/class/block/$name/queue/logical_block_size"
+	[ -r "$q" ] || q="/sys/class/block/$name/../queue/logical_block_size"
+	SECSZ="$(cat "$q" 2>/dev/null)"
+fi
+case "$SECSZ" in 512|1024|2048|4096) ;; *) SECSZ=512 ;; esac
+
 say "Encrypting this phone.\nDo not turn it off. This takes a while."
 
 # 2. Check first: resize2fs refuses to touch a filesystem that has not been.
@@ -183,7 +204,7 @@ stat_file="/sys/class/block/$name/stat"
 r0="$(awk '{print $3}' "$stat_file" 2>/dev/null || echo 0)"
 w0="$(awk '{print $7}' "$stat_file" 2>/dev/null || echo 0)"
 cryptsetup reencrypt --encrypt --reduce-device-size 32M --batch-mode \
-	--key-file "$PW" "$ROOT" > "$PROG" 2>&1 &
+	--sector-size "$SECSZ" --key-file "$PW" "$ROOT" > "$PROG" 2>&1 &
 pid=$!
 last=-1
 while kill -0 "$pid" 2>/dev/null; do
