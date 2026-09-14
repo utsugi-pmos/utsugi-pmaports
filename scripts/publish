@@ -147,7 +147,7 @@ CSSV="$(sha256sum "$REPO/site/style.css" | cut -c1-8)"
 # the previous image and its download button was a 404 for the ten minutes
 # until a hand-run publish. The stderr is kept, so the next such failure says
 # what gh actually objected to.
-GH_REPO="$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')"
+# GH_REPO comes from lib.sh (robust for ssh and https remotes).
 IMG="$(gh release list --repo "$GH_REPO" --limit 20 --json tagName -q '.[].tagName' \
 	| grep -m1 -- -surya || true)"
 # If this cannot be resolved the pages must not be published: a hardcoded name

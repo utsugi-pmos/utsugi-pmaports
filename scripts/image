@@ -121,7 +121,7 @@ fi
 if [ "$RELEASE" = 1 ]; then
 	command -v gh >/dev/null || die "gh is not installed"
 	title "Publishing the release"
-	GH_REPO="$(echo "$GH_REMOTE" | sed 's|.*:||; s|\.git$||')"
+	# GH_REPO comes from lib.sh (robust for ssh and https remotes).
 
 	# Create the release EMPTY, then upload. Handing the files to
 	# "gh release create" makes one request that both creates the release and
