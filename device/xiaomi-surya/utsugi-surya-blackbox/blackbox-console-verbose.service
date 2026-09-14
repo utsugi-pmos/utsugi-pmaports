@@ -1,0 +1,34 @@
+[Unit]
+Description=Raise the console to level 7 for the black box, once the desktop owns the screen
+# WHY THIS IS SEPARATE, AND WHY IT WAITS
+# --------------------------------------
+# The black box records whatever reaches the kernel CONSOLE into the ramoops
+# buffer in RAM (see blackbox-settings.service). To record more than critical
+# errors it raises the console to level 7 -- but the console at boot is the
+# framebuffer, still on screen until the compositor takes it over with a DRM
+# modeset. Raising it before then painted every modem/wifi/driver line over the
+# boot for the few seconds between unlocking and the desktop.
+#
+# So it waits for kwin_wayland to be up (it grabs DRM and switches the VT to
+# graphics, after which the framebuffer console no longer renders), and only
+# then raises the level. The messages still reach the ramoops console and the
+# journal; they just never reach a visible framebuffer.
+#
+# The cost, chosen deliberately: a freeze in the boot window before the desktop
+# records at the boot console level (loglevel=3), not 7. Freezes happen during
+# use, not in those few seconds.
+After=plasma-mobile.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+# Wait (bounded) for the compositor to own the screen, then raise the console.
+# pgrep, not a fixed sleep: proceed the moment kwin is up, give up after 60 s so
+# a session that never starts does not leave the box deaf for ever.
+ExecStartPre=/bin/sh -c 'i=0; while [ $i -lt 60 ]; do pgrep -x kwin_wayland >/dev/null 2>&1 && break; i=$((i+1)); sleep 1; done; sleep 1'
+ExecStart=/sbin/sysctl -q -w kernel.printk="7 4 1 7"
+
+[Install]
+WantedBy=graphical.target

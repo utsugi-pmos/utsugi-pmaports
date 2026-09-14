@@ -1,4 +1,5 @@
 enable blackbox-settings.service
+enable blackbox-console-verbose.service
 enable blackbox-archive.service
 enable blackbox-heartbeat.timer
 # journal-sync is deliberately NOT enabled: it writes the journal to disk
