@@ -314,8 +314,8 @@ Kirigami.ApplicationWindow {
                     onClicked: root.declineEncryption()
                 }
                 QQC2.Label {
-                    text: "\"Not now\" is for good: the question will not come back. "
-                        + "It can be done later from a terminal, see the install page."
+                    text: "\"Not now\" does not ask again here, but it is not final: "
+                        + "you can encrypt later from Settings › System › Phone encryption."
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.5

@@ -182,8 +182,15 @@ QString Passwd::change(const QString &newPassword)
     if (newPassword.length() < 4) {
         return QStringLiteral("Use at least 4 characters.");
     }
+    // Keeping the shipped password is a choice the user is allowed to make. It
+    // is the whole point of deciding "configured" by a boolean marker and NOT by
+    // comparing the live password to the shipped one: pick 1111, or the factory
+    // value, and keep it. The account already holds this value, so there is
+    // nothing for passwd to change -- and passwd would refuse an unchanged
+    // password anyway -- so record the choice and we are done.
     if (newPassword == QLatin1String(kShipped)) {
-        return QStringLiteral("That is the password it came with. Pick another one.");
+        markConfigured();
+        return QString();
     }
 
     QByteArray transcript;

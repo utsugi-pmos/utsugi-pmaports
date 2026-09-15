@@ -1,0 +1,20 @@
+{
+    "KPlugin": {
+        "Category": "System",
+        "Description": "Encrypt the phone's storage with a passphrase",
+        "Description[es]": "Cifrar el almacenamiento del teléfono con una frase de paso",
+        "FormFactors": [
+            "handset",
+            "tablet"
+        ],
+        "Icon": "object-locked",
+        "License": "GPL-2.0-or-later",
+        "Name": "Phone encryption",
+        "Name[es]": "Cifrado del teléfono",
+        "Website": "https://github.com/utsugi-pmos/utsugi-pmaports"
+    },
+    "X-KDE-Keywords": "encrypt,encryption,disk,storage,luks,cryptsetup,passphrase,security",
+    "X-KDE-Keywords[es]": "cifrar,cifrado,disco,almacenamiento,luks,cryptsetup,frase de paso,seguridad",
+    "X-KDE-System-Settings-Parent-Category": "system",
+    "X-KDE-Weight": 50
+}
