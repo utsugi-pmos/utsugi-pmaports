@@ -1,7 +1,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=lost-phone
 pkgver=1.5
-pkgrel=1
+pkgrel=2
 pkgdesc="Find your phone without Google: SMS, your own network, your own relay or ntfy"
 url="https://github.com/utsugi-pmos/lost-phone"
 arch="all"
@@ -46,6 +46,11 @@ build() {
 
 package() {
 	DESTDIR="$pkgdir" cmake --install build
+	# Not in the app drawer: it is configured from Settings (its KCM), so the
+	# launcher tile is clutter. Hidden here (idempotently) until the source
+	# .desktop ships NoDisplay itself.
+	sed -i '/^NoDisplay=/d; /^\[Desktop Entry\]/a NoDisplay=true' \
+		"$pkgdir"/usr/share/applications/org.kde.lostphone.desktop
 	install -Dm644 "$srcdir"/80-lost-phone.preset -t "$pkgdir"/usr/lib/systemd/user-preset/
 	# Opens the LAN door on wifi only; the daemon refuses to listen without it.
 	install -Dm644 50_lost-phone.nft -t "$pkgdir"/etc/nftables.d/

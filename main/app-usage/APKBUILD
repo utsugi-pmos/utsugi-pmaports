@@ -1,14 +1,19 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=app-usage
-pkgver=1.3
+pkgver=1.4
 pkgrel=0
-pkgdesc="Battery usage per application, the screen Plasma Mobile does not ship"
+pkgdesc="Battery usage per application, in System Settings; the screen Plasma Mobile does not ship"
 url="https://github.com/utsugi-pmos/app-usage"
 arch="all"
 license="LGPL-2.0-or-later"
 options="!check"
 subpackages="$pkgname-systemd"
+# Since 1.4 the screen is a System Settings module (kcm_app_usage, under
+# Hardware), not a drawer app -- so the KDE runtime that hosts KCMs is required.
 depends="
+	plasma-settings
+	kcmutils
+	kirigami
 	qt6-qtdeclarative
 	qt6-qtsvg
 	python3
@@ -16,9 +21,15 @@ depends="
 makedepends="
 	cmake
 	samurai
+	extra-cmake-modules
 	qt6-qtbase-dev
 	qt6-qtdeclarative-dev
 	qt6-qttools
+	kcmutils-dev
+	kconfig-dev
+	kcoreaddons-dev
+	ki18n-dev
+	kirigami-dev
 	"
 source="$pkgname-$pkgver.tar.gz::$url/archive/refs/tags/v$pkgver.tar.gz
 	80-app-usage.preset
@@ -42,6 +53,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-363b70631cb674f13f5489cfa941d659aafd5780eeeba518eb235dc03d21b2c0bbe40149381a52edb35e264f2958ce06a43bf2db6b5b70b2975d60c39cbedf5d  app-usage-1.3.tar.gz
+f46f4ed783e5d5e276121fb722a79f4ff3b1aa71b6b8d3db5ff78a65233da8592c36f94fa5d2dd149620bd3f98b5379c6eb04097007d57d34c017b2bea550749  app-usage-1.4.tar.gz
 2d1464fa2fe8c5ff48c36e2e10c542ac600b26453039f02acdfd984b59273c8c581d6cda39f18182ffb0eef4d772482b3234d4f87c308d841ccbf1da957c4dad  80-app-usage.preset
 "

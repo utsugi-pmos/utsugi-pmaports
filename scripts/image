@@ -87,6 +87,20 @@ pmb zap
 # which is also what feeds the published repository. The local packages ARE the
 # published ones -- publish runs from the same directory -- so this builds the
 # same image without throwing the store away.
+#
+# TRAP, and it has shipped a wrong image once. The image is built from the LOCAL
+# package store ($WORK/packages), and apk always picks the HIGHEST version it
+# finds. `scripts/publish` prunes the *published* mirror to one version per
+# package, but it does NOT touch the local store. So a development build left in
+# the store at a higher pkgrel than the one you published (e.g. an r11 you were
+# iterating on while the repo has r0) is what the image will contain -- the phone
+# then gets, from the image, a package the repository does not have, and the
+# `apk upgrade` path is inconsistent from day one. Before building an image,
+# make sure the local store's highest version of every own package equals what
+# is published: rebuild it at the published pkgrel, or delete the stray
+# $WORK/packages/edge/aarch64/<pkg>-<higher>.apk and regenerate the local index
+# with `pmb index`. `pmb index` leaves a chroot mounted, so run `pmb shutdown`
+# before this build or the image's own shutdown step fails.
 if [ "$FDE" = 1 ]; then
 	# --fde is not a switch: it changes the partitioning, writes /etc/fstab
 	# pointing at /dev/mapper/root instead of a UUID, creates /etc/crypttab and
