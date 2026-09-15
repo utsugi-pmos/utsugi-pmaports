@@ -13,7 +13,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # be the one that knows every gesture.
 pkgname=phone-keyconfig
 pkgver=1.0
-pkgrel=0
+pkgrel=1
 pkgdesc="Configurable power and volume button actions for Plasma Mobile"
 url="https://github.com/utsugi-pmos/phone-keyconfig"
 arch="all"
