@@ -55,8 +55,10 @@
 <i># "fastboot", then plug the USB cable in</i>
 sudo fastboot devices      <b># must print your phone</b>
 
-xz -d @IMG@.xz
+xz -d @IMG@.xz             <i># unpacks to 6 GB</i>
+<i># ~3 min; an "avb footer" warning is normal</i>
 sudo fastboot flash userdata @IMG@
+<i># may take a minute to answer: keep the cable in</i>
 sudo fastboot reboot</pre></div></div>
 				<div class="pane pane-win"><div class="sh"><pre><i># 1. platform-tools.zip from developer.android.com,</i>
 <i>#    unzip it, open PowerShell in that folder</i>
@@ -67,7 +69,9 @@ sudo fastboot reboot</pre></div></div>
 <i># phone OFF, hold volume-down + power, plug the cable</i>
 .\fastboot devices
 
+<i># ~3 min; an "avb footer" warning is normal</i>
 .\fastboot flash userdata @IMG@
+<i># may take a minute to answer: keep the cable in</i>
 .\fastboot reboot
 <b># not tested by me: reports welcome</b></pre></div></div>
 				<div class="pane pane-mac"><div class="sh"><pre>brew install android-platform-tools xz
@@ -76,8 +80,10 @@ sudo fastboot reboot</pre></div></div>
 <i># "fastboot", then plug the USB cable in</i>
 fastboot devices           <b># no sudo needed on macOS</b>
 
-xz -d @IMG@.xz
+xz -d @IMG@.xz             <i># unpacks to 6 GB</i>
+<i># ~3 min; an "avb footer" warning is normal</i>
 fastboot flash userdata @IMG@
+<i># may take a minute to answer: keep the cable in</i>
 fastboot reboot
 <b># not tested by me: reports welcome</b></pre></div></div>
 			</div>
@@ -88,7 +94,8 @@ fastboot reboot
 <section>
 	<div class="wrap">
 		<div class="h"><span>01</span><h2>What is in the image</h2></div>
-		<p>One file, 1.2&nbsp;GB compressed. Nothing to add afterwards.</p>
+		<p>One file, 1.2&nbsp;GB compressed, 6.1&nbsp;GB unpacked. Nothing to add
+		afterwards.</p>
 		<div class="scroll">
 		<table>
 			<tr><th>The hardware</th><td>Patched kernel, cameras, in-call audio,

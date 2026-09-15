@@ -22,7 +22,8 @@
 		<h1>Flash the ready image</h1>
 		<p class="lede">One download, everything inside: kernel, hardware fixes, the
 		six own applications, browser, mail, maps, photos. About 1.2&nbsp;GB
-		compressed.</p>
+		compressed, 6.1&nbsp;GB once unpacked: keep <b>8&nbsp;GB free</b> on the
+		PC before you start.</p>
 		<p><a class="btn" href="https://github.com/utsugi-pmos/utsugi-pmaports/releases/latest/download/@IMG@.xz">Download @IMG@.xz &mdash; 1.2 GB</a></p>
 		<div class="note"><i></i><div>
 			<b>Four steps come before the flashing, and the first one takes a week.</b>
@@ -58,6 +59,7 @@
 		</div>
 		<p>Xiaomi's kernel names the panel in there: the line carries
 		<code>tianma</code> or <code>huaxing</code>. If nothing useful comes out,
+		or there is no MIUI left to ask because the phone already runs some Linux,
 		flash one and look at the screen &mdash; black means the other one, and you
 		can reflash as often as you like.</p>
 
@@ -120,8 +122,12 @@ fastboot reboot
 		<p>Power on: you should get a text console complaining it has nothing to
 		boot. That complaint is the good outcome &mdash; there is no system on
 		<code>userdata</code> yet. A screen that stays black means the other panel.</p>
-		<p>Already running postmarketOS on this phone? Then U-Boot is there and this
-		step is done.</p>
+		<p>Already running this system, or a postmarketOS you installed through
+		U-Boot? Then U-Boot is there and this step is done. Not sure what is on
+		<code>boot</code>? Do the step anyway: fastboot cannot tell you what is in
+		there, writing U-Boot a second time does no harm, and a plain postmarketOS
+		made with <code>pmbootstrap</code> keeps a kernel in <code>boot</code>, which
+		this image cannot boot from.</p>
 	</div>
 </section>
 
@@ -189,7 +195,21 @@ fastboot reboot
 			<code>brew install --cask android-platform-tools</code>, or unpack
 			platform-tools and call it as <code>./fastboot</code>.</p></div>
 		</div>
-		<p>The phone boots to the desktop. First boot takes a minute longer.</p>
+		<p>What to expect while it runs, so nothing looks broken:</p>
+		<div class="scroll">
+		<table>
+			<tr><th><code>xz -d</code></th><td>A minute or two, no output. It replaces
+			the <code>.xz</code> with a 6.1&nbsp;GB <code>.img</code>.</td></tr>
+			<tr><th><code>fastboot flash</code></th><td>About three minutes: six
+			<i>Sending sparse 'userdata'</i> lines, each ending in OKAY. A <i>Warning:
+			skip copying userdata image avb footer</i> with an absurd image size comes
+			first. It is harmless; ignore it.</td></tr>
+			<tr><th><code>fastboot reboot</code></th><td>Can sit for up to a minute
+			before it prints OKAY. Keep the cable in; it has not hung.</td></tr>
+			<tr><th>The phone</th><td>A black screen for a while, then the desktop.
+			First boot takes a minute longer than the rest.</td></tr>
+		</table>
+		</div>
 		<div class="note"><i></i><div>
 			<b>Log in and change the password.</b>
 			The image ships user <code>user</code> with password <code>1111</code>,
