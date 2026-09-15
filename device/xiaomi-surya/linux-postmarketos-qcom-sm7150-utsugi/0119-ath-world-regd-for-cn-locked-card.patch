@@ -1,0 +1,53 @@
+From: Dr. Utsugi <cidwel@gmail.com>
+Date: Tue, 15 Sep 2026 00:00:00 +0000
+Subject: [PATCH] ath: force a world-roaming regdomain (this card is CN-locked)
+
+The wcn3990 in the POCO X3 NFC ships its regulatory EEPROM programmed to
+China (regdomain 0x809c -> country CN). China's 5 GHz plan omits the mid
+band, 5470-5730 MHz (channels 100-144), so any access point that Wi-Fi's
+automatic DFS channel selection puts there is completely invisible to the
+phone -- it cannot even see the network, let alone join it. In Europe that
+is where a large share of 5 GHz routers land.
+
+There is no runtime lever for this. ath registers the wiphy with
+REGULATORY_STRICT_REG | REGULATORY_CUSTOM_REG and derives the domain from
+the EEPROM at init, so a userspace `iw reg set <cc>` never reaches the card
+(measured: the global domain changes, phy#0 stays CN). The country is fixed
+when the driver probes.
+
+So fix it there: force an Atheros world-roaming SKU (0x67), whose table is
+2.4 GHz channels 1-13 plus ATH_5GHZ_ALL = 5150-5350 and 5470-5850 MHz -- the
+mid band included. Those channels come up passive (NL80211_RRF_NO_IR), which
+is the legal world-roaming behaviour and is enough for a station: a passive
+scan hears the beacon, and ath's own beacon_found path then clears NO_IR so
+the phone can associate and transmit. 0x67 is chosen over the sanitizer's
+default 0x64, whose table uses ATH_5GHZ_NO_MIDBAND and would skip exactly the
+channels we need.
+
+Applied only on the initial probe (ath_regd_init), so the dynamic country
+path (__ath_regd_init from ath_reg_dyn_country) is left untouched.
+
+Signed-off-by: Dr. Utsugi <cidwel@gmail.com>
+---
+ drivers/net/wireless/ath/regd.c | 10 ++++++++++
+ 1 file changed, 10 insertions(+)
+
+--- a/drivers/net/wireless/ath/regd.c	2026-09-15 13:09:04.122350018 +0200
++++ b/drivers/net/wireless/ath/regd.c	2026-09-15 13:09:04.146006379 +0200
+@@ -764,6 +764,16 @@
+ 						 regulatory);
+ 	int r;
+ 
++	/*
++	 * This card is EEPROM-locked to CN (regdomain 0x809c), whose 5 GHz
++	 * plan omits channels 100-144, making networks there invisible. The
++	 * wiphy is STRICT_REG|CUSTOM_REG so `iw reg set` never reaches it;
++	 * the only lever is here. Force an Atheros world-roaming SKU (0x67)
++	 * whose table includes 5470-5850 MHz. The mid band comes up passive
++	 * (NO_IR): legal, and enough for a station once the beacon is heard.
++	 */
++	reg->current_rd = 0x67;
++
+ 	r = __ath_regd_init(reg);
+ 	if (r)
+ 		return r;
