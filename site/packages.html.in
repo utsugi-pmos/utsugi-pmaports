@@ -255,13 +255,15 @@
 				<p><b>Battery use per application</b>, the screen Plasma Mobile does not
 				have. A daemon samples what each application costs and calibrates itself
 				against the battery gauge, so the numbers are measured on your phone
-				rather than assumed.</p></a>
+				rather than assumed. In <b>Settings &rarr; Hardware</b>, not the app
+				drawer.</p></a>
 			<a href="https://github.com/utsugi-pmos/smart-unlock">
 				<div class="n">smart-unlock</div>
 				<p><b>No PIN when it is safe.</b> On a wifi you trust, identified by
 				BSSID and gateway MAC rather than by name. Or for a while after you last
 				unlocked, or inside time slots you choose. Never on by default, and it
-				respects a phone locked remotely.</p></a>
+				respects a phone locked remotely. In <b>Settings &rarr; Personalization</b>,
+				not the app drawer.</p></a>
 			<a href="https://github.com/utsugi-pmos/lost-phone">
 				<div class="n">lost-phone</div>
 				<p><b>Find the phone without Google.</b> Four paths, switched on one by
@@ -271,7 +273,8 @@
 				with a web panel and a map for when it is out on the street, or your ntfy. It rings at full
 				volume even silenced, turns wifi and GPS on to let itself be found and
 				gives them back, says where it is, and can lock or power off the phone from
-				the panel.</p></a>
+				the panel. Set up in <b>Settings &rarr; Security</b>, not the app
+				drawer.</p></a>
 			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/tree/main/main/utsugi-compass">
 				<div class="n">utsugi-compass</div>
 				<p><b>A compass, and the instrument that says whether the sensors work.</b>
