@@ -18,7 +18,7 @@
 // is not where the secret lives, it is where the program learns what to answer
 // the prompt with so the user does not have to type a password they were given
 // rather than chose.
-static const char *kShipped = "147147";
+static const char *kShipped = "1111";
 
 namespace
 {
@@ -31,10 +31,10 @@ namespace
 // each question, precisely so a password typed ahead cannot be swallowed. The
 // first reply vanished that way and every answer landed one question late --
 //
-//     147147                       <- written before it asked, discarded
+//     1111                         <- written before it asked, discarded
 //     Changing password for user.
 //     Current password:
-//     1111                         <- the NEW password answering the OLD prompt
+//     2468                         <- the NEW password answering the OLD prompt
 //     passwd: Authentication failure
 //
 // -- which is measured, from the phone, on 2026-09-12. So: read until it asks,
