@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=18
+pkgrel=19
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -164,7 +164,7 @@ systemd() {
 }
 sha512sums="
 46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
-7e56cc3687549ac013c2bca615c3342575ac31ca6f74448fc5f34b906b320c854993eebd4689dcc0c85c99374f294559097f67cfd3229dba265f55569e5ff4d2  change-the-password
+c72ba9e507704312c08bba1439c017810eb9de09de9f90481f472343307f3c4ad6163a053145ca912dd5242b9bccc8d2ce9f1fcb5bb1389d441a49abb6a0811a  change-the-password
 2c7ff25dd7d816c5ecf07986ac97234d4629261c78b3d6664879ab630372b11aa52f327261f528dfea69b18c0eb26f3bdf41e85222bd5f52c7f90cd93e7be5f1  change-the-password.service
 74cc650e1c96753744ae871597da3f3f9b464da000f1a4055f06665894cbfa5e339c8491fe07d95246d4cf2951b4e2dd467fbc80b0a1848d873dd79eb6d4b6b9  change-the-password.path
 a534a75ab7f8e79970ad39c47dc28b2e93d1df5b3b118558e98d4ceb08c72bbf9f937fc7100295ecfe53ce36d2024d32696364bcc307284a6166bdbd94e7e47c  80-utsugi-surya-password.preset
