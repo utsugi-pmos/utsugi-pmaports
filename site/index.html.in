@@ -125,6 +125,9 @@ fastboot reboot
 			, all four.</td></tr>
 			<tr><th>Find yourself</th><td>Twelve satellites, fix in about 40&nbsp;s from
 			cold. postmarketOS ships the GPS locked; this unlocks it.</td></tr>
+			<tr><th>Reach any Wi-Fi</th><td>Including 5&nbsp;GHz on the upper DFS
+			channels. The radio ships region-locked to China, which hides them; a kernel
+			patch frees it, so a router on channel 100&ndash;140 is no longer invisible.</td></tr>
 			<tr><th>Save battery</th><td>60&nbsp;Hz instead of 120 when you ask, and a
 			charge screen when you plug it in switched off.</td></tr>
 			<tr><th>Turn it off</th><td>And it turns off. That took a kernel patch.</td></tr>
