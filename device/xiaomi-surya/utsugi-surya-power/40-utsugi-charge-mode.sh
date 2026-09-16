@@ -42,6 +42,7 @@ command -v plymouth >/dev/null && command -v iskey >/dev/null || { log "no plymo
 # boot second 5. Ask for them and give them up to twenty seconds to probe.
 modprobe qcom_spmi_adc5 2>/dev/null; modprobe nvmem_qcom_spmi_sdam 2>/dev/null
 modprobe qcom_qg 2>/dev/null; modprobe qcom_smbx 2>/dev/null
+modprobe aw8695_haptics 2>/dev/null
 mountpoint -q /sys/kernel/debug || mount -t debugfs none /sys/kernel/debug 2>/dev/null
 i=0
 until [ -r "$CHG/online" ] && [ -r "$QG/capacity" ] && [ -n "$(ls /sys/kernel/debug/regmap 2>/dev/null)" ]; do
@@ -96,6 +97,8 @@ arm_buzzer() {
 	# Only an alarm this boot is actually for: not a stale one hours away.
 	[ $(( ring - now )) -le 600 ] && [ $(( now - ring )) -le 600 ] || { log "alarm at rtc $ring is not this boot's"; return 0; }
 	cp /bin/busybox /tmp/utsugi-alarm-buzz 2>/dev/null || return 0
+	grep -qs . /sys/class/input/*/device/name && grep -qls aw8695 /sys/class/input/*/device/name \
+		|| log "no vibrator found yet (aw8695); the buzzer will try anyway"
 	setsid /tmp/utsugi-alarm-buzz sh -c '
 		while [ "$(cat /sys/class/rtc/rtc0/since_epoch)" -lt "$1" ]; do
 			[ "$(cat /proc/1/comm 2>/dev/null)" = init ] || exit 0

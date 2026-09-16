@@ -19,7 +19,17 @@ missed every other way a phone goes off: a reboot, a power-off before the
 desktop was up, a flat battery. Found on 2026-09-16 on an encrypted phone.
 
     arm-alarm-wakeup            arm
+    arm-alarm-wakeup --boot     first see whether an alarm was missed, then arm
     arm-alarm-wakeup --dry-run  only say what it would arm
+
+A MISSED ALARM. On an encrypted phone the boot started for an alarm stops at
+the passphrase, and the Clock app only starts after it. kclockd works out each
+alarm's next ring from the moment it starts, so an alarm whose minute passed
+while the passphrase screen waited is simply moved to tomorrow, and nothing
+rings when the owner unlocks. Measured on 2026-09-16. With --boot, before the
+boot partition's copy is replaced, this checks whether that copy's alarm fell
+due within the last MISSED_WINDOW seconds, and if so leaves its details in
+/run/utsugi-surya/missed-alarm for alarm-catch-up, in the session, to ring.
 """
 import datetime, glob, json, os, sys
 
@@ -31,6 +41,12 @@ RTC_NOW = "/sys/class/rtc/rtc0/since_epoch"
 # because the RTC is the only clock the initramfs has.
 NEXT_ALARM = "/boot/utsugi/next-alarm"
 DRY = "--dry-run" in sys.argv
+BOOT = "--boot" in sys.argv
+MISSED = "/run/utsugi-surya/missed-alarm"
+# Longer than a passphrase typed by someone just woken; shorter than the
+# quarter of an hour after which alarm-sync.timer has moved the boot copy on
+# past an alarm that did ring, so a reboot soon after never rings it twice.
+MISSED_WINDOW = 14 * 60
 
 
 def alarms():
@@ -63,6 +79,51 @@ def next_ring(alarm, now):
             return cand + snooze
     return None
 
+
+def alarm_records():
+    """(uuid, alarm) for every alarm in every user's kclockdrc."""
+    for rc in glob.glob("/home/*/.config/kclockdrc"):
+        group = None
+        for line in open(rc, encoding="utf-8", errors="replace"):
+            line = line.strip()
+            if line.startswith("["):
+                group = line
+            elif group == "[Alarms]" and "=" in line:
+                key, value = line.split("=", 1)
+                try:
+                    yield key, json.loads(value)
+                except ValueError:
+                    pass
+
+
+def notice_missed_alarm():
+    try:
+        old_target, old_rest = open(NEXT_ALARM).read().split(None, 1)
+        rtc_now = int(open(RTC_NOW).read())
+    except (OSError, ValueError):
+        return
+    due_rtc = int(old_target) + LEAD
+    late = rtc_now - due_rtc
+    if not 0 < late <= MISSED_WINDOW:
+        return
+    hhmm, _, name = old_rest.strip().partition(" ")
+    for uuid, a in alarm_records():
+        if not a.get("enabled", False) or a.get("name", "") != name:
+            continue
+        if f"{int(a.get('hours', -1)):02d}:{int(a.get('minutes', -1)):02d}" != hhmm:
+            continue
+        record = dict(a, uuid=uuid, due=int(datetime.datetime.now().timestamp()) - late)
+        os.makedirs(os.path.dirname(MISSED), exist_ok=True)
+        with open(MISSED, "w") as f:
+            json.dump(record, f)
+        os.chmod(MISSED, 0o644)
+        print(f"arm-alarm-wakeup: alarm '{name}' at {hhmm} was due {late} s ago and "
+              f"has not rung: left for alarm-catch-up")
+        return
+
+
+if BOOT and not DRY:
+    notice_missed_alarm()
 
 now = datetime.datetime.now().astimezone()
 best = None

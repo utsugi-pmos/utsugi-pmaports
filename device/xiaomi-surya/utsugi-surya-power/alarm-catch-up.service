@@ -1,0 +1,13 @@
+[Unit]
+Description=Ring an alarm that fell due while the phone waited for its passphrase
+Documentation=file:///usr/libexec/utsugi-surya/alarm-catch-up
+ConditionPathExists=/run/utsugi-surya/missed-alarm
+After=plasma-core.target
+PartOf=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/alarm-catch-up
+
+[Install]
+WantedBy=plasma-workspace.target

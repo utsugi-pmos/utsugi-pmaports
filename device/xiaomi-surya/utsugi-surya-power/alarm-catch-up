@@ -1,0 +1,114 @@
+#!/usr/bin/python3
+"""Ring, as soon as the session is up, an alarm that fell due while an
+encrypted phone waited for its passphrase.
+
+arm-alarm-wakeup --boot leaves the alarm in /run/utsugi-surya/missed-alarm.
+kclockd has no call to ring an alarm now, and has already moved this one to
+tomorrow. So this adds a one-off copy, with the same name, sound and duration,
+for the next minute -- the finest an alarm can be set -- lets kclockd ring it
+the ordinary way, on the lock screen, and removes the copy once it has rung.
+A one-off original is switched off, as dismissing it would have done, so it
+does not ring again tomorrow; a repeating one is left alone.
+"""
+import datetime, json, os, subprocess, sys, time
+
+MISSED = "/run/utsugi-surya/missed-alarm"
+RC = os.path.expanduser("~/.config/kclockdrc")
+BUS = ["busctl", "--user"]
+SVC = "org.kde.kclockd"
+
+
+def log(msg):
+    print(f"alarm-catch-up: {msg}", flush=True)
+
+
+def call(*args):
+    return subprocess.run(BUS + list(args), capture_output=True, text=True)
+
+
+def uuids():
+    out = set()
+    try:
+        in_alarms = False
+        for line in open(RC, encoding="utf-8", errors="replace"):
+            line = line.strip()
+            if line.startswith("["):
+                in_alarms = line == "[Alarms]"
+            elif in_alarms and "=" in line:
+                out.add(line.split("=", 1)[0])
+    except OSError:
+        pass
+    return out
+
+
+def path(uuid):
+    return "/Alarms/" + uuid.strip("{}").replace("-", "")
+
+
+try:
+    a = json.load(open(MISSED))
+except (OSError, ValueError):
+    sys.exit(0)
+
+# The file belongs to root and stays until the next boot; what this session has
+# already rung is remembered in the runtime directory, which also lives until
+# the next boot. Without this, logging out and back in rang it again.
+HANDLED = os.path.join(os.environ.get("XDG_RUNTIME_DIR", "/tmp"), "utsugi-alarm-caught-up")
+key = f"{a.get('uuid')} {a.get('due')}"
+try:
+    if key in open(HANDLED).read().splitlines():
+        sys.exit(0)
+except OSError:
+    pass
+
+late = int(time.time()) - int(a.get("due", 0))
+if late > 30 * 60:
+    log(f"'{a.get('name')}' is {late} s late, too late to ring now")
+    sys.exit(0)
+
+# kclockd is started by the session; give it a minute.
+for _ in range(60):
+    if call("status", SVC).returncode == 0:
+        break
+    time.sleep(1)
+else:
+    log("kclockd did not appear")
+    sys.exit(1)
+
+before = uuids()
+when = datetime.datetime.now() + datetime.timedelta(seconds=75)
+r = call("call", SVC, "/Alarms", "org.kde.kclock.AlarmModel", "addAlarm", "siiisii",
+         a.get("name", "Alarm"), str(when.hour), str(when.minute), "0",
+         a.get("audioPath", ""), str(a.get("ringDuration", 5)), str(a.get("snoozeDuration", 5)))
+if r.returncode != 0:
+    log(f"could not add the copy: {r.stderr.strip()}")
+    sys.exit(1)
+time.sleep(2)
+new = sorted(uuids() - before)
+copy = new[0] if new else None
+log(f"'{a.get('name')}' due {late} s ago: a copy rings at {when:%H:%M}")
+
+if int(a.get("daysOfWeek", 0)) == 0 and a.get("uuid"):
+    call("set-property", SVC, path(a["uuid"]), "org.kde.kclock.Alarm", "enabled", "b", "false")
+
+with open(HANDLED, "a") as f:
+    f.write(key + "\n")
+
+if not copy:
+    sys.exit(0)
+
+# Wait for it to ring and stop (dismissed, snoozed or timed out), then remove
+# the copy. Snoozing keeps it ringing later, so wait that out too.
+deadline = time.time() + 2 * 60 + 60 * (int(a.get("ringDuration", 5)) + 3 * int(a.get("snoozeDuration", 5)))
+rang = False
+while time.time() < deadline:
+    r = call("get-property", SVC, path(copy), "org.kde.kclock.Alarm", "ringing")
+    ringing = r.stdout.strip().endswith("true")
+    rang = rang or ringing
+    if rang and not ringing:
+        r = call("get-property", SVC, path(copy), "org.kde.kclock.Alarm", "snoozedLength")
+        if r.stdout.strip().endswith(" 0"):
+            break
+    time.sleep(3)
+call("call", SVC, "/Alarms", "org.kde.kclock.AlarmModel", "removeAlarm", "s", copy)
+log("copy removed" + ("" if rang else " (it never rang)"))

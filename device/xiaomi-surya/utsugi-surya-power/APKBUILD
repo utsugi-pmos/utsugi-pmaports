@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=17
+pkgrel=19
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -33,6 +33,9 @@ source="power-reason
 	bluetooth-off-while-asleep
 	arm-alarm-wakeup
 	alarm-watch
+	alarm-catch-up
+	alarm-catch-up.service
+	80-utsugi-surya-power-user.preset
 	alarm-watch.service
 	alarm-sync.service
 	alarm-sync.timer
@@ -59,7 +62,7 @@ package() {
 	install -Dm755 "$srcdir"/power-reason -t "$pkgdir"/usr/bin/
 
 	local helper
-	for helper in poweroff-for-real arm-alarm-wakeup alarm-watch; do
+	for helper in poweroff-for-real arm-alarm-wakeup alarm-watch alarm-catch-up; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 	# /usr/bin, not /usr/libexec: this one is typed by a person, and reaching
@@ -79,6 +82,9 @@ package() {
 		-t "$pkgdir"/usr/lib/systemd/system.conf.d/
 	install -Dm644 "$srcdir"/80-utsugi-surya-power.preset \
 		-t "$pkgdir"/usr/lib/systemd/system-preset/
+	install -Dm644 "$srcdir"/alarm-catch-up.service -t "$pkgdir"/usr/lib/systemd/user/
+	install -Dm644 "$srcdir"/80-utsugi-surya-power-user.preset \
+		"$pkgdir"/usr/lib/systemd/user-preset/80-utsugi-surya-power.preset
 	# Run by systemd-sleep before and after every suspend. See the file.
 	install -Dm755 "$srcdir"/bluetooth-off-while-asleep \
 		-t "$pkgdir"/usr/lib/systemd/system-sleep/
@@ -107,13 +113,16 @@ sha512sums="
 113c78460fffd54bcf8b97e9ff6752d911aa299cb3da09c1eab5fca923dbee14489124bbea14bfbd080748274cd94918950d6a3e87b6caf12b89d3effe9090c7  power-reason
 f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
 aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
-10a390dc1de65169cc7b06216e21a1f280f77724c104a5ce2b08d5f454143ffe7b72ce54ac418936af600d3ad27441ba44fe8460d2e1ef988a8785a8c975837d  arm-alarm-wakeup
-fe0f5e6a3886f187188d361eafe752b84a88bc69b3be5e630613cc8d66b0c137815695a37bafbdd33fb514ed37597319d2c0297063ed8fbe4ebd035e93c4c154  alarm-watch
+56e0686ef2d8bb41078d024dfdb1d0ab4da359f237e4420a7aa0f09bb78d212abfd4b1ad006ad2f7fe3d287805a84b33487ac5189d48972d7a3b87bdaa11404f  arm-alarm-wakeup
+3877fd285b7421ca8df75a25abd7dbdc0d21a7573f328dc1a81d1856b477f613c3d2c7f692ee039747471f146732d2caaaf0b402271990e00f501043241d623e  alarm-watch
+af856354d6c39b397cc495495ed89f002ca0b442e471b654daad9a6438b90504df8f8b23608814b88079183d49b8fea2a970055f097c7683eb8640aa4437c7de  alarm-catch-up
+43cb226237e8df675ec5f9c63c4bc4f13f285165e73a764cd8ed9685c3f7b0e97ddd65a725e88e8546218b13bed29af8be5e1633e18abf60ffb24eaaf064a8c9  alarm-catch-up.service
+f1b42bd9d16fe3879028554d72ef582a6671df746a058af5f8065a58c258860ef5e098403dc33941fc976fed3873d434f4b8a6af31126a395044740005c2bc68  80-utsugi-surya-power-user.preset
 62bbc957e274b62b68fcb93dc3cfe8db64392fa687b853def5d2240e57309367eced6637bf62db95c0e00327c9f5361fd9e2b03e2dcb1e42465fcf3293fbe427  alarm-watch.service
 64ceb9c8eeb34dce977544a246083c7be7862ef4db80aae0abea9683945bdc6b824933cfc2849d6323dcfcf9bb7dfe9af1ac874e795a704311e8797687d99f76  alarm-sync.service
 71bfe4e9980a9abbdc5e9ce5f67f00f0065a6b43de21c1ddf660c2603cb4197cc04b7524b92dc1753169f568b21035da6de34f950d0b8e0a799a349aa677624e  alarm-sync.timer
-f3d9520c76abfe2254e866621774b50c27a4436cb3ab6a47481680aa0f548da2531652829cd816d7979a1b56720c7e818bead90a04047596b4713d6c05016c91  40-utsugi-charge-mode.sh
-d329fef05a415f484d6c244570188f9b93e52b811bc4eda8749feec264a6c4b88dac5ef99d1e9c2db3b02a2cc90ee2d94bba39e89cd664797034a0af727c1f26  40-utsugi-charge-mode.modules
+899bb7d8473909f8306e348b91928e272235d77bbda4e7127fba9d2263ded0465ed40ad6ba6272b72fe7dfe791101db09d4b3aade0a48b89317d35fdf71b8ea3  40-utsugi-charge-mode.sh
+741a59ff15af43d0b8f89677982747c40560f1572e46322606ded23b96dd8fcc630d3bdc7c8f7c50f7ff4add05a2ace662e30976194587fc3ffc68975d76fd81  40-utsugi-charge-mode.modules
 a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
 bef13eab0c3201f7280d0b19f443af11d26b0cab178e7b5ee35f8359e392655ba79313eeb77c0446ce8a08744a48f80dbba4c7698032737c6467fe810e47603c  utsugi-spin.script
 19e2c887557f4c9104a6b09a3033e73d0baae9da1f98a84105b7d56b5ca55f60ae8a560940c12c60122175e5711bf328ec28014be144fa6de087ddaf05680850  pixel.png

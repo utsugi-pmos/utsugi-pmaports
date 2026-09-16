@@ -6,7 +6,9 @@
 set -u
 ARM=/usr/libexec/utsugi-surya/arm-alarm-wakeup
 
-"$ARM"
+# Once per boot, before anything replaces the boot partition's copy: was an
+# alarm missed while the phone waited for its passphrase?
+"$ARM" --boot
 dirs=$(ls -d /home/*/.config 2>/dev/null)
 if [ -z "$dirs" ]; then
 	echo "alarm-watch: no /home/*/.config to watch yet"
