@@ -1,0 +1,21 @@
+#!/bin/sh
+# Keep the PMIC's RTC alarm and /boot/utsugi/next-alarm in step with the Clock
+# app's alarms: every time kclockd saves them (it replaces ~/.config/kclockdrc
+# with a rename, hence moved_to as well as close_write), arm-alarm-wakeup runs
+# again. See arm-alarm-wakeup for why this cannot wait for the power-off.
+set -u
+ARM=/usr/libexec/utsugi-surya/arm-alarm-wakeup
+
+"$ARM"
+dirs=$(ls -d /home/*/.config 2>/dev/null)
+if [ -z "$dirs" ]; then
+	echo "alarm-watch: no /home/*/.config to watch yet"
+	exec sleep infinity
+fi
+# shellcheck disable=SC2086
+inotifywait -m -q -e close_write,moved_to --format '%f' $dirs | while read -r f; do
+	[ "$f" = kclockdrc ] || continue
+	# kclockd writes more than once per change; let it finish.
+	sleep 1
+	"$ARM"
+done

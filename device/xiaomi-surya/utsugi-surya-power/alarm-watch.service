@@ -1,0 +1,14 @@
+[Unit]
+Description=Keep the RTC wake alarm in step with the Clock app's alarms
+Documentation=file:///usr/libexec/utsugi-surya/arm-alarm-wakeup
+# /boot has to be mounted: the next alarm is left there for the charging screen.
+RequiresMountsFor=/boot /home
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/alarm-watch
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

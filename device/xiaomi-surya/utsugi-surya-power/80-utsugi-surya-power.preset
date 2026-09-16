@@ -1,1 +1,3 @@
 enable poweroff-for-real.service
+enable alarm-watch.service
+enable alarm-sync.timer

@@ -1,0 +1,13 @@
+[Unit]
+Description=Re-arm the RTC wake alarm every quarter of an hour
+# A repeating alarm's next ring moves on once it has rung, without the Clock
+# app necessarily saving anything: this catches that.
+
+[Timer]
+OnBootSec=2min
+OnUnitActiveSec=15min
+# Batched with other wakeups; it does not wake a sleeping phone.
+AccuracySec=2min
+
+[Install]
+WantedBy=timers.target
