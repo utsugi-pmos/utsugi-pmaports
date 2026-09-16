@@ -8,8 +8,9 @@
 # Started in the background by 40-utsugi-charge-mode.sh when this boot is for
 # an alarm and the root is LUKS, about two minutes before the alarm. Brings the
 # audio DSP and the sound card up, waits for the alarm's second, then plays the
-# tone and buzzes in a loop until the passphrase has been typed (PID 1 becomes
-# systemd) or ten minutes have passed.
+# tone and buzzes in a loop until a button is pressed (power, volume up or
+# down), the passphrase has been typed (PID 1 becomes systemd) or ten minutes
+# have passed.
 #
 # THE ORDER IS THE WHOLE TRICK, measured on 2026-09-16. With every module
 # loaded at once, the AFE clock vote fails ("AFE failed to vote (3)"), the
@@ -80,12 +81,35 @@ while [ "$(cat "$RTC")" -lt "$RING" ]; do
 	up && exit 0
 	sleep 1
 done
-log "ringing"
-n=0
-while ! up && [ "$n" -lt 150 ]; do
-	[ "$card" = 1 ] && aplay -q -D hw:0,0 "$DIR/alarm.wav" 2>/dev/null &
-	beebzzr -d 700 -b 2 >/dev/null 2>&1
-	wait
-	n=$((n + 1))
+# Any of the three buttons silences it: power (pm8941_pwrkey), volume down
+# (pm8941_resin) and volume up (gpio-keys). One reader per button, each waiting
+# for a single event, leaves a mark; the loop below checks it every 0.2 s.
+STOP=/tmp/utsugi-alarm-stop
+rm -f "$STOP"
+readers=""
+for d in /sys/class/input/event*; do
+	case "$(cat "$d/device/name" 2>/dev/null)" in
+	pm8941_pwrkey|pm8941_resin|gpio-keys)
+		( dd if="/dev/input/${d##*/}" of=/dev/null bs=24 count=1 2>/dev/null && : > "$STOP" ) &
+		readers="$readers $!" ;;
+	esac
 done
-log "stopped ($( up && echo unlocked || echo 'ten minutes' ))"
+
+log "ringing"
+end=$(( $(cat "$RTC") + 600 ))
+why="ten minutes"
+while [ "$(cat "$RTC")" -lt "$end" ]; do
+	up && { why=unlocked; break; }
+	[ -e "$STOP" ] && { why="a button"; break; }
+	ap=""; [ "$card" = 1 ] && { aplay -q -D hw:0,0 "$DIR/alarm.wav" 2>/dev/null & ap=$!; }
+	beebzzr -d 700 -b 2 >/dev/null 2>&1 & bz=$!
+	i=0
+	while [ "$i" -lt 10 ] && [ ! -e "$STOP" ] && ! up; do sleep 0.2; i=$((i + 1)); done
+	kill $ap $bz 2>/dev/null
+	wait $ap $bz 2>/dev/null
+done
+# The readers are subshells each waiting on a dd; take the dd's down too, so
+# nothing is left holding the buttons open after the switch to the real system.
+kill $readers 2>/dev/null
+pkill -f "of=/dev/null bs=24 count=1" 2>/dev/null
+log "stopped by $why"
