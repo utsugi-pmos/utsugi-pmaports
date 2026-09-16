@@ -1,0 +1,17 @@
+#!/usr/bin/python3
+"""Write the alarm tone alarm-sound plays: four short beeps at 1760 Hz and a
+pause, 2 s, 48 kHz mono 16-bit. Made at build time so the package ships no
+sound file of anyone else's."""
+import math, struct, sys, wave
+
+RATE = 48000
+frames = bytearray()
+for beep in range(4):
+    for i in range(int(RATE * 0.12)):
+        env = min(1.0, i / 240, (int(RATE * 0.12) - i) / 240)
+        frames += struct.pack("<h", int(0.8 * 32767 * env * math.sin(2 * math.pi * 1760 * i / RATE)))
+    frames += b"\0\0" * int(RATE * 0.08)
+frames += b"\0\0" * (RATE * 2 - len(frames) // 2)
+with wave.open(sys.argv[1], "wb") as w:
+    w.setnchannels(1); w.setsampwidth(2); w.setframerate(RATE)
+    w.writeframes(bytes(frames))

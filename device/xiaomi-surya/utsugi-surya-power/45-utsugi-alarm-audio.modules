@@ -1,0 +1,23 @@
+# The audio stack, for alarm-sound in the initramfs. Blacklisted there by
+# utsugi-alarm-audio.modprobe; mkinitfs adds their dependencies.
+qcom_pd_mapper
+qrtr_smd
+qcom_q6v5_pas
+q6core
+q6afe
+q6afe_clocks
+q6afe_dai
+q6asm
+q6asm_dai
+q6adm
+q6routing
+q6voice
+q6voice_dai
+snd_soc_lpass_va_macro
+snd_soc_lpass_rx_macro
+snd_soc_lpass_tx_macro
+soundwire_qcom
+snd_soc_wcd937x_sdw
+snd_soc_wcd937x
+snd_soc_tas2562
+snd_soc_sm8250

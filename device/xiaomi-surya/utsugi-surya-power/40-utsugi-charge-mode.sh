@@ -82,42 +82,30 @@ fi
 [ -n "$ALARM" ] && log "next alarm at rtc $ALARM ($ALARM_TEXT)"
 
 # A boot that is going on for an alarm may stop at the passphrase of an
-# encrypted phone, and nothing in there knows about the alarm or can play a
-# sound: the DSP firmware and the audio stack are inside the encrypted root.
-# The vibrator is not. So a small watcher stays behind in the initramfs and,
-# at the alarm's time, vibrates until the phone is unlocked; once the real
-# init is PID 1 the Clock app has taken over and the watcher quits. PID 1 is
+# encrypted phone, where nothing knows about the alarm. alarm-sound, which
+# travels in the initramfs with the DSP firmware and the audio stack, rings it
+# by the speaker and buzzes until the phone is unlocked; after that the Clock
+# app has taken over. PID 1 is
 # not called "init" while waiting: the initramfs execs /init_2nd.sh, so the
 # test is "not systemd yet" -- testing for "init" made the watcher quit at once
 # and nothing vibrated, measured on 2026-09-16. It is not
 # a shell: init_2nd kills every 'sh' before switching root, so busybox runs
 # under another name to survive that sweep. Harmless on an unencrypted phone:
 # systemd is PID 1 long before the alarm is due.
-# The watcher itself: $1 the RTC second to start at, $2 the RTC clock, $3 the
-# file holding PID 1's name. Kept in a variable so it can be run on its own.
-BUZZER='
-	while [ "$(cat "$2")" -lt "$1" ]; do
-		[ "$(cat "$3" 2>/dev/null)" != systemd ] || exit 0
-		sleep 2
-	done
-	n=0
-	while [ "$(cat "$3" 2>/dev/null)" != systemd ] && [ "$n" -lt 150 ]; do
-		beebzzr -d 700 -b 2 >/dev/null 2>&1
-		sleep 2; n=$((n + 1))
-	done'
-
 arm_buzzer() {
-	[ -n "$ALARM" ] && command -v beebzzr >/dev/null || return 0
+	[ -n "$ALARM" ] || return 0
 	ring=$(( ALARM + 120 ))
 	now=$(cat "$RTC" 2>/dev/null || echo 0)
 	# Only an alarm this boot is actually for: not a stale one hours away.
 	[ $(( ring - now )) -le 600 ] && [ $(( now - ring )) -le 600 ] || { log "alarm at rtc $ring is not this boot's"; return 0; }
-	# busybox picks its applet from its own name, so the copy has to be called
-	# busybox-something: named anything else it answers "applet not found" and
-	# exits, which is what happened on 2026-09-16 and why nothing vibrated.
-	cp /bin/busybox /tmp/busybox-utsugi-alarm 2>/dev/null || return 0
-	setsid /tmp/busybox-utsugi-alarm sh -c "$BUZZER" buzz "$ring" "$RTC" /proc/1/comm >/dev/null 2>&1 </dev/null &
-	log "alarm buzzer armed for rtc $ring"
+	# Only an encrypted root stops at a passphrase. An unencrypted phone is at
+	# its desktop long before the alarm, where the Clock app rings it; loading
+	# the audio stack here too would race the real system's own.
+	find_root_partition ROOT
+	[ "$(get_partition_type "$ROOT")" = crypto_LUKS ] || { log "root not encrypted: the desktop rings the alarm"; return 0; }
+	[ -x /usr/libexec/utsugi-surya/alarm-sound ] || { log "no alarm-sound in this initramfs"; return 0; }
+	setsid sh /usr/libexec/utsugi-surya/alarm-sound "$ring" </dev/null >/dev/null 2>&1 &
+	log "alarm ringer armed for rtc $ring"
 }
 
 n=$(reason) || { log "cannot read PON_REASON1, normal boot"; exit 0; }

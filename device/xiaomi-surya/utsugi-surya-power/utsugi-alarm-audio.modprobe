@@ -1,0 +1,24 @@
+# Only inside the initramfs (45-utsugi-alarm-audio.files puts it at
+# /etc/modprobe.d). The audio modules travel in the initramfs for alarm-sound,
+# which loads them by name, in order; udev must never load them on its own there,
+# all at once, which leaves the phone without a sound card.
+blacklist qcom_q6v5_pas
+blacklist qcom_pd_mapper
+blacklist q6core
+blacklist q6afe
+blacklist q6afe_clocks
+blacklist q6afe_dai
+blacklist q6asm
+blacklist q6asm_dai
+blacklist q6adm
+blacklist q6routing
+blacklist q6voice
+blacklist q6voice_dai
+blacklist snd_soc_lpass_va_macro
+blacklist snd_soc_lpass_rx_macro
+blacklist snd_soc_lpass_tx_macro
+blacklist soundwire_qcom
+blacklist snd_soc_wcd937x_sdw
+blacklist snd_soc_wcd937x
+blacklist snd_soc_tas2562
+blacklist snd_soc_sm8250
