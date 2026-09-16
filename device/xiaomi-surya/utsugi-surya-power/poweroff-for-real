@@ -85,4 +85,8 @@ END
 	# than leave the phone half shut down.
 fi
 
+# A powered-off phone can still ring its next clock alarm: the PMIC turns it
+# on from an RTC alarm (PON_REASON1 = 0x04). Armed only for a real power-off;
+# a reboot comes back on its own. See arm-alarm-wakeup.
+[ "$mode" = poweroff ] && /usr/libexec/utsugi-surya/arm-alarm-wakeup >> /var/log/poweroff-for-real.log 2>&1
 exec /bin/busybox "$mode" -f

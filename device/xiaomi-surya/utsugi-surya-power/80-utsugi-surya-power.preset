@@ -1,3 +1,1 @@
 enable poweroff-for-real.service
-enable charge-mode-decide.service
-enable charge-mode.service

@@ -1,0 +1,9 @@
+# Modules the charging screen in the initramfs needs (40-utsugi-charge-mode.sh).
+# The battery gauge and the charger are modules in this kernel; without them
+# in the initramfs there is no /sys/class/power_supply to read, and the hook
+# steps aside with "no battery nodes". Measured 2026-09-16 on the surya at
+# boot second 5. mkinitfs resolves their dependencies from modules.dep.
+qcom_qg
+qcom_spmi_adc5
+nvmem_qcom_spmi_sdam
+qcom_smbx

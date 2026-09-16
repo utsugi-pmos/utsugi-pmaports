@@ -1,0 +1,18 @@
+#!/bin/sh
+# Keep Bluetooth off while the phone sleeps.
+#
+# Measured on 2026-09-16 (surya/docs, "the screen turns on by itself"): the
+# Bluetooth UART carries a dedicated wake line, GPIO 41, and it fires the
+# moment the kernel arms it for suspend. Every suspend is aborted within two
+# seconds, PowerDevil then lights the screen for two minutes, and the cycle
+# repeats every five minutes on battery: the phone never sleeps and is dead by
+# morning. With the radio blocked the same phone slept 344 s until an RTC alarm.
+#
+# This is the mitigation, not the fix: the fix is in the kernel, where the
+# controller's wake-up traffic after qca_suspend has to be understood. Until
+# then, headsets disconnect when the phone falls asleep and reconnect on wake;
+# bluetoothd powers the adapter back on by itself when the block is lifted.
+case "$1" in
+	pre)  rfkill block bluetooth ;;
+	post) rfkill unblock bluetooth ;;
+esac
