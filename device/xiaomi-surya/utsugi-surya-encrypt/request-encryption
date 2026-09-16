@@ -20,7 +20,9 @@ mkdir -p "$DIR"
 
 if [ "${1:-}" = "--decline" ]; then
 	: > "$DECLINED"
-	rm -f /run/utsugi-surya/disk-is-not-encrypted
+	# Only the first-boot offer goes; the disk is still not encrypted, and
+	# Settings keeps offering it.
+	rm -f /run/utsugi-surya/offer-encryption
 	exit 0
 fi
 
@@ -32,5 +34,6 @@ fi
 printf '%s' "$passphrase" > "$REQUEST"
 sync
 # The step is done for this boot; the reboot is what starts the work.
-rm -f /run/utsugi-surya/disk-is-not-encrypted
+# A request overrides an earlier "Not now".
+rm -f "$DECLINED" /run/utsugi-surya/disk-is-not-encrypted /run/utsugi-surya/offer-encryption
 systemctl reboot
