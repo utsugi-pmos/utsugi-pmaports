@@ -1,0 +1,8 @@
+[Unit]
+Description=Re-arm the RTC wake alarm for the next clock alarm
+Documentation=file:///usr/libexec/utsugi-surya/arm-alarm-wakeup
+RequiresMountsFor=/boot /home
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utsugi-surya/arm-alarm-wakeup

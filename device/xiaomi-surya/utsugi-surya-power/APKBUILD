@@ -19,19 +19,23 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=16
+pkgrel=17
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
-depends="python3"
+depends="python3 inotify-tools"
 subpackages="$pkgname-systemd"
 install="$pkgname.post-install $pkgname.post-upgrade"
 source="power-reason
 	poweroff-for-real
 	bluetooth-off-while-asleep
 	arm-alarm-wakeup
+	alarm-watch
+	alarm-watch.service
+	alarm-sync.service
+	alarm-sync.timer
 	40-utsugi-charge-mode.sh
 	40-utsugi-charge-mode.modules
 	utsugi-spin.plymouth
@@ -55,7 +59,7 @@ package() {
 	install -Dm755 "$srcdir"/power-reason -t "$pkgdir"/usr/bin/
 
 	local helper
-	for helper in poweroff-for-real arm-alarm-wakeup; do
+	for helper in poweroff-for-real arm-alarm-wakeup alarm-watch; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 	# /usr/bin, not /usr/libexec: this one is typed by a person, and reaching
@@ -68,8 +72,8 @@ package() {
 	install -Dm644 "$srcdir"/tuned.conf -t "$pkgdir"/etc/tuned/profiles/powersave/
 
 	local unit
-	for unit in poweroff-for-real; do
-		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/system/
+	for unit in poweroff-for-real.service alarm-watch.service alarm-sync.service alarm-sync.timer; do
+		install -Dm644 "$srcdir/$unit" -t "$pkgdir"/usr/lib/systemd/system/
 	done
 	install -Dm644 "$srcdir"/50-utsugi-surya-watchdog.conf \
 		-t "$pkgdir"/usr/lib/systemd/system.conf.d/
@@ -103,7 +107,11 @@ sha512sums="
 113c78460fffd54bcf8b97e9ff6752d911aa299cb3da09c1eab5fca923dbee14489124bbea14bfbd080748274cd94918950d6a3e87b6caf12b89d3effe9090c7  power-reason
 f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
 aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
-278082509147268d47e437c588237a008f692896502bbe9983fbb08bf5651f0c4658c22ce3a6be6f438719fd5792492eab6225cfb96c8e8e424d2df49198da91  arm-alarm-wakeup
+10a390dc1de65169cc7b06216e21a1f280f77724c104a5ce2b08d5f454143ffe7b72ce54ac418936af600d3ad27441ba44fe8460d2e1ef988a8785a8c975837d  arm-alarm-wakeup
+fe0f5e6a3886f187188d361eafe752b84a88bc69b3be5e630613cc8d66b0c137815695a37bafbdd33fb514ed37597319d2c0297063ed8fbe4ebd035e93c4c154  alarm-watch
+62bbc957e274b62b68fcb93dc3cfe8db64392fa687b853def5d2240e57309367eced6637bf62db95c0e00327c9f5361fd9e2b03e2dcb1e42465fcf3293fbe427  alarm-watch.service
+64ceb9c8eeb34dce977544a246083c7be7862ef4db80aae0abea9683945bdc6b824933cfc2849d6323dcfcf9bb7dfe9af1ac874e795a704311e8797687d99f76  alarm-sync.service
+71bfe4e9980a9abbdc5e9ce5f67f00f0065a6b43de21c1ddf660c2603cb4197cc04b7524b92dc1753169f568b21035da6de34f950d0b8e0a799a349aa677624e  alarm-sync.timer
 f3d9520c76abfe2254e866621774b50c27a4436cb3ab6a47481680aa0f548da2531652829cd816d7979a1b56720c7e818bead90a04047596b4713d6c05016c91  40-utsugi-charge-mode.sh
 d329fef05a415f484d6c244570188f9b93e52b811bc4eda8749feec264a6c4b88dac5ef99d1e9c2db3b02a2cc90ee2d94bba39e89cd664797034a0af727c1f26  40-utsugi-charge-mode.modules
 a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
@@ -118,5 +126,5 @@ f5a797d56481565da046b946b8c6848e1d998488e2a5d8c42806d1d4e52b3547929b831a77e68312
 e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903e460509bb11cc2dc3b817b5ee39a8878e68358c7f011e5ef  poweroff-for-real.service
 84f5c593026d9007267af2ccfbfca7cae7161eb8b3dba684c48a3917cc4a4a05ff68ebe8c206a8fee849bd2e7d9f6a9e0932073824e39a8c03b016d47b44f2be  50-utsugi-surya-watchdog.conf
 090c7f0022030eb0fe71a55863059d3df169335fbe30088bdaba080e58b717ca61fa77067cc9473a4db72a9eb4fdb037f24908fde3757646f635abb3edb39772  tuned.conf
-4a0a0e2dae4bd26ea6780f2dbd6aa4112473e253e9159b0456561fe35c7cea2c71aeab2c8c6e78a29e9c00b625ca4e62dcaa3beb1d45e60ea768b73d55d3a56f  80-utsugi-surya-power.preset
+04862371b9a9a37fe9a5638f9c943093814cc3a6450830adea75951ee2d48c0dd2de60ff2da50e50c890b664ace03bd9949f04e065a5dee793e376072bc4a9cd  80-utsugi-surya-power.preset
 "

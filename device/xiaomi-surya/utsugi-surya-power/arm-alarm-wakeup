@@ -1,17 +1,22 @@
 #!/usr/bin/python3
-"""Arm the PMIC's RTC alarm so the powered-off phone turns itself on for the
-next clock alarm.
+"""Keep the PMIC's RTC alarm, and the boot partition, set for the next clock
+alarm, so a phone that is off turns itself on in time for it.
 
 The Clock app (kclockd) keeps its alarms in ~/.config/kclockdrc, one JSON
 object per alarm under [Alarms]. This reads them, finds the next one that is
 enabled, and writes the RTC wake alarm LEAD seconds before it, so the phone
 has booted to the desktop -- where kclockd rings it -- when the time comes.
+The same moment goes to /boot/utsugi/next-alarm for the charging screen in the
+initramfs, which runs before an encrypted root is unlocked.
 
 Measured on 2026-09-16: an RTC alarm powers the phone on from a real power-off
 (PON_REASON1 = 0x04), and the desktop is up about 70 s after the alarm fires.
 
-Run from poweroff-for-real, right before the power-off itself. Prints what it
-armed; arms nothing if there is no alarm in the next seven days.
+It runs whenever the alarms change (alarm-watch), every quarter of an hour
+(alarm-sync.timer, for repeating alarms whose next ring moves on without the
+file changing) and at power-off. It used to run ONLY at power-off, and that
+missed every other way a phone goes off: a reboot, a power-off before the
+desktop was up, a flat battery. Found on 2026-09-16 on an encrypted phone.
 
     arm-alarm-wakeup            arm
     arm-alarm-wakeup --dry-run  only say what it would arm
@@ -81,9 +86,20 @@ def leave_for_the_initramfs(line):
         print(f"arm-alarm-wakeup: cannot write {NEXT_ALARM}: {e}")
 
 
+def current_wakealarm():
+    try:
+        v = open(WAKEALARM).read().strip()
+        return int(v) if v else None
+    except (OSError, ValueError):
+        return None
+
+
 if best is None:
     print("arm-alarm-wakeup: no enabled alarm, nothing armed")
     if not DRY:
+        if current_wakealarm() is not None:
+            with open(WAKEALARM, "w") as f:
+                f.write("0\n")
         leave_for_the_initramfs(None)
     sys.exit(0)
 
@@ -94,13 +110,28 @@ if delta < 5:
 print(f"arm-alarm-wakeup: next alarm '{name}' at {ring:%Y-%m-%d %H:%M}, "
       f"waking in {delta} s" + (" (dry run)" if DRY else ""))
 if not DRY:
-    with open(WAKEALARM, "w") as f:
-        f.write("0\n")
-    with open(WAKEALARM, "w") as f:
-        f.write(f"+{delta}\n")
     try:
         rtc_now = int(open(RTC_NOW).read())
     except (OSError, ValueError):
         rtc_now = None
-    if rtc_now is not None:
-        leave_for_the_initramfs(f"{rtc_now + delta} {ring:%H:%M} {name}")
+    target = None if rtc_now is None else rtc_now + delta
+    line = None if target is None else f"{target} {ring:%H:%M} {name}"
+    # Called every quarter of an hour and on every save of the alarms: touch
+    # nothing that is already right, so the FAT boot partition is not
+    # rewritten for nothing.
+    armed = current_wakealarm()
+    try:
+        old = open(NEXT_ALARM).read().split(None, 1)
+    except OSError:
+        old = None
+    same_rtc = armed is not None and target is not None and abs(armed - target) <= 2
+    same_file = (old is not None and len(old) == 2 and line is not None
+                 and abs(int(old[0]) - target) <= 2
+                 and old[1].strip() == line.split(None, 1)[1])
+    if not same_rtc:
+        with open(WAKEALARM, "w") as f:
+            f.write("0\n")
+        with open(WAKEALARM, "w") as f:
+            f.write(f"+{delta}\n")
+    if line is not None and not same_file:
+        leave_for_the_initramfs(line)
