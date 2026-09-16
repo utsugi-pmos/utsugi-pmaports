@@ -1,6 +1,6 @@
 {
     "KPlugin": {
-        "Category": "System",
+        "Category": "Security & Privacy",
         "Description": "Encrypt the phone's storage with a passphrase",
         "Description[es]": "Cifrar el almacenamiento del teléfono con una frase de paso",
         "FormFactors": [
@@ -15,6 +15,6 @@
     },
     "X-KDE-Keywords": "encrypt,encryption,disk,storage,luks,cryptsetup,passphrase,security",
     "X-KDE-Keywords[es]": "cifrar,cifrado,disco,almacenamiento,luks,cryptsetup,frase de paso,seguridad",
-    "X-KDE-System-Settings-Parent-Category": "system",
+    "X-KDE-System-Settings-Parent-Category": "security-privacy",
     "X-KDE-Weight": 50
 }

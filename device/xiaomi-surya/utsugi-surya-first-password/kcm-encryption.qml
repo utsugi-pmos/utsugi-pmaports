@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-or-later
 //
-// Phone encryption, in System Settings. The same assistant the first-boot step
+// Phone encryption, in Settings › Security & Privacy. The same assistant the first-boot step
 // shows, for anyone who chose "Not now" then and wants it now. It drives the
 // same Encrypt backend (kcm.encrypt), so the pkexec-to-initramfs path is
 // identical -- on "Encrypt and restart" the phone reboots and encrypts itself

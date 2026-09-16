@@ -315,7 +315,7 @@ Kirigami.ApplicationWindow {
                 }
                 QQC2.Label {
                     text: "\"Not now\" does not ask again here, but it is not final: "
-                        + "you can encrypt later from Settings › System › Phone encryption."
+                        + "you can encrypt later from Settings › Security & Privacy › Phone encryption."
                     wrapMode: Text.Wrap
                     horizontalAlignment: Text.AlignHCenter
                     opacity: 0.5
