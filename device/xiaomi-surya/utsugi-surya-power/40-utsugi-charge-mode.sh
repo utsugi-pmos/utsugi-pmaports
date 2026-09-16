@@ -93,25 +93,30 @@ fi
 # a shell: init_2nd kills every 'sh' before switching root, so busybox runs
 # under another name to survive that sweep. Harmless on an unencrypted phone:
 # systemd is PID 1 long before the alarm is due.
+# The watcher itself: $1 the RTC second to start at, $2 the RTC clock, $3 the
+# file holding PID 1's name. Kept in a variable so it can be run on its own.
+BUZZER='
+	while [ "$(cat "$2")" -lt "$1" ]; do
+		[ "$(cat "$3" 2>/dev/null)" != systemd ] || exit 0
+		sleep 2
+	done
+	n=0
+	while [ "$(cat "$3" 2>/dev/null)" != systemd ] && [ "$n" -lt 150 ]; do
+		beebzzr -d 700 -b 2 >/dev/null 2>&1
+		sleep 2; n=$((n + 1))
+	done'
+
 arm_buzzer() {
 	[ -n "$ALARM" ] && command -v beebzzr >/dev/null || return 0
 	ring=$(( ALARM + 120 ))
 	now=$(cat "$RTC" 2>/dev/null || echo 0)
 	# Only an alarm this boot is actually for: not a stale one hours away.
 	[ $(( ring - now )) -le 600 ] && [ $(( now - ring )) -le 600 ] || { log "alarm at rtc $ring is not this boot's"; return 0; }
-	cp /bin/busybox /tmp/utsugi-alarm-buzz 2>/dev/null || return 0
-	grep -qs . /sys/class/input/*/device/name && grep -qls aw8695 /sys/class/input/*/device/name \
-		|| log "no vibrator found yet (aw8695); the buzzer will try anyway"
-	setsid /tmp/utsugi-alarm-buzz sh -c '
-		while [ "$(cat /sys/class/rtc/rtc0/since_epoch)" -lt "$1" ]; do
-			[ "$(cat /proc/1/comm 2>/dev/null)" != systemd ] || exit 0
-			sleep 2
-		done
-		n=0
-		while [ "$(cat /proc/1/comm 2>/dev/null)" != systemd ] && [ "$n" -lt 150 ]; do
-			beebzzr -d 700 -b 2 >/dev/null 2>&1
-			sleep 2; n=$((n + 1))
-		done' buzz "$ring" >/dev/null 2>&1 </dev/null &
+	# busybox picks its applet from its own name, so the copy has to be called
+	# busybox-something: named anything else it answers "applet not found" and
+	# exits, which is what happened on 2026-09-16 and why nothing vibrated.
+	cp /bin/busybox /tmp/busybox-utsugi-alarm 2>/dev/null || return 0
+	setsid /tmp/busybox-utsugi-alarm sh -c "$BUZZER" buzz "$ring" "$RTC" /proc/1/comm >/dev/null 2>&1 </dev/null &
 	log "alarm buzzer armed for rtc $ring"
 }
 
