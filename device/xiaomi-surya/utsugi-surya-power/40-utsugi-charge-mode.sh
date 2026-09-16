@@ -31,7 +31,7 @@ log() { echo "utsugi-charge: $*" > /dev/kmsg 2>/dev/null; }
 QG=/sys/class/power_supply/qcom_qg
 CHG=/sys/class/power_supply/pm8150b-charger
 RTC=/sys/class/rtc/rtc0/since_epoch
-USB_CHG=16; DC_CHG=8; KPDPWR=128; HARD_RESET=1
+USB_CHG=16; DC_CHG=8; RTC_ALARM=4; KPDPWR=128; HARD_RESET=1
 SCREEN_OFF=45   # s without a press before the screen goes dark
 LONG_PRESS=2    # s of power to boot
 
@@ -58,15 +58,6 @@ reason() {
 	done
 	return 1
 }
-n=$(reason) || { log "cannot read PON_REASON1, normal boot"; exit 0; }
-online=$(cat "$CHG/online" 2>/dev/null || echo 0)
-if [ $((n & HARD_RESET)) -ne 0 ] || [ $((n & KPDPWR)) -ne 0 ] || \
-   [ $((n & (USB_CHG | DC_CHG))) -eq 0 ] || [ "$online" != 1 ]; then
-	log "PON_REASON1=$n charger=$online: normal boot"
-	exit 0
-fi
-log "PON_REASON1=$n charger=$online: charge mode"
-
 # The next alarm, as an RTC timestamp, left by arm-alarm-wakeup at power-off.
 # The RTC is the only clock here: the system time is not set yet.
 ALARM=; ALARM_TEXT=
@@ -79,6 +70,47 @@ if [ -n "$bootp" ]; then
 	fi
 fi
 [ -n "$ALARM" ] && log "next alarm at rtc $ALARM ($ALARM_TEXT)"
+
+# A boot that is going on for an alarm may stop at the passphrase of an
+# encrypted phone, and nothing in there knows about the alarm or can play a
+# sound: the DSP firmware and the audio stack are inside the encrypted root.
+# The vibrator is not. So a small watcher stays behind in the initramfs and,
+# at the alarm's time, vibrates until the phone is unlocked; once the real
+# init is PID 1 the Clock app has taken over and the watcher quits. It is not
+# a shell: init_2nd kills every 'sh' before switching root, so busybox runs
+# under another name to survive that sweep. Harmless on an unencrypted phone:
+# systemd is PID 1 long before the alarm is due.
+arm_buzzer() {
+	[ -n "$ALARM" ] && command -v beebzzr >/dev/null || return 0
+	ring=$(( ALARM + 120 ))
+	now=$(cat "$RTC" 2>/dev/null || echo 0)
+	# Only an alarm this boot is actually for: not a stale one hours away.
+	[ $(( ring - now )) -le 600 ] && [ $(( now - ring )) -le 600 ] || { log "alarm at rtc $ring is not this boot's"; return 0; }
+	cp /bin/busybox /tmp/utsugi-alarm-buzz 2>/dev/null || return 0
+	setsid /tmp/utsugi-alarm-buzz sh -c '
+		while [ "$(cat /sys/class/rtc/rtc0/since_epoch)" -lt "$1" ]; do
+			[ "$(cat /proc/1/comm 2>/dev/null)" = init ] || exit 0
+			sleep 2
+		done
+		n=0
+		while [ "$(cat /proc/1/comm 2>/dev/null)" = init ] && [ "$n" -lt 150 ]; do
+			beebzzr -d 700 -b 2 >/dev/null 2>&1
+			sleep 2; n=$((n + 1))
+		done' buzz "$ring" >/dev/null 2>&1 </dev/null &
+	log "alarm buzzer armed for rtc $ring"
+}
+
+n=$(reason) || { log "cannot read PON_REASON1, normal boot"; exit 0; }
+online=$(cat "$CHG/online" 2>/dev/null || echo 0)
+# The RTC alarm turned the phone on while it was off: a Clock alarm is due.
+[ $((n & RTC_ALARM)) -ne 0 ] && { log "PON_REASON1=$n: woken by the alarm"; arm_buzzer; }
+if [ $((n & HARD_RESET)) -ne 0 ] || [ $((n & KPDPWR)) -ne 0 ] || \
+   [ $((n & (USB_CHG | DC_CHG))) -eq 0 ] || [ "$online" != 1 ]; then
+	log "PON_REASON1=$n charger=$online: normal boot"
+	exit 0
+fi
+log "PON_REASON1=$n charger=$online: charge mode"
+
 
 # The power key's event node. Polling "is it pressed now" (iskey) misses a
 # quick tap between two polls -- measured on 2026-09-16, a short press did
@@ -176,26 +208,5 @@ log "leaving charge mode: $why"
 plymouth display-message --text=" " 2>/dev/null
 plymouth update --status=charge-off 2>/dev/null
 brightness $(( MAXBL / 2 ))
-
-# Continuing for an alarm on an encrypted phone: the boot stops at the
-# passphrase and nothing in there knows about the alarm. So a small watcher
-# stays behind in the initramfs and, when the time comes, vibrates until the
-# phone is unlocked (once the real init is up, the Clock app takes over and
-# this one quits). Not a shell: init_2nd kills every 'sh' before switching
-# root, so busybox is copied under another name to survive that sweep.
-if [ "${why%% *}" = alarm ] && command -v beebzzr >/dev/null; then
-	ring=$(( ALARM + 120 ))
-	cp /bin/busybox /tmp/utsugi-alarm-buzz 2>/dev/null && \
-	setsid /tmp/utsugi-alarm-buzz sh -c '
-		while [ "$(cat /sys/class/rtc/rtc0/since_epoch)" -lt "$1" ]; do
-			[ "$(cat /proc/1/comm 2>/dev/null)" = init ] || exit 0
-			sleep 2
-		done
-		n=0
-		while [ "$(cat /proc/1/comm 2>/dev/null)" = init ] && [ "$n" -lt 150 ]; do
-			beebzzr -d 700 -b 2 >/dev/null 2>&1
-			sleep 2; n=$((n + 1))
-		done' buzz "$ring" >/dev/null 2>&1 </dev/null &
-	log "alarm buzzer armed for rtc $ring"
-fi
+[ "${why%% *}" = alarm ] && arm_buzzer
 exit 0

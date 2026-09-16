@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=14
+pkgrel=15
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -104,7 +104,7 @@ sha512sums="
 f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
 aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
 278082509147268d47e437c588237a008f692896502bbe9983fbb08bf5651f0c4658c22ce3a6be6f438719fd5792492eab6225cfb96c8e8e424d2df49198da91  arm-alarm-wakeup
-e3dae4e15d40a40e9575da72a4e04b9ae6da1eb5e9efef83da42fed6b46f22e0b0c3dde8457377c05ba30aa75638267dc4b922e21f7022419bb46ae9279e4bc4  40-utsugi-charge-mode.sh
+42b2634e67cdd081ff2d401c9b410d6d929896a005cac9f1f502e29fb9b01d2fea5b0da5d09e44544276da62729e8f8ecfed6e1a206a2528162bc1ba1efb239d  40-utsugi-charge-mode.sh
 d329fef05a415f484d6c244570188f9b93e52b811bc4eda8749feec264a6c4b88dac5ef99d1e9c2db3b02a2cc90ee2d94bba39e89cd664797034a0af727c1f26  40-utsugi-charge-mode.modules
 a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
 bef13eab0c3201f7280d0b19f443af11d26b0cab178e7b5ee35f8359e392655ba79313eeb77c0446ce8a08744a48f80dbba4c7698032737c6467fe810e47603c  utsugi-spin.script
