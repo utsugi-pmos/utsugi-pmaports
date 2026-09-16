@@ -86,7 +86,10 @@ fi
 # sound: the DSP firmware and the audio stack are inside the encrypted root.
 # The vibrator is not. So a small watcher stays behind in the initramfs and,
 # at the alarm's time, vibrates until the phone is unlocked; once the real
-# init is PID 1 the Clock app has taken over and the watcher quits. It is not
+# init is PID 1 the Clock app has taken over and the watcher quits. PID 1 is
+# not called "init" while waiting: the initramfs execs /init_2nd.sh, so the
+# test is "not systemd yet" -- testing for "init" made the watcher quit at once
+# and nothing vibrated, measured on 2026-09-16. It is not
 # a shell: init_2nd kills every 'sh' before switching root, so busybox runs
 # under another name to survive that sweep. Harmless on an unencrypted phone:
 # systemd is PID 1 long before the alarm is due.
@@ -101,11 +104,11 @@ arm_buzzer() {
 		|| log "no vibrator found yet (aw8695); the buzzer will try anyway"
 	setsid /tmp/utsugi-alarm-buzz sh -c '
 		while [ "$(cat /sys/class/rtc/rtc0/since_epoch)" -lt "$1" ]; do
-			[ "$(cat /proc/1/comm 2>/dev/null)" = init ] || exit 0
+			[ "$(cat /proc/1/comm 2>/dev/null)" != systemd ] || exit 0
 			sleep 2
 		done
 		n=0
-		while [ "$(cat /proc/1/comm 2>/dev/null)" = init ] && [ "$n" -lt 150 ]; do
+		while [ "$(cat /proc/1/comm 2>/dev/null)" != systemd ] && [ "$n" -lt 150 ]; do
 			beebzzr -d 700 -b 2 >/dev/null 2>&1
 			sleep 2; n=$((n + 1))
 		done' buzz "$ring" >/dev/null 2>&1 </dev/null &
