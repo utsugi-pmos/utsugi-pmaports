@@ -7,7 +7,7 @@
 //
 // Two steps, each shown only when the system half says it applies:
 //   /run/utsugi-surya/password-is-default    -> choose a password
-//   /run/utsugi-surya/disk-is-not-encrypted  -> encrypt the phone, or not
+//   /run/utsugi-surya/offer-encryption       -> encrypt the phone, or not
 // The second is optional and can be declined for good. The first cannot.
 import QtQuick
 import QtQuick.Layouts
@@ -30,7 +30,7 @@ Kirigami.ApplicationWindow {
     Encrypt { id: encrypt }
 
     readonly property bool needPassword: encrypt.exists("/run/utsugi-surya/password-is-default")
-    readonly property bool offerEncryption: encrypt.exists("/run/utsugi-surya/disk-is-not-encrypted")
+    readonly property bool offerEncryption: encrypt.exists("/run/utsugi-surya/offer-encryption")
 
     pageStack.globalToolBar.style: Kirigami.ApplicationHeaderStyle.None
 

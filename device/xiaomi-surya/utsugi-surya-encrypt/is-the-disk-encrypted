@@ -1,15 +1,22 @@
 #!/bin/sh
-# Decide, once per boot, whether to offer encryption -- and leave a flag in
-# /run saying so. The assistant is conditioned on that flag; the decision needs
-# root (blkid on the root device) and the drawing does not, so they are split
-# the same way the shipped-password check is.
+# Decide, once per boot, whether the root is encrypted -- and leave flags in
+# /run saying so. The decision needs root (blkid on the root device) and the
+# drawing does not, so they are split the same way the shipped-password check is.
+#
+#   disk-is-not-encrypted   the truth; the Settings module reads it
+#   offer-encryption        the truth, unless the first-boot step was already
+#                           answered; the first-boot step reads it
+#
+# They were one flag until 2026-09-16, and "Not now" in the first-boot step
+# then hid encryption from Settings too, which said "This phone is encrypted"
+# on a phone that was not -- the one case that module exists for.
 set -u
 DIR=/var/lib/utsugi-surya
 FLAG=/run/utsugi-surya/disk-is-not-encrypted
-rm -f "$FLAG"
+OFFER=/run/utsugi-surya/offer-encryption
+rm -f "$FLAG" "$OFFER"
 
-# Already asked and declined, or already requested: nothing to offer.
-[ -e "$DIR/encryption-declined" ] && exit 0
+# Already requested: it happens on the next boot, nothing to show.
 [ -e "$DIR/encrypt-request" ] && exit 0
 
 src="$(findmnt -no SOURCE / 2>/dev/null)"
@@ -25,3 +32,4 @@ type="$(blkid -o value -s TYPE "$src" 2>/dev/null)"
 
 mkdir -p /run/utsugi-surya
 : > "$FLAG"
+[ -e "$DIR/encryption-declined" ] || : > "$OFFER"
