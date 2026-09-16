@@ -7,3 +7,7 @@ qcom_qg
 qcom_spmi_adc5
 nvmem_qcom_spmi_sdam
 qcom_smbx
+# The vibrator, for the alarm on an encrypted phone at the passphrase screen:
+# without it there is no force-feedback device before the root is unlocked.
+ff_memless
+aw8695_haptics
