@@ -69,6 +69,15 @@ if [ -n "$bootp" ]; then
 		umount /tmp/utsugi-boot 2>/dev/null
 	fi
 fi
+# The file is rewritten at every power-off, but not by a reboot, a crash or a
+# flat battery, so it can be old. An alarm already more than ten minutes past
+# is not this boot's: without this, the charging screen would think its time
+# had come and carry straight on booting. Seen on 2026-09-16 after the reboot
+# into encryption.
+if [ -n "$ALARM" ] && [ $(( $(cat "$RTC" 2>/dev/null || echo 0) - ALARM )) -gt 600 ]; then
+	log "stale alarm at rtc $ALARM ($ALARM_TEXT), ignored"
+	ALARM=; ALARM_TEXT=
+fi
 [ -n "$ALARM" ] && log "next alarm at rtc $ALARM ($ALARM_TEXT)"
 
 # A boot that is going on for an alarm may stop at the passphrase of an
