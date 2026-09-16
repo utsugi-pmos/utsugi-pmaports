@@ -1,0 +1,8 @@
+[Plymouth Theme]
+Name=utsugi spin theme
+Description=postmarketOS "spin" logo, plus a charging screen driven by 'plymouth update --status=charge-<percent>'
+ModuleName=script
+
+[script]
+ImageDir=/usr/share/plymouth/themes/utsugi-spin
+ScriptFile=/usr/share/plymouth/themes/utsugi-spin/utsugi-spin.script

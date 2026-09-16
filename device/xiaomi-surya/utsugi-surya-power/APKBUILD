@@ -1,5 +1,6 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
-# Power on the POCO X3 NFC: powering off, the watchdog, charge mode and the
+# Power on the POCO X3 NFC: powering off, the watchdog, the charging screen
+# (in the initramfs), alarms while off, Bluetooth while asleep, and the
 # power-saving profile.
 #
 # Powering off hangs on this phone at a different point every time, with no oops
@@ -7,12 +8,18 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # teardown that freezes, and it is ordered so that it is the first unit stopped
 # on the way down.
 #
+# A powered-off phone turns itself on for the next clock alarm
+# (arm-alarm-wakeup, run by poweroff-for-real; the PMIC wakes on its RTC).
+#
+# Bluetooth is blocked while the phone sleeps: its UART wake line aborts every
+# suspend otherwise (bluetooth-off-while-asleep).
+#
 # The watchdog is what removes the need for a person: if the system stops
 # responding the hardware resets on its own. 20 s because the hardware maximum
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=13
+pkgrel=14
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -20,16 +27,23 @@ license="MIT"
 options="!check"
 depends="python3"
 subpackages="$pkgname-systemd"
+install="$pkgname.post-install $pkgname.post-upgrade"
 source="power-reason
 	poweroff-for-real
-	charge-mode
-	charge-mode-decide
-	charge-screen
+	bluetooth-off-while-asleep
+	arm-alarm-wakeup
+	40-utsugi-charge-mode.sh
+	40-utsugi-charge-mode.modules
+	utsugi-spin.plymouth
+	utsugi-spin.script
+	pixel.png
+	right.png
+	top.png
+	left.png
+	error.png
+	utsugi-spin.NOTICE
 	reboot-to-bootloader
 	poweroff-for-real.service
-	charge-mode.service
-	charge-mode-decide.service
-	10-utsugi-charge-mode.conf
 	50-utsugi-surya-watchdog.conf
 	tuned.conf
 	80-utsugi-surya-power.preset
@@ -41,7 +55,7 @@ package() {
 	install -Dm755 "$srcdir"/power-reason -t "$pkgdir"/usr/bin/
 
 	local helper
-	for helper in poweroff-for-real charge-mode charge-mode-decide charge-screen; do
+	for helper in poweroff-for-real arm-alarm-wakeup; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 	# /usr/bin, not /usr/libexec: this one is typed by a person, and reaching
@@ -54,34 +68,55 @@ package() {
 	install -Dm644 "$srcdir"/tuned.conf -t "$pkgdir"/etc/tuned/profiles/powersave/
 
 	local unit
-	for unit in poweroff-for-real charge-mode charge-mode-decide; do
+	for unit in poweroff-for-real; do
 		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/system/
 	done
-	install -Dm644 "$srcdir"/10-utsugi-charge-mode.conf \
-		-t "$pkgdir"/usr/lib/systemd/system/plasma-mobile.service.d/
 	install -Dm644 "$srcdir"/50-utsugi-surya-watchdog.conf \
 		-t "$pkgdir"/usr/lib/systemd/system.conf.d/
 	install -Dm644 "$srcdir"/80-utsugi-surya-power.preset \
 		-t "$pkgdir"/usr/lib/systemd/system-preset/
+	# Run by systemd-sleep before and after every suspend. See the file.
+	install -Dm755 "$srcdir"/bluetooth-off-while-asleep \
+		-t "$pkgdir"/usr/lib/systemd/system-sleep/
+
+	# The charging screen lives in the initramfs (so that it runs on an
+	# encrypted phone too; the systemd version it replaced could not). /usr/share/mkinitfs/* is a trigger directory:
+	# installing this regenerates the initramfs. The plymouth theme that
+	# draws the battery is picked by the post-install, in plymouthd.conf.
+	install -Dm755 "$srcdir"/40-utsugi-charge-mode.sh \
+		-t "$pkgdir"/usr/share/mkinitfs/hooks-extra/
+	install -Dm644 "$srcdir"/40-utsugi-charge-mode.modules \
+		-t "$pkgdir"/usr/share/mkinitfs/modules/
+	local f
+	for f in utsugi-spin.plymouth utsugi-spin.script pixel.png right.png top.png left.png error.png; do
+		install -Dm644 "$srcdir/$f" -t "$pkgdir"/usr/share/plymouth/themes/utsugi-spin/
+	done
+	install -Dm644 "$srcdir"/utsugi-spin.NOTICE "$pkgdir"/usr/share/plymouth/themes/utsugi-spin/NOTICE
 }
 
 systemd() {
-	# Takes everything under usr/lib/systemd: the units, the preset, the drop-in
-	# over plasma-mobile.service and systemd's own system.conf.d snippet.
+	# Takes everything under usr/lib/systemd: the unit, the preset, the sleep
+	# hook and systemd's own system.conf.d snippet.
 	default_systemd
 }
 sha512sums="
 113c78460fffd54bcf8b97e9ff6752d911aa299cb3da09c1eab5fca923dbee14489124bbea14bfbd080748274cd94918950d6a3e87b6caf12b89d3effe9090c7  power-reason
-34be92a1dc109e6b8b6be5a35920bb2c8a5c958cea2b35d975156655e8a77e80319b721e90e1948fdf085623081c2cae3393a85b8f0d9f7e5a65dee61af57fa4  poweroff-for-real
-afc51225a9bdd7508fdf6c569b1da9bc3e98fc897931d3b3b24c2229ecb8e2c6f9120c2a1f64b841ea50c725ded8cec9ecb064a6336af9ba75f66d1b51dae807  charge-mode
-61aaa071c1360a27b5ac920a5987cbda377cda28bdfcb67deb7e486653e7cdfa77c91690f1cf7ca89d4cc321864ea5582cff0a658f7472aa98e6a5387277fcaf  charge-mode-decide
-301c818c8042b57a42afb0902a6dc57aaf0982b7f65bfebb40f1cabb4127f1fe248e578bfe6fbeece48a34cc3e1a4ddba6f7421b7d758131ade51cb4d54e1d49  charge-screen
+f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
+aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
+278082509147268d47e437c588237a008f692896502bbe9983fbb08bf5651f0c4658c22ce3a6be6f438719fd5792492eab6225cfb96c8e8e424d2df49198da91  arm-alarm-wakeup
+e3dae4e15d40a40e9575da72a4e04b9ae6da1eb5e9efef83da42fed6b46f22e0b0c3dde8457377c05ba30aa75638267dc4b922e21f7022419bb46ae9279e4bc4  40-utsugi-charge-mode.sh
+d329fef05a415f484d6c244570188f9b93e52b811bc4eda8749feec264a6c4b88dac5ef99d1e9c2db3b02a2cc90ee2d94bba39e89cd664797034a0af727c1f26  40-utsugi-charge-mode.modules
+a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
+bef13eab0c3201f7280d0b19f443af11d26b0cab178e7b5ee35f8359e392655ba79313eeb77c0446ce8a08744a48f80dbba4c7698032737c6467fe810e47603c  utsugi-spin.script
+19e2c887557f4c9104a6b09a3033e73d0baae9da1f98a84105b7d56b5ca55f60ae8a560940c12c60122175e5711bf328ec28014be144fa6de087ddaf05680850  pixel.png
+ff98f7a80ac3b1166098f54e9704d7910f51961085324fbb5bfdaf747f40d902f88ddaad7178eb1aed249c3c42febe9d617c89660d2fa15bbd826ae30e577b17  right.png
+2ce7dbf8d11d94dc3e688406acc376547cc856eaab422b78e8395adddfc519edb63a5a8b10a24290a61e909734e28ebfb9c735de70f0e1f5d25b34cc744b5e64  top.png
+f5a797d56481565da046b946b8c6848e1d998488e2a5d8c42806d1d4e52b3547929b831a77e683120b46a5801668330582665f02b1acbdbf6435aa56d7e55349  left.png
+42d80014a40f5f069eac2aad5e82bd80affeff75f8b1459c55b6cc36c95ade832690ef971a2513922043208b29e32dcee6669be5eee682fcee516ca6fbb6ff04  error.png
+6e659f9decafbe8e6a9371a5deeaeab5486652fe8aedcc7b4d8e7a70c1569e17d346c34c391ae251778975158ceaa9f172963e1f06abd71c2bf83ff6fd245e2a  utsugi-spin.NOTICE
 34fe075a54f9035d8e910b791dc8f7358f9864d884ed005ce6c9f3ed603d2ec4c5e07c4b3aa885a2a59ebf94a597abc0b14dadc851bb62e2d9012d6ad5eedd54  reboot-to-bootloader
 e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903e460509bb11cc2dc3b817b5ee39a8878e68358c7f011e5ef  poweroff-for-real.service
-d435c973e8f3e3d5be421704387c4a98e932115153b9cf96c50fdae30cc5c877ff6e97581474c99f8c0c3f9839a6444b6e960403ed420c4f78b9184c960755bc  charge-mode.service
-dd43c63d7cb7f0eb68ca64e3d29db5c17e499cc6a9759ea6625b28d931bbfac597f989c15daf04502886a9d9bab11da8d3ddfb4556b9b14e9840f0a125465cce  charge-mode-decide.service
-de18a34ce063c1a2c2d4e1a980b6e856af3044491d427d573fb4d4ad029ae0db8914c0d2a8c208b6b936f779040811d7b236bc631d7c24bc77fc2f2ca9be1215  10-utsugi-charge-mode.conf
 84f5c593026d9007267af2ccfbfca7cae7161eb8b3dba684c48a3917cc4a4a05ff68ebe8c206a8fee849bd2e7d9f6a9e0932073824e39a8c03b016d47b44f2be  50-utsugi-surya-watchdog.conf
 090c7f0022030eb0fe71a55863059d3df169335fbe30088bdaba080e58b717ca61fa77067cc9473a4db72a9eb4fdb037f24908fde3757646f635abb3edb39772  tuned.conf
-89da0d299043cba804186434c5c81fd1dc03258951f01745488a06583867b64df819ac2d7be395c87a6b23deabcf88d36e6b75aa7a71cb39236178791d926fb4  80-utsugi-surya-power.preset
+4a0a0e2dae4bd26ea6780f2dbd6aa4112473e253e9159b0456561fe35c7cea2c71aeab2c8c6e78a29e9c00b625ca4e62dcaa3beb1d45e60ea768b73d55d3a56f  80-utsugi-surya-power.preset
 "
