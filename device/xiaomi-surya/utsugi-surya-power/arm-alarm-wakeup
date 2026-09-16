@@ -31,7 +31,7 @@ boot partition's copy is replaced, this checks whether that copy's alarm fell
 due within the last MISSED_WINDOW seconds, and if so leaves its details in
 /run/utsugi-surya/missed-alarm for alarm-catch-up, in the session, to ring.
 """
-import datetime, glob, json, os, sys
+import datetime, glob, json, os, subprocess, sys
 
 LEAD = 120                       # seconds before the alarm to start booting
 WAKEALARM = "/sys/class/rtc/rtc0/wakealarm"
@@ -107,6 +107,15 @@ def notice_missed_alarm():
     if not 0 < late <= MISSED_WINDOW:
         return
     hhmm, _, name = old_rest.strip().partition(" ")
+    # alarm-sound already rang it at the passphrase screen, and typing the
+    # passphrase was the owner answering it: do not ring it a second time.
+    try:
+        kmsg = subprocess.run(["dmesg"], capture_output=True, text=True).stdout
+    except OSError:
+        kmsg = ""
+    if "utsugi-alarm: ringing" in kmsg:
+        print(f"arm-alarm-wakeup: alarm '{name}' at {hhmm} already rang at the passphrase screen")
+        return
     for uuid, a in alarm_records():
         if not a.get("enabled", False) or a.get("name", "") != name:
             continue

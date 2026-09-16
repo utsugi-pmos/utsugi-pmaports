@@ -1,0 +1,10 @@
+# For alarm-sound: ring by the speaker at the passphrase screen of an encrypted phone.
+/usr/libexec/utsugi-surya/alarm-sound
+/usr/share/utsugi-surya/alarm-audio/speaker.state
+/usr/share/utsugi-surya/alarm-audio/alarm.wav
+/usr/share/utsugi-surya/alarm-audio/utsugi-alarm-audio.modprobe:/etc/modprobe.d/utsugi-alarm-audio.conf
+/usr/bin/aplay
+/usr/bin/amixer
+/usr/sbin/alsactl
+/usr/share/alsa
+/lib/firmware/qcom/sm7150/xiaomi/surya/adsp.mbn

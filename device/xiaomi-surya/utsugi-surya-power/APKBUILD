@@ -19,18 +19,26 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=21
+pkgrel=22
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
-depends="python3 inotify-tools"
+depends="python3 inotify-tools alsa-utils beebzzr"
+makedepends="python3"
 subpackages="$pkgname-systemd"
 install="$pkgname.post-install $pkgname.post-upgrade"
 source="power-reason
 	poweroff-for-real
 	bluetooth-off-while-asleep
+	10-utsugi-debug-shell.sh
+	alarm-sound
+	make-alarm-tone
+	speaker.state
+	utsugi-alarm-audio.modprobe
+	45-utsugi-alarm-audio.modules
+	45-utsugi-alarm-audio.files
 	arm-alarm-wakeup
 	alarm-watch
 	alarm-catch-up
@@ -55,6 +63,11 @@ source="power-reason
 	tuned.conf
 	80-utsugi-surya-power.preset
 	"
+
+build() {
+	# The tone alarm-sound plays at the passphrase screen.
+	python3 "$srcdir"/make-alarm-tone "$srcdir"/alarm.wav
+}
 
 package() {
 	# A user-facing command: which is why it goes in /usr/bin and not in
@@ -97,6 +110,17 @@ package() {
 		-t "$pkgdir"/usr/share/mkinitfs/hooks-extra/
 	install -Dm644 "$srcdir"/40-utsugi-charge-mode.modules \
 		-t "$pkgdir"/usr/share/mkinitfs/modules/
+
+	# Ringing an alarm by the speaker at the passphrase screen of an encrypted
+	# phone: the audio stack, blacklisted inside the initramfs so only
+	# alarm-sound loads it, and in its own order. See alarm-sound.
+	install -Dm755 "$srcdir"/alarm-sound -t "$pkgdir"/usr/libexec/utsugi-surya/
+	install -Dm644 "$srcdir"/speaker.state "$srcdir"/alarm.wav "$srcdir"/utsugi-alarm-audio.modprobe \
+		-t "$pkgdir"/usr/share/utsugi-surya/alarm-audio/
+	install -Dm644 "$srcdir"/45-utsugi-alarm-audio.modules -t "$pkgdir"/usr/share/mkinitfs/modules/
+	install -Dm644 "$srcdir"/45-utsugi-alarm-audio.files -t "$pkgdir"/usr/share/mkinitfs/files/
+	# A shell over USB inside the initramfs, only with /boot/utsugi/debug-shell.
+	install -Dm755 "$srcdir"/10-utsugi-debug-shell.sh -t "$pkgdir"/usr/share/mkinitfs/hooks-extra/
 	local f
 	for f in utsugi-spin.plymouth utsugi-spin.script pixel.png right.png top.png left.png error.png; do
 		install -Dm644 "$srcdir/$f" -t "$pkgdir"/usr/share/plymouth/themes/utsugi-spin/
@@ -113,7 +137,14 @@ sha512sums="
 113c78460fffd54bcf8b97e9ff6752d911aa299cb3da09c1eab5fca923dbee14489124bbea14bfbd080748274cd94918950d6a3e87b6caf12b89d3effe9090c7  power-reason
 f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
 aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
-56e0686ef2d8bb41078d024dfdb1d0ab4da359f237e4420a7aa0f09bb78d212abfd4b1ad006ad2f7fe3d287805a84b33487ac5189d48972d7a3b87bdaa11404f  arm-alarm-wakeup
+f099b467ced2b1edf74d42988cd6cc0feca20340650f966a88d115663a48b51379fae581e3d8c67b7aa37ffe4eb9dad62740cddbaaa8f388cf8be8c0310997c0  10-utsugi-debug-shell.sh
+af061818370b2c5d61a0b2b6b93842a41e06db07f17b23974b2995d7b02554613c530a1041cb153a0c7b9216521780f04bfebe4f4a1025481ca1353dcdd9b130  alarm-sound
+5d3ae10cda43dd4b8857db888f7594ee557b6d37bc85bfed6c8b9e4834a4fcf168254bb7d543cb5c1ea8bea628300cd0bdcda9f0a87f5cd176f172409fe1bb3e  make-alarm-tone
+18b4ed551c80e6fd48ecd680a59c53d71f5d34e17f8423740916e12923eb18e6835bf2e5b0d893292df512f7da7168f3c471e1c6c42151bc9728f10741e3f6ed  speaker.state
+624c116bda52ed8008a4a469eff47385b984b5cd13b817eb4fc3bb5af4fd13a4eead80dd07b716d93b03cf951b5ae652efafae9b7dad85fc5ad81f8000b0dee5  utsugi-alarm-audio.modprobe
+759cc65a633898113e040955d947a3f616b3cafa57238345c0d14237b404300de1b9230aad85ffac94991fb660e1ab2cd6b0f86a5bb35077002a393084d0ec39  45-utsugi-alarm-audio.modules
+ab8cb46e51c94556d03b4baed609751b9c12fcfb37deca5844c2a1ae22fee2af3aa628598c906fbd59fd2d65989bfaebf5ccf58a7a3c7c2c9dd19dd26bfb36fd  45-utsugi-alarm-audio.files
+702f80b0b485520c64d0b9b59cd02c0caa61a3f56798507fff03ba60b2e27b6c05428e0af230af7d487ba8fd8180d2a834edc907ec81827a248839a1be2f9b13  arm-alarm-wakeup
 3877fd285b7421ca8df75a25abd7dbdc0d21a7573f328dc1a81d1856b477f613c3d2c7f692ee039747471f146732d2caaaf0b402271990e00f501043241d623e  alarm-watch
 af856354d6c39b397cc495495ed89f002ca0b442e471b654daad9a6438b90504df8f8b23608814b88079183d49b8fea2a970055f097c7683eb8640aa4437c7de  alarm-catch-up
 43cb226237e8df675ec5f9c63c4bc4f13f285165e73a764cd8ed9685c3f7b0e97ddd65a725e88e8546218b13bed29af8be5e1633e18abf60ffb24eaaf064a8c9  alarm-catch-up.service
@@ -121,7 +152,7 @@ f1b42bd9d16fe3879028554d72ef582a6671df746a058af5f8065a58c258860ef5e098403dc33941
 62bbc957e274b62b68fcb93dc3cfe8db64392fa687b853def5d2240e57309367eced6637bf62db95c0e00327c9f5361fd9e2b03e2dcb1e42465fcf3293fbe427  alarm-watch.service
 64ceb9c8eeb34dce977544a246083c7be7862ef4db80aae0abea9683945bdc6b824933cfc2849d6323dcfcf9bb7dfe9af1ac874e795a704311e8797687d99f76  alarm-sync.service
 71bfe4e9980a9abbdc5e9ce5f67f00f0065a6b43de21c1ddf660c2603cb4197cc04b7524b92dc1753169f568b21035da6de34f950d0b8e0a799a349aa677624e  alarm-sync.timer
-a395d363079f73c15758c34189b47f639ad7aea5cab3a72b784b5527ed5dd80489df8fc45a186d520bc5799e0dab398d6c361ff5b5116c82a7408c4e0be04f49  40-utsugi-charge-mode.sh
+dae2f8e9d428e0862f9b94d6e335f588d335b4837ec888449ea20ab8b0217a18f3677a8f529fa38518fd498281b7745834efb51b251b5598300e1acaf8f804c7  40-utsugi-charge-mode.sh
 741a59ff15af43d0b8f89677982747c40560f1572e46322606ded23b96dd8fcc630d3bdc7c8f7c50f7ff4add05a2ace662e30976194587fc3ffc68975d76fd81  40-utsugi-charge-mode.modules
 a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
 bef13eab0c3201f7280d0b19f443af11d26b0cab178e7b5ee35f8359e392655ba79313eeb77c0446ce8a08744a48f80dbba4c7698032737c6467fe810e47603c  utsugi-spin.script
