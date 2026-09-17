@@ -18,6 +18,7 @@
 
 #include "passwd.h"
 #include "encrypt.h"
+#include "identity.h"
 
 int main(int argc, char *argv[])
 {
@@ -56,6 +57,7 @@ int main(int argc, char *argv[])
 
     qmlRegisterType<Passwd>("org.utsugi.firstpassword", 1, 0, "Passwd");
     qmlRegisterType<Encrypt>("org.utsugi.firstpassword", 1, 0, "Encrypt");
+    qmlRegisterType<Identity>("org.utsugi.firstpassword", 1, 0, "Identity");
 
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextObject(new KLocalizedContext(&engine));

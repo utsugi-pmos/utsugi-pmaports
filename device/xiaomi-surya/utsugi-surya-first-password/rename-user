@@ -1,0 +1,92 @@
+#!/bin/sh
+# Rename the phone's account and move its home, at boot, before anybody logs in.
+#
+# The first-boot Advanced setup cannot do this itself: usermod refuses to rename
+# an account that has processes, and the setup runs inside that account's own
+# session. So set-identity only leaves a request,
+#
+#     /var/lib/utsugi-surya/rename-user      "<uid> <new name>"
+#
+# the phone restarts, and this runs before the session starts. The session
+# itself finds the account by number (plasma-mobile.service has User=10000), so
+# the renamed account logs in as before.
+#
+# NOTHING HERE MAY STOP THE BOOT. Every check comes before the first change, a
+# failed step undoes the ones before it, and whatever happens the request is
+# consumed, so a failure is one line in the log and the old name, never a boot
+# loop for the watchdog to turn into another.
+set -u
+
+REQ=/var/lib/utsugi-surya/rename-user
+
+log() {
+	echo "rename-user: $*"
+	echo "rename-user: $*" > /dev/kmsg 2>/dev/null || true
+}
+
+give_up() {
+	log "$*; the account keeps its name"
+	mv -f "$REQ" "$REQ.failed" 2>/dev/null || rm -f "$REQ"
+	exit 0
+}
+
+read -r uid new < "$REQ" || give_up "unreadable request"
+entry=$(getent passwd "$uid") || give_up "no account with uid $uid"
+old=$(echo "$entry" | cut -d: -f1)
+oldhome=$(echo "$entry" | cut -d: -f6)
+newhome="/home/$new"
+
+if [ "$old" = "$new" ]; then
+	rm -f "$REQ"
+	exit 0
+fi
+printf '%s\n' "$new" | grep -Eqx '[a-z_][a-z0-9_-]{0,31}' || give_up "'$new' is not a valid name"
+getent passwd "$new" >/dev/null && give_up "an account '$new' already exists"
+getent group "$new" >/dev/null && give_up "a group '$new' already exists"
+[ -e "$newhome" ] && give_up "$newhome already exists"
+[ -d "$oldhome" ] || give_up "$oldhome is missing"
+pgrep -u "$uid" >/dev/null 2>&1 && give_up "$old has processes running"
+
+log "renaming $old to $new, $oldhome to $newhome"
+
+usermod -l "$new" "$old" || give_up "usermod -l failed"
+group_renamed=0
+if getent group "$old" >/dev/null && groupmod -n "$new" "$old"; then
+	group_renamed=1
+fi
+if ! usermod -d "$newhome" -m "$new"; then
+	[ "$group_renamed" = 1 ] && groupmod -n "$old" "$new"
+	usermod -l "$old" "$new"
+	give_up "moving the home failed, name put back"
+fi
+
+# From here the account is renamed and its home moved: what follows only
+# tidies up, and a failure in it is logged, not undone.
+
+# Absolute paths to the old home in the account's own settings: wallpapers,
+# download folders, recent files. Text files only (grep -I), and not the caches,
+# which rebuild themselves. sed -i writes a new file, so owner and mode are put
+# back from the original.
+find "$newhome" -xdev -type f -size -4M ! -path "$newhome/.cache/*" \
+	-exec grep -lIF "$oldhome" {} + 2>/dev/null |
+while IFS= read -r f; do
+	owner=$(stat -c '%u:%g' "$f")
+	mode=$(stat -c '%a' "$f")
+	if sed -i -E "s#${oldhome}([^A-Za-z0-9_.-]|\$)#${newhome}\\1#g" "$f"; then
+		chown "$owner" "$f"
+		chmod "$mode" "$f"
+	else
+		log "could not rewrite paths in $f"
+	fi
+done
+
+# System files that name the account.
+for f in /etc/subuid /etc/subgid; do
+	[ -f "$f" ] && sed -i "s/^$old:/$new:/" "$f"
+done
+for d in /var/lib/systemd/linger /var/lib/AccountsService/users /var/mail /var/spool/mail; do
+	[ -e "$d/$old" ] && mv "$d/$old" "$d/$new"
+done
+
+rm -f "$REQ" "$REQ.failed"
+log "done"

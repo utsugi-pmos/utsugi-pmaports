@@ -39,7 +39,7 @@ namespace
 //
 // -- which is measured, from the phone, on 2026-09-12. So: read until it asks,
 // then answer, three times.
-bool talkToPasswd(const QByteArray &newPassword, QByteArray *transcript)
+bool talkToPasswd(const QByteArray &currentPassword, const QByteArray &newPassword, QByteArray *transcript)
 {
     int master = -1;
     const pid_t pid = forkpty(&master, nullptr, nullptr, nullptr);
@@ -60,7 +60,7 @@ bool talkToPasswd(const QByteArray &newPassword, QByteArray *transcript)
         QByteArray reply;
     };
     const Step steps[] = {
-        { "urrent password", QByteArray(kShipped) },   // also "Old password"
+        { "urrent password", currentPassword },        // also "Old password"
         { "ew password",     newPassword },
         { "etype",           newPassword },
     };
@@ -173,6 +173,11 @@ void markConfigured()
 
 QString Passwd::change(const QString &newPassword)
 {
+    return changeFrom(QString::fromLatin1(kShipped), newPassword);
+}
+
+QString Passwd::changeFrom(const QString &currentPassword, const QString &newPassword)
+{
     // Four, not six. Six is a desktop habit: a phone is unlocked dozens of
     // times a day with a thumb, and the thing people actually use is a 4-digit
     // PIN. Refusing that does not produce a longer password, it produces one
@@ -188,13 +193,13 @@ QString Passwd::change(const QString &newPassword)
     // value, and keep it. The account already holds this value, so there is
     // nothing for passwd to change -- and passwd would refuse an unchanged
     // password anyway -- so record the choice and we are done.
-    if (newPassword == QLatin1String(kShipped)) {
+    if (newPassword == currentPassword) {
         markConfigured();
         return QString();
     }
 
     QByteArray transcript;
-    if (talkToPasswd(newPassword.toUtf8(), &transcript)) {
+    if (talkToPasswd(currentPassword.toUtf8(), newPassword.toUtf8(), &transcript)) {
         markConfigured();
         return QString();
     }

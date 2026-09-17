@@ -17,9 +17,13 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # Nothing is setuid and no helper runs as root. Deciding "still the shipped one"
 # does need /etc/shadow, and that half lives in utsugi-surya-plasma, as a system
 # unit that leaves a flag in /run.
+#
+# The exception is the Advanced setup after it: the phone's name and the
+# owner's full name need root, and go through pkexec to set-identity, allowed
+# for the phone's own user by a polkit rule, like the encryption request.
 pkgname=utsugi-surya-first-password
 pkgver=1
-pkgrel=17
+pkgrel=19
 pkgdesc="Choose a password before using a phone flashed from the image"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="aarch64"
@@ -56,6 +60,14 @@ source="CMakeLists.txt
 	passwd.h
 	encrypt.cpp
 	encrypt.h
+	identity.cpp
+	identity.h
+	set-identity
+	rename-user
+	rename-user.service
+	80-utsugi-surya-rename-user.preset
+	org.utsugi.surya.identity.policy
+	50-utsugi-surya-identity.rules
 	Main.qml
 	kcm.cpp
 	kcm_phone_encryption.json
@@ -79,6 +91,15 @@ build() {
 
 package() {
 	DESTDIR="$pkgdir" cmake --install build
+
+	# The Advanced setup's full name and phone name: root through pkexec, the
+	# same way the encryption request works.
+	install -Dm755 "$srcdir"/set-identity "$srcdir"/rename-user \
+		-t "$pkgdir"/usr/libexec/utsugi-surya/
+	install -Dm644 "$srcdir"/org.utsugi.surya.identity.policy \
+		-t "$pkgdir"/usr/share/polkit-1/actions/
+	install -Dm644 "$srcdir"/50-utsugi-surya-identity.rules \
+		-t "$pkgdir"/usr/share/polkit-1/rules.d/
 }
 
 systemd() {
@@ -90,15 +111,28 @@ systemd() {
 		-t "$subpkgdir"/usr/lib/systemd/user/
 	install -Dm644 "$srcdir"/80-utsugi-surya-first-password.preset \
 		-t "$subpkgdir"/usr/lib/systemd/user-preset/
+	# The account rename asked for in the Advanced setup, at the next boot.
+	install -Dm644 "$srcdir"/rename-user.service \
+		-t "$subpkgdir"/usr/lib/systemd/system/
+	install -Dm644 "$srcdir"/80-utsugi-surya-rename-user.preset \
+		-t "$subpkgdir"/usr/lib/systemd/system-preset/
 }
 sha512sums="
-d902ab2713438f88ac5cd356a84e9df6ff0394f264180ab1af64fb383dc25c0af011ba27544d7bc84eae15dc8ab2644a27a2f411a975dd18ac53e1d4b876c2c4  CMakeLists.txt
-1fc8a2fe2f3f38c873b957d2f0aa63f708e56708afa95e18422dfaed1d4ef60d6d403caa6e689e0babdbbc3557e7b87e6287d669391e092573578181662f2cd5  main.cpp
-099d21a3f8bdc143cdd965c363e2c62ba54181fddcbb8ce3969a75dad27f5595519b4c81e18dc2693f90023facc686be95a9eee8d28a87c3fb1b77ac4d2ff88a  passwd.cpp
-1eae24b1170b8480a2c85790c7d2a1aa3d9372fa5551fe1dfe923c71fd0836e4397bc62d23ccd093ac1a7e7b480ca7015641409335d06b541db26528d197b0ba  passwd.h
+96f51bb538f5c98647bd40a1bbee623d3c062e7e36b190ae05a04068d922d2d71a4a5ab7f2b5f6dc66daf88842e4cbc763054b8764f964441226f1d236df022a  CMakeLists.txt
+53cb0a3e677978f90c7ab47016b3cf4bd9ed8ba493335ac42a096378daf119092b53aec1a7cb29c73be3878cf3c8bd2e0620cbd59633bb9cc4ff13a862b932f0  main.cpp
+655d8ec5f0cb1f7c315242e04f7cf04c8edd67c10b13069a44067715c9df39df46fc35558ed0409899c601d2b9802b7b9bafa57d7b0454bf5f98cfc7ee4e66ae  passwd.cpp
+ccc9eee900cab8a6e99efda2a801ad4dac1723b965712435f2b83ce5c439e33dce43919b8591d9a539a087c949be2301b82311cd67c1979a1266ec5dab9aebaa  passwd.h
 332b6a93deee50f6044d1db2ce9d99a2e69944f22b447839f6dae2881003aee70ae3866a75c3a597dc003edd695b552c53f5a0d03f29a5ff287af8fb3c8ffc32  encrypt.cpp
 6f52e3ec07160a26101b107189356b16944a8e913c7c4a86e9d01e4a41cd92f005f91343a64015a1e658a4d366685542587d498d62c982c8c2ec9b65ffc0b0f0  encrypt.h
-ebf200c489b58acb4015c7c6f42850c36aced699c60868d10b36d0b879d3702c266848cedde2ccda540ef9f589ef792b1871d3234fb9cb182d336edffec3d540  Main.qml
+caa407e15d37417e9c88d9f4ffff9f34a6d19772af2426cfe52279abb4b7876bf56e1e76cca22b29f8b3637a1529c2b72a1856779c9d0a5e9031e651a17c65b4  identity.cpp
+a2123b34074a1cec689105d82cc431c4650456bc2ba949e13d4f6ed6aae715a3c378650acb9b6ea3c423b9d82aa60046f0b8ea9eda1b0e4ef747dda8934b218a  identity.h
+573e309464e9cc8b747331a69fdca53b1fa7d0046b0e743a95f4a1804fb4e934126cc93fd517a72d208d27c8c3404456f8ca1b192f4215881b3ef955f9c66385  set-identity
+39aeeca13b64ef7a103218c1a856b9ddce1478deb156e2046bb488b782d10b8bb8d8248848c78bfdbd43c4521caf25cb9ddc4b9ed3366e539fd49ab68632d020  rename-user
+7102cabea22772ba259ff67fb9b5230fec0ac16af3be8fdec7d74d43679995407085c4b5e3e0dc9c45c0279c8c1f3386dd6059f2d4a929d29bbdffefec28fbca  rename-user.service
+2919b3b4ccfa62f79a985d000d1e917925a080ed665e886cdb4b96885d1e2a675b3836a2adcc6aad511fa62d3f3bf3bccc2a51c718a6154b865a419a5b4776a4  80-utsugi-surya-rename-user.preset
+a297548425e93767ce571d4ae1bf3f6b0be374ff69eb980d9586464be6648d1fc1e9980157ee2f40487787be70efc52e62c0fe34b23a0047519140b78e3bc51e  org.utsugi.surya.identity.policy
+155e23955a033c194d934ebcc305e67d1ff4350e02e07fda19d12761dad7db7d4b702541076c80df54904bcabf88bce1d00e14be056ad039c474384bc9327c81  50-utsugi-surya-identity.rules
+95c5cc27d1e47bdd80c997bc9a8e749194239108f1cdc78c613d1b691daeb59fed9ecbcb3d9b7dc410b1ebb78c3ce59050ce34e9ef756c58da91fa8c8d6ecca1  Main.qml
 0792185b6926ccf653c5d94acbef106da5e1eecc1ef5fcdf39e5b5f079ddab02a7d90750387b2a1419e08d577b68ec9babe49fbf731e86531e8b024b2fa51fa3  kcm.cpp
 b4eaad4b4b9a5f4549870b21afb409e50ae769ffda4f15cfdc52f1c15386f1d3faf500264d58873b0e81968efca0cb45b75fbad2f7e53d47ac6e4704f87016e0  kcm_phone_encryption.json
 50d25442b50fce4851aa78f87c0d2e13003ae1a85f254a37877dfda2f5b4de9016f716bdd810b1b9b2ba2802916c83c855c15dec40e5f060c9ad7966827d069b  kcm-encryption.qml
