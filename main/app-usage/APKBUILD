@@ -1,6 +1,6 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=app-usage
-pkgver=1.4
+pkgver=1.7
 pkgrel=0
 pkgdesc="Battery usage per application, in System Settings; the screen Plasma Mobile does not ship"
 url="https://github.com/utsugi-pmos/app-usage"
@@ -53,6 +53,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-f46f4ed783e5d5e276121fb722a79f4ff3b1aa71b6b8d3db5ff78a65233da8592c36f94fa5d2dd149620bd3f98b5379c6eb04097007d57d34c017b2bea550749  app-usage-1.4.tar.gz
+20484166c44d594d6cda491ce8d0024f4678f0b0c667cec413ab6d5154b7f1de3b46e65c6842a45e8caf313beb7a12bc06d4dc09a8c1d6609c96932a8364edce  app-usage-1.7.tar.gz
 2d1464fa2fe8c5ff48c36e2e10c542ac600b26453039f02acdfd984b59273c8c581d6cda39f18182ffb0eef4d772482b3234d4f87c308d841ccbf1da957c4dad  80-app-usage.preset
 "

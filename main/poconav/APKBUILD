@@ -1,6 +1,6 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=poconav
-pkgver=1.4
+pkgver=1.6
 pkgrel=0
 pkgdesc="Car navigation with neural-network voice, made for the dashboard"
 url="https://github.com/utsugi-pmos/poconav"
@@ -50,5 +50,5 @@ package() {
 	install -Dm755 poconav-routes local-maps -t "$pkgdir"/usr/bin/
 }
 sha512sums="
-263a57b92e722d59b65a1ac05a669cba9d1789a41c1a81bbf8a4ff7b6ef3f569df8ce2d6cb872f095bdf1e38bfe1517cdd731b7df8470af40e5d10b81f8b39ec  poconav-1.4.tar.gz
+23f76dbabe5dabf1c3b0b5fbf0062d41b9589aab0ad2c4f6bb47e72f06587c9bb6e7c4f0cf93e7b60aad04925719789a9e7fa92aacb1b186f9c43cda8953e133  poconav-1.6.tar.gz
 "
