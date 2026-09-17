@@ -1,0 +1,81 @@
+#!/bin/sh
+# The phone's name and its owner's full name, from the first-boot Advanced
+# setup. Runs as root through pkexec (see the polkit rule).
+#
+#   set-identity [--real-name NAME] [--hostname NAME] [--user-name NAME]
+#
+# The user name is not changed here: an account cannot be renamed while its
+# session runs. It is left as a request for rename-user.service, which does it
+# at the next boot, before the session starts.
+#
+# The full name is only ever set on the account that asked (PKEXEC_UID), never
+# on one named in the arguments. The hostname also replaces the old one on the
+# 127.0.0.1 line of /etc/hosts, where the image puts it: leaving it there would
+# make every lookup of the new name slow and the old name resolve to this phone.
+set -eu
+
+[ "$(id -u)" = 0 ] || { echo "this has to run as root (through pkexec)" >&2; exit 1; }
+uid="${PKEXEC_UID:?not called through pkexec}"
+user=$(getent passwd "$uid" | cut -d: -f1)
+[ -n "$user" ] || { echo "Unknown account." >&2; exit 1; }
+
+set_name=0
+set_host=0
+set_user=0
+while [ $# -gt 0 ]; do
+	case "$1" in
+		--real-name) [ $# -ge 2 ] || exit 2; name=$2; set_name=1; shift 2 ;;
+		--hostname) [ $# -ge 2 ] || exit 2; host=$2; set_host=1; shift 2 ;;
+		--user-name) [ $# -ge 2 ] || exit 2; newuser=$2; set_user=1; shift 2 ;;
+		*) echo "unknown argument: $1" >&2; exit 2 ;;
+	esac
+done
+
+if [ "$set_name" = 1 ]; then
+	# ':' ends the field in /etc/passwd and ',' separates the GECOS subfields.
+	case "$name" in
+		*:* | *,* | *'
+'*) echo "The full name cannot contain a colon, a comma or a line break." >&2; exit 1 ;;
+	esac
+	[ "${#name}" -le 64 ] || { echo "The full name is too long." >&2; exit 1; }
+	usermod -c "$name" "$user"
+fi
+
+if [ "$set_user" = 1 ]; then
+	if ! printf '%s\n' "$newuser" | grep -Eqx '[a-z_][a-z0-9_-]{0,31}'; then
+		echo "A user name starts with a lowercase letter and has only lowercase letters, digits, - and _." >&2
+		exit 1
+	fi
+	if [ "$newuser" != "$user" ]; then
+		case "$newuser" in
+			root | bin | daemon | adm | lp | sync | shutdown | halt | mail | news | uucp | \
+			operator | man | postmaster | cron | ftp | sshd | at | squid | xfs | games | \
+			cyrus | vpopmail | ntp | smmsp | guest | nobody | systemd-*)
+				echo "That name is taken by the system." >&2
+				exit 1 ;;
+		esac
+		if getent passwd "$newuser" >/dev/null || getent group "$newuser" >/dev/null; then
+			echo "That name is taken by the system." >&2
+			exit 1
+		fi
+		mkdir -p /var/lib/utsugi-surya
+		printf '%s %s\n' "$uid" "$newuser" > /var/lib/utsugi-surya/rename-user
+	else
+		rm -f /var/lib/utsugi-surya/rename-user
+	fi
+fi
+
+if [ "$set_host" = 1 ]; then
+	if ! printf '%s\n' "$host" | grep -Eqx '[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?'; then
+		echo "Use lowercase letters, digits and hyphens, without a hyphen at either end." >&2
+		exit 1
+	fi
+	old=$(hostname)
+	if [ "$host" != "$old" ]; then
+		hostnamectl set-hostname "$host"
+		awk -v old="$old" -v new="$host" '
+			$1 == "127.0.0.1" { for (i = 2; i <= NF; i++) if ($i == old) $i = new }
+			{ print }
+		' /etc/hosts > /etc/hosts.utsugi-new && mv /etc/hosts.utsugi-new /etc/hosts
+	fi
+fi

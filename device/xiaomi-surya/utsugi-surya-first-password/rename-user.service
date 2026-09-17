@@ -1,0 +1,19 @@
+[Unit]
+Description=Rename the phone's account, asked for in the first-boot setup
+# Before anything of the account can run: the session, the user manager (which
+# lingering would start on its own), and logins. usermod refuses an account
+# that has processes.
+DefaultDependencies=no
+ConditionPathExists=/var/lib/utsugi-surya/rename-user
+After=local-fs.target systemd-tmpfiles-setup.service
+Before=systemd-user-sessions.service user@10000.service plasma-mobile.service sysinit.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/libexec/utsugi-surya/rename-user
+# Moving a big home is one rename(2) on the same filesystem; rewriting paths
+# is the slow part. Bounded, so a surprise cannot hold the boot for ever.
+TimeoutStartSec=120
+
+[Install]
+WantedBy=sysinit.target

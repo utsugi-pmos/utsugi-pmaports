@@ -23,7 +23,7 @@ find_package(KF6 ${KF_MIN_VERSION} REQUIRED COMPONENTS I18n Kirigami KCMUtils)
 
 qt_standard_project_setup(REQUIRES 6.6)
 
-qt_add_executable(utsugi-first-password main.cpp passwd.cpp passwd.h encrypt.cpp encrypt.h)
+qt_add_executable(utsugi-first-password main.cpp passwd.cpp passwd.h encrypt.cpp encrypt.h identity.cpp identity.h)
 
 qt_add_qml_module(utsugi-first-password
 	URI org.utsugi.firstpassword

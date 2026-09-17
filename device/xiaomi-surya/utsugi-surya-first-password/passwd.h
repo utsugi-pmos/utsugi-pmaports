@@ -25,4 +25,8 @@ public:
     // passwd's raw output: it is written for a terminal and says things like
     // "BAD PASSWORD: it is too simplistic" in the middle of a phone screen.
     Q_INVOKABLE QString change(const QString &newPassword);
+
+    // The same from a password this program did not ship: the Advanced setup
+    // changes the one chosen a minute earlier, which the step still holds.
+    Q_INVOKABLE QString changeFrom(const QString &currentPassword, const QString &newPassword);
 };
