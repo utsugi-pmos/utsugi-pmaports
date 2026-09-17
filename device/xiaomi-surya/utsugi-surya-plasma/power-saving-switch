@@ -332,6 +332,29 @@ off)
 	restore
 	;;
 
+choose)
+	# The Power Saving tile's choice, written the way Settings > Energy writes
+	# its own: as the profile of all three PowerDevil states, then a reload so
+	# PowerDevil applies it. Setting only the CURRENT profile, as the tile did,
+	# lasted until the next change between mains and battery, when PowerDevil
+	# put its configured profile back -- balanced, since utsugi-surya-plasma
+	# ships it. Measured on 2026-09-17.
+	#
+	# Only here, on the owner's tap. An earlier attempt did it in
+	# power-saving-agent for EVERY profile change, and PowerDevil's own
+	# re-apply, read back as a new choice, set the phone flipping between
+	# balanced and power-saver every 2.5 s.
+	case "${2:-}" in
+	"$SAVER"|"$NORMAL"|performance) ;;
+	*) echo "usage: $(basename "$0") choose power-saver|balanced|performance" >&2; exit 1 ;;
+	esac
+	for group in AC Battery LowBattery; do
+		kwriteconfig6 --file powerdevilrc --group "$group" --group Performance --key PowerProfile "$2"
+	done
+	set_profile "$2"
+	qdbus6 "$PD" /org/kde/Solid/PowerManagement org.kde.Solid.PowerManagement.refreshStatus >/dev/null 2>&1
+	;;
+
 toggle)
 	if [ "$(profile_now)" = "$SAVER" ]; then "$0" off; else "$0" on; fi
 	;;
@@ -345,7 +368,7 @@ restore)
 	;;
 
 *)
-	echo "usage: $(basename "$0") [status|on|off|toggle|apply|restore]" >&2
+	echo "usage: $(basename "$0") [status|on|off|toggle|apply|restore|choose <profile>]" >&2
 	exit 1
 	;;
 esac

@@ -19,6 +19,7 @@ import QtQuick
 
 import org.kde.plasma.private.mobileshell.quicksettingsplugin as QS
 import org.kde.plasma.private.batterymonitor as BatteryMonitor
+import org.kde.plasma.plasma5support as P5Support
 
 QS.QuickSetting {
     id: root
@@ -59,7 +60,19 @@ QS.QuickSetting {
     // showing a switch that silently does nothing.
     available: power.isPowerProfileDaemonInstalled
 
+    // The switch writes the choice as PowerDevil's configured profile, so it
+    // survives plugging the cable in or out; see `choose` in power-saving-switch.
+    // setProfile first, only so the tile answers at once.
+    P5Support.DataSource {
+        id: runner
+        engine: "executable"
+        connectedSources: []
+        onNewData: (source, data) => disconnectSource(source)
+    }
+
     function toggle(): void {
-        power.setProfile(root.saving ? root.normalProfile : root.savingProfile);
+        const next = root.saving ? root.normalProfile : root.savingProfile;
+        power.setProfile(next);
+        runner.connectSource("@SWITCH@ choose " + next);
     }
 }
