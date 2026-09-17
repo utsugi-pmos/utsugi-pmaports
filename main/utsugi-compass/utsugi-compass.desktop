@@ -15,3 +15,6 @@ StartupNotify=true
 # its own binary instead of a qmlscene argument.
 StartupWMClass=org.qt-project.qmlscene
 Categories=Utility;Science;
+# Out of the app drawer: it is a test bench, not something the owner opens
+# (asked on 2026-09-17). It still runs from a terminal with the Exec line above.
+NoDisplay=true

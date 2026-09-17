@@ -16,7 +16,7 @@
 # question "does this sensor work?" comes up.
 pkgname=utsugi-compass
 pkgver=1
-pkgrel=0
+pkgrel=1
 pkgdesc="Compass and sensor test bench"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -45,6 +45,6 @@ package() {
 }
 sha512sums="
 e05f23fe21d2f82cf206ef55758656dea01f60bc50304466c35020026a2001b3c92a4072646e7360804c2d91501a471a7989a2d3caa3b7874b4e7bae225b0265  compass.qml
-ea1b7def3c829a6c1dbbdd5b812b6ff4af32005c439c2524e4ef48a39fb0ac57ab7d11f8f963d9399dc972220bce308f05e0ab02c188e0282ba49620c7f022bc  utsugi-compass.desktop
+bb57ab414b52a9a57871bcb74ec7e25635b4482d03d6d4337ae9c30960e0211bf80eb49655139c294e54fc6692ba32ef3fad4c8c8727422f94cd54b5a5500c5c  utsugi-compass.desktop
 418fe6be6b5e0a5e8971c90745e3b6c21bccde24f9dcce16ca1d6fdf6ac3eb153e9c515d8d6f1dea87f2da0444598bf4e8f8ade0399ff6b56b7d49530cbf4533  utsugi-compass.svg
 "
