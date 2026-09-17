@@ -1,0 +1,6 @@
+# The charger/fuel-gauge/type-C wake the phone thousands of times and abort
+# suspend, lighting the screen. Only calls (modem), alarms (RTC) and the power
+# key should wake it. Deny wakeup to the power-supply chain. See surya task 028.
+SUBSYSTEM=="power_supply", KERNEL=="pm8150b-charger", ATTR{power/wakeup}="disabled"
+SUBSYSTEM=="power_supply", KERNEL=="qcom_qg", ATTR{power/wakeup}="disabled"
+SUBSYSTEM=="power_supply", KERNEL=="tcpm-source-psy*", ATTR{power/wakeup}="disabled"

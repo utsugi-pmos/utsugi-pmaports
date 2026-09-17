@@ -1,0 +1,6 @@
+# A big core (6/7) sometimes does not wake from big-rail-power-collapse during
+# s2idle: hard lockup, watchdog reboot. Disable that idle state on the big
+# cores; they still power-collapse the core, just not the rail. See surya task
+# 028 and bug-reports/04.
+SUBSYSTEM=="cpu", KERNEL=="cpu6", ATTR{cpuidle/state2/disable}="1"
+SUBSYSTEM=="cpu", KERNEL=="cpu7", ATTR{cpuidle/state2/disable}="1"
