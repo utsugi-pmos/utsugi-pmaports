@@ -18,7 +18,7 @@
 # instead of an old shell running against a new Plasma.
 pkgname=lockscreen-keyboard
 pkgver=1
-pkgrel=0
+pkgrel=1
 _pmver=6.7.5
 pkgdesc="Plasma Mobile lock screen that opens on the keyboard for passwords that are not a PIN"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
@@ -49,6 +49,6 @@ package() {
 }
 sha512sums="
 2fb32939204c0c5f0cda7dbedaf1937e9e052211fe004fc0eadebee6139755c8b8d479253325975676bc00c3225d9325470f86c675ddbaa7a0f80a7b32d93c84  plasma-mobile-6.7.5.tar.xz
-3c733f2e7b3daaf6ca9c2f451be9f7960e579903120b7255d36ecc1cf06fd5679181e7f5c5dfd1a1f04b1a9155bc4def3bf8c51a6361926828e5aa31aa457be6  start-on-the-keyboard.diff
+02f6726f03ad62a4f8e28f19b6ef2db946511e399c302b37d13e8158d51f6d5bfd8a1698939a4056a60412f6e1de6b8d39c5e7881571db513b1603666b2e30d3  start-on-the-keyboard.diff
 da0f83f2636e4aaae2d3b3b5f3596a0f36aa462215340dffea50bec33b74134aa133cb297a93b7c14174546a1d4d2f740d9054f9bfb02ef2597f643acfda4fb7  lockscreen-keyboard.profile
 "
