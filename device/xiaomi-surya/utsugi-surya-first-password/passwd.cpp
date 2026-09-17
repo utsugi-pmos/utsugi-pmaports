@@ -208,6 +208,13 @@ QString Passwd::changeFrom(const QString &currentPassword, const QString &newPas
     // that a person actually hits and keep the rest generic rather than
     // printing a wall of it on a phone screen.
     const QString out = QString::fromUtf8(transcript);
+    // The current password it was given is not the account's. It happened when
+    // the step was run on a phone whose password had already been changed, and
+    // "try a longer one" sent the owner looking for a length rule that does not
+    // exist.
+    if (out.contains(QLatin1String("Authentication failure"), Qt::CaseInsensitive)) {
+        return QStringLiteral("The current password is not the one this step expected, so nothing was changed.");
+    }
     if (out.contains(QLatin1String("too simplistic"), Qt::CaseInsensitive)
         || out.contains(QLatin1String("BAD PASSWORD"), Qt::CaseInsensitive)) {
         return QStringLiteral("Too simple: it is close to a dictionary word or a pattern.");
