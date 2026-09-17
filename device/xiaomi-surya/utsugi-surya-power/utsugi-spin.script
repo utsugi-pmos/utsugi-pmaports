@@ -3,6 +3,7 @@
 #
 # The initramfs hook (40-utsugi-charge-mode.sh) drives it with
 #     plymouth update --status=charge-<0..100>     draw the battery at that level
+#                                                  (in green at 100: full)
 #     plymouth update --status=charge-off          back to the logo
 # and puts the words (percentage, "charging", the next alarm) through the
 # ordinary 'plymouth display-message'. Plymouth's script language cannot split
@@ -105,6 +106,7 @@ error_sprite.SetOpacity(0);
 # One white pixel, scaled into every bar of the battery. Six sprites: the four
 # sides of the case, the terminal on top, and the level inside.
 pixel_image = Image("pixel.png");
+full_image = Image("full.png");                # one green pixel, for a full battery
 global.charge_level = -1;
 
 bat_w = Window.GetWidth() * 0.28;
@@ -143,12 +145,25 @@ fun charge_show(level)
     left_sprite.SetOpacity(0);
     error_sprite.SetOpacity(0);
 
+    # Full is drawn green, case and all: at 100 the gauge still reports
+    # "Charging" while it tops off, and a white battery that never changes
+    # looked like one still charging (reported 2026-09-17).
+    if (level >= 100)
+        colour = full_image;
+    else
+        colour = pixel_image;
+    bat_top.SetImage(colour.Scale(bat_w, bat_b));
+    bat_bottom.SetImage(colour.Scale(bat_w, bat_b));
+    bat_left.SetImage(colour.Scale(bat_b, bat_h));
+    bat_right.SetImage(colour.Scale(bat_b, bat_h));
+    bat_nub.SetImage(colour.Scale(nub_w, nub_h));
+
     inner_w = bat_w - 4 * bat_b;
     inner_h = bat_h - 4 * bat_b;
     fill_h = inner_h * level / 100;
     if (fill_h < 1)
         fill_h = 1;
-    bat_fill.SetImage(pixel_image.Scale(inner_w, fill_h));
+    bat_fill.SetImage(colour.Scale(inner_w, fill_h));
     bat_fill.SetPosition(bat_x + 2 * bat_b, bat_y + 2 * bat_b + inner_h - fill_h, 21);
 
     bat_top.SetOpacity(1);

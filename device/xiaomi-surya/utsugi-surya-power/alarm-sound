@@ -3,7 +3,7 @@
 # phone waits for its passphrase -- where the real system, its sound server
 # and the Clock app do not exist yet.
 #
-#   alarm-sound <rtc-second>
+#   alarm-sound <rtc-second> ["HH:MM name"]
 #
 # Started in the background by 40-utsugi-charge-mode.sh when this boot is for
 # an alarm and the root is LUKS, about two minutes before the alarm. Brings the
@@ -24,6 +24,8 @@
 # initramfs (utsugi-alarm-audio.conf) so udev never loads them on its own.
 set -u
 RING=${1:?rtc second}
+# "HH:MM name", as the charging screen read it from the boot partition.
+WHAT=${2:-}
 RTC=/sys/class/rtc/rtc0/since_epoch
 DIR=/usr/share/utsugi-surya/alarm-audio
 log() { echo "utsugi-alarm: $*" > /dev/kmsg 2>/dev/null; }
@@ -95,6 +97,20 @@ for d in /sys/class/input/event*; do
 	esac
 done
 
+# Tell whoever is looking at the passphrase screen what this is and how to
+# stop it. Restarting unl0kr is how its message changes: it exits without
+# printing, cryptsetup refuses the empty passphrase, and the boot's unlock loop
+# starts it again, now with the text (unl0kr ignores the attempt counter, so
+# nothing says "wrong passphrase").
+say() {
+	printf '%s' "$1" > /tmp/utsugi-unlock-message
+	pkill -x unl0kr 2>/dev/null
+}
+hhmm=${WHAT%% *}
+name=${WHAT#* }; [ "$name" = "$WHAT" ] && name=""
+title="Alarm ${hhmm}${name:+ - $name}"
+say "$(printf '%s\nPress volume or power to silence it' "$title")"
+
 log "ringing"
 end=$(( $(cat "$RTC") + 600 ))
 why="ten minutes"
@@ -112,4 +128,5 @@ done
 # nothing is left holding the buttons open after the switch to the real system.
 kill $readers 2>/dev/null
 pkill -f "of=/dev/null bs=24 count=1" 2>/dev/null
+[ "$why" = "a button" ] && say "$(printf '%s\nSilenced' "$title")"
 log "stopped by $why"

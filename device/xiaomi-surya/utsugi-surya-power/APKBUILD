@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=23
+pkgrel=25
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -52,6 +52,7 @@ source="power-reason
 	utsugi-spin.plymouth
 	utsugi-spin.script
 	pixel.png
+	full.png
 	right.png
 	top.png
 	left.png
@@ -122,7 +123,7 @@ package() {
 	# A shell over USB inside the initramfs, only with /boot/utsugi/debug-shell.
 	install -Dm755 "$srcdir"/10-utsugi-debug-shell.sh -t "$pkgdir"/usr/share/mkinitfs/hooks-extra/
 	local f
-	for f in utsugi-spin.plymouth utsugi-spin.script pixel.png right.png top.png left.png error.png; do
+	for f in utsugi-spin.plymouth utsugi-spin.script pixel.png full.png right.png top.png left.png error.png; do
 		install -Dm644 "$srcdir/$f" -t "$pkgdir"/usr/share/plymouth/themes/utsugi-spin/
 	done
 	install -Dm644 "$srcdir"/utsugi-spin.NOTICE "$pkgdir"/usr/share/plymouth/themes/utsugi-spin/NOTICE
@@ -138,7 +139,7 @@ sha512sums="
 f2bdf9c68de5f0eb3cd28ce7049af5988217ce7b2e1144f73511c2560087487a88b4941f47923aa35272843bdb4ca99f99f633e5558c81c119901e0bb3567880  poweroff-for-real
 aa5ee854c6a42c21c6c66930a41a1ad7d76742558a58564d571ff558063d5ef7b8e8bf7c0ed2fdc32eb7a866533cd15e03a4b0f3f5fec95ae068dcfea87c016c  bluetooth-off-while-asleep
 f099b467ced2b1edf74d42988cd6cc0feca20340650f966a88d115663a48b51379fae581e3d8c67b7aa37ffe4eb9dad62740cddbaaa8f388cf8be8c0310997c0  10-utsugi-debug-shell.sh
-2cf1b2b41897249c22fb6d72e422008eac1eecd35da789a6457161ea1c4cba2e6b4a676c69e6fd4cf38a33be9348b2114e80c47f5b3ff742fd2a4bd718b39019  alarm-sound
+98e5fbcfeb7725a041610ea6481fc2d5afe230d478a5a731431d85f14d798ffdb6c4d168eda9543505afa37f00a69689865e719ce06f452adb8e14f2590c26f3  alarm-sound
 5d3ae10cda43dd4b8857db888f7594ee557b6d37bc85bfed6c8b9e4834a4fcf168254bb7d543cb5c1ea8bea628300cd0bdcda9f0a87f5cd176f172409fe1bb3e  make-alarm-tone
 18b4ed551c80e6fd48ecd680a59c53d71f5d34e17f8423740916e12923eb18e6835bf2e5b0d893292df512f7da7168f3c471e1c6c42151bc9728f10741e3f6ed  speaker.state
 624c116bda52ed8008a4a469eff47385b984b5cd13b817eb4fc3bb5af4fd13a4eead80dd07b716d93b03cf951b5ae652efafae9b7dad85fc5ad81f8000b0dee5  utsugi-alarm-audio.modprobe
@@ -152,11 +153,12 @@ f1b42bd9d16fe3879028554d72ef582a6671df746a058af5f8065a58c258860ef5e098403dc33941
 62bbc957e274b62b68fcb93dc3cfe8db64392fa687b853def5d2240e57309367eced6637bf62db95c0e00327c9f5361fd9e2b03e2dcb1e42465fcf3293fbe427  alarm-watch.service
 64ceb9c8eeb34dce977544a246083c7be7862ef4db80aae0abea9683945bdc6b824933cfc2849d6323dcfcf9bb7dfe9af1ac874e795a704311e8797687d99f76  alarm-sync.service
 71bfe4e9980a9abbdc5e9ce5f67f00f0065a6b43de21c1ddf660c2603cb4197cc04b7524b92dc1753169f568b21035da6de34f950d0b8e0a799a349aa677624e  alarm-sync.timer
-dae2f8e9d428e0862f9b94d6e335f588d335b4837ec888449ea20ab8b0217a18f3677a8f529fa38518fd498281b7745834efb51b251b5598300e1acaf8f804c7  40-utsugi-charge-mode.sh
+63223c1ea2395f51ec2faf9765326db1dd8d5c9a7ada06b1513123fa181e8b391e5dd37f105ef7ddfa77549d735b50e82a16b8d2ab93f09e5f98dd26452144de  40-utsugi-charge-mode.sh
 741a59ff15af43d0b8f89677982747c40560f1572e46322606ded23b96dd8fcc630d3bdc7c8f7c50f7ff4add05a2ace662e30976194587fc3ffc68975d76fd81  40-utsugi-charge-mode.modules
 a08fffd568ed61429bb5940626288d712e9c348c1325fdbab659d2c564d05754bbb9b24fd7f6b746140de1334e12e5d6058927740cf0b7ad7d14f0bbc8805876  utsugi-spin.plymouth
-bef13eab0c3201f7280d0b19f443af11d26b0cab178e7b5ee35f8359e392655ba79313eeb77c0446ce8a08744a48f80dbba4c7698032737c6467fe810e47603c  utsugi-spin.script
+7bab94433ad5f33e66ef66715be0f1dcb787b38ff4555c5af08890584042a86d35f11b69a6625bb6131116419a44740930294417ca52c19a2c7201fae40734c1  utsugi-spin.script
 19e2c887557f4c9104a6b09a3033e73d0baae9da1f98a84105b7d56b5ca55f60ae8a560940c12c60122175e5711bf328ec28014be144fa6de087ddaf05680850  pixel.png
+e638da15e881bf09a672ec25d29cf9962f28fd5017245da7f38686c50d683891d4c028d7cb8dc498ff8240b1ee81f76e258a7e5a1b73ba0cd989b9be4702a283  full.png
 ff98f7a80ac3b1166098f54e9704d7910f51961085324fbb5bfdaf747f40d902f88ddaad7178eb1aed249c3c42febe9d617c89660d2fa15bbd826ae30e577b17  right.png
 2ce7dbf8d11d94dc3e688406acc376547cc856eaab422b78e8395adddfc519edb63a5a8b10a24290a61e909734e28ebfb9c735de70f0e1f5d25b34cc744b5e64  top.png
 f5a797d56481565da046b946b8c6848e1d998488e2a5d8c42806d1d4e52b3547929b831a77e683120b46a5801668330582665f02b1acbdbf6435aa56d7e55349  left.png
