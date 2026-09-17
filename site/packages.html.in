@@ -28,8 +28,8 @@
 			<tr><th class="mono">Package</th><th>What you get</th></tr>
 			<tr><td class="mono"><a href="#base">utsugi-surya-base</a></td><td>Kernel, audio,
 			sensors, GPS, cameras, power-off, charge mode, black box, the Plasma Mobile
-			fixes, and poconav, screenglaze, keepalive, app-usage, smart-unlock and
-			lost-phone</td></tr>
+			fixes, and poconav, screenglaze, keepalive, lockscreen-keyboard, app-usage,
+			smart-unlock and lost-phone</td></tr>
 			<tr><td class="mono"><a href="#extras">utsugi-surya-extras</a></td><td>Browser,
 			mail, two-factor, social, photos &mdash; eight third-party packages</td></tr>
 			<tr><td class="mono"><a href="#vayu">utsugi-vayu-base</a></td><td>The
@@ -275,6 +275,13 @@
 				gives them back, says where it is, and can lock or power off the phone from
 				the panel. Set up in <b>Settings &rarr; Security</b>, not the app
 				drawer.</p></a>
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/tree/main/main/lockscreen-keyboard">
+				<div class="n">lockscreen-keyboard</div>
+				<p><b>A lock screen for passwords, not only PINs.</b> Plasma Mobile always
+				opens on the number pad. Choose a password with letters in the first-boot
+				setup and the lock screen opens on the keyboard instead. Carried the way
+				keepalive carries its task switcher: Plasma's own shell rebuilt with one
+				change, pinned to the Plasma version it was made against.</p></a>
 			<a href="https://github.com/utsugi-pmos/utsugi-pmaports/tree/main/main/utsugi-compass">
 				<div class="n">utsugi-compass</div>
 				<p><b>A compass, and the instrument that says whether the sensors work.</b>

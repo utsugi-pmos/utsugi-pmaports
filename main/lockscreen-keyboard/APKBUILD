@@ -1,0 +1,54 @@
+# Maintainer: Dr. Utsugi <cidwel@gmail.com>
+#
+# A lock screen that opens on the letters keyboard when the password is not a
+# PIN. Plasma Mobile always starts on the number pad: a password with letters
+# needs a tap on a small button first, and whoever does not know the button is
+# left looking at digits. The first-boot Advanced setup writes the choice to
+# ~/.config/utsugi-lockscreenrc.
+#
+# THE SHELL IS NOT PATCHED IN PLACE, the same way keepalive ships its task
+# switcher: the mobile shell package is rebuilt from plasma-mobile's own tarball
+# and installed into a data directory of ours, put AHEAD of /usr/share by a
+# profile script, so KPackage finds it first. The whole package, because
+# KPackage takes the first directory that has it and reads nothing from the
+# others. The lock screen greeter and plasmashell both load it.
+#
+# The dependency on plasma-mobile is pinned to the version the patch was made
+# against: when Plasma moves, apk refuses to upgrade until this is rebuilt,
+# instead of an old shell running against a new Plasma.
+pkgname=lockscreen-keyboard
+pkgver=1
+pkgrel=0
+_pmver=6.7.5
+pkgdesc="Plasma Mobile lock screen that opens on the keyboard for passwords that are not a PIN"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="GPL-2.0-or-later"
+options="!check"
+depends="plasma-mobile~$_pmver"
+source="plasma-mobile-$_pmver.tar.xz::https://download.kde.org/stable/plasma/$_pmver/plasma-mobile-$_pmver.tar.xz
+	start-on-the-keyboard.diff
+	lockscreen-keyboard.profile
+	"
+builddir="$srcdir/plasma-mobile-$_pmver"
+
+prepare() {
+	default_prepare
+	# .diff, not .patch: default_prepare would apply a .patch on its own, and
+	# this one is applied here on purpose, next to the package it changes.
+	patch -p1 -i "$srcdir"/start-on-the-keyboard.diff
+}
+
+package() {
+	local shell="$pkgdir"/usr/share/lockscreen-keyboard/xdg-data/plasma/shells/org.kde.plasma.mobileshell
+	mkdir -p "$shell"
+	cp -r "$builddir"/shell/. "$shell"/
+	rm -f "$shell"/Messages.sh
+	install -Dm644 "$srcdir"/lockscreen-keyboard.profile \
+		"$pkgdir"/etc/profile.d/lockscreen-keyboard.sh
+}
+sha512sums="
+2fb32939204c0c5f0cda7dbedaf1937e9e052211fe004fc0eadebee6139755c8b8d479253325975676bc00c3225d9325470f86c675ddbaa7a0f80a7b32d93c84  plasma-mobile-6.7.5.tar.xz
+3c733f2e7b3daaf6ca9c2f451be9f7960e579903120b7255d36ecc1cf06fd5679181e7f5c5dfd1a1f04b1a9155bc4def3bf8c51a6361926828e5aa31aa457be6  start-on-the-keyboard.diff
+da0f83f2636e4aaae2d3b3b5f3596a0f36aa462215340dffea50bec33b74134aa133cb297a93b7c14174546a1d4d2f740d9054f9bfb02ef2597f643acfda4fb7  lockscreen-keyboard.profile
+"
