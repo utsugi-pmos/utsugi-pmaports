@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=23
+pkgrel=24
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -44,6 +44,7 @@ replaces_priority=100
 # and pick it by hand.
 subpackages="$pkgname-systemd $pkgname-firefox:_firefox:noarch $pkgname-librewolf:_librewolf:noarch"
 source="surya-120hz.js
+	console-off-under-desktop.service
 	change-the-password
 	change-the-password.service
 	change-the-password.path
@@ -144,6 +145,7 @@ package() {
 		-t "$pkgdir"/usr/libexec/utsugi-surya/
 	install -Dm644 "$srcdir"/change-the-password.service \
 		"$srcdir"/change-the-password.path \
+		"$srcdir"/console-off-under-desktop.service \
 		-t "$pkgdir"/usr/lib/systemd/system/
 	# A SYSTEM preset, not the user one below: this unit reads /etc/shadow.
 	install -Dm644 "$srcdir"/80-utsugi-surya-password.preset \
@@ -172,10 +174,11 @@ systemd() {
 }
 sha512sums="
 46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
+2e235a09d96150b95e91b3260439d8fa2ea40aa0292476b537298fcd2d71f7026064fae291ff21b45a415e1cb9ad90700a9fe7b18fef11ae8c339ed550f27f88  console-off-under-desktop.service
 c72ba9e507704312c08bba1439c017810eb9de09de9f90481f472343307f3c4ad6163a053145ca912dd5242b9bccc8d2ce9f1fcb5bb1389d441a49abb6a0811a  change-the-password
 2c7ff25dd7d816c5ecf07986ac97234d4629261c78b3d6664879ab630372b11aa52f327261f528dfea69b18c0eb26f3bdf41e85222bd5f52c7f90cd93e7be5f1  change-the-password.service
 74cc650e1c96753744ae871597da3f3f9b464da000f1a4055f06665894cbfa5e339c8491fe07d95246d4cf2951b4e2dd467fbc80b0a1848d873dd79eb6d4b6b9  change-the-password.path
-a534a75ab7f8e79970ad39c47dc28b2e93d1df5b3b118558e98d4ceb08c72bbf9f937fc7100295ecfe53ce36d2024d32696364bcc307284a6166bdbd94e7e47c  80-utsugi-surya-password.preset
+056b72e3ad6bf8e933b5e32f6097ebc86fb881510d143a1f15cdcec50bfbb80ce4e0f92b529b6f2b603f673e312eb537f2483a2edb94dcea79d7d0ac516a2657  80-utsugi-surya-password.preset
 b3be4dfccb85b36004b7ad3865a81fb11a8aa853c73a1821141d7e54a840ba7138c299c9eb79173722dbf5fdb4bf7a975133897e30bdb5d425fd642c10eecbd5  location-switch
 12131415539e6ae1c2d6a493589f7123f57eb4220eb40a243e40b11ef7f5a8afb72f55bdb12f1f44f952025627a993a6d0ca08cfdcaf71953494989c294dbd54  power-saving-switch
 c1f97d776a1331944864e80ce50e07fcda81d6a0f5b055af687fb12e5fd8e7b7a784477f16335978bc96ce2b8269d9c8a77b613a4a61914480063e132325179d  usb-power-switch

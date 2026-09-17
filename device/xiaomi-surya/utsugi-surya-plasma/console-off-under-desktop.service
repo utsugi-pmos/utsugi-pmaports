@@ -1,0 +1,31 @@
+[Unit]
+Description=Take the text console off the screen once the desktop owns it
+# WHY
+# ---
+# Waking the phone flashed a terminal full of Bluetooth and touchscreen lines
+# before the desktop came back, nearly every time (reported 2026-09-17). The
+# kernel's framebuffer console stays bound behind KWin, and on suspend and
+# resume the PM core switches to a text VT and back: for that moment the
+# console is what is on screen -- at level 7 since blackbox-console-verbose,
+# so every driver line of the resume is printed on it. tty1 being in graphics
+# mode does not help, the switch goes through another VT.
+#
+# Unbinding fbcon leaves the dummy console, which draws nothing. The black box
+# is not affected: ramoops records the kernel console on its own, and the
+# journal keeps everything. Measured on the phone: after the unbind, waking it
+# repeatedly showed no terminal.
+#
+# Waits for kwin_wayland like blackbox-console-verbose, so boot messages and
+# the splash before the desktop are untouched.
+After=plasma-mobile.service
+Before=shutdown.target
+Conflicts=shutdown.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStartPre=/bin/sh -c 'i=0; while [ $i -lt 60 ]; do pgrep -x kwin_wayland >/dev/null 2>&1 && break; i=$((i+1)); sleep 1; done; sleep 1'
+ExecStart=/bin/sh -c 'for v in /sys/class/vtconsole/vtcon*; do grep -q "frame buffer" "$v/name" && echo 0 > "$v/bind"; done; true'
+
+[Install]
+WantedBy=graphical.target
