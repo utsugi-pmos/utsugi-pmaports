@@ -92,6 +92,36 @@ fi
 # a shell: init_2nd kills every 'sh' before switching root, so busybox runs
 # under another name to survive that sweep. Harmless on an unencrypted phone:
 # systemd is PID 1 long before the alarm is due.
+# The passphrase screen can say what is ringing and how to stop it: unl0kr
+# takes --message, and fde-unlock is what starts it, in a loop until the root
+# opens. The initramfs's own files are writable at this point, so on an alarm
+# boot fde-unlock is swapped for one that passes the message when
+# /tmp/utsugi-unlock-message exists; alarm-sound writes that file and restarts
+# unl0kr so it comes back with the text. (Not through a mkinitfs file list:
+# with two sources for /usr/bin/fde-unlock, which one lands is a map order.)
+#
+# The copy is the original with --message added, so a future fde-unlock keeps
+# its own options; if the edit does not take, nothing is swapped.
+message_on_passphrase_screen() {
+	F=/usr/bin/fde-unlock
+	[ -f "$F" ] && [ ! -e "$F.orig" ] || return 0
+	sed 's/unl0kr |/unl0kr --message "$UTSUGI_MESSAGE" |/' "$F" > "$F.message" 2>/dev/null
+	grep -q -- '--message "$UTSUGI_MESSAGE"' "$F.message" 2>/dev/null || { rm -f "$F.message"; log "fde-unlock not recognised: no message on the passphrase screen"; return 0; }
+	cp "$F" "$F.orig" && chmod 755 "$F.message" || return 0
+	cat > "$F" <<'WRAPPER'
+#!/bin/sh
+# utsugi: the alarm's message on the passphrase screen, see 40-utsugi-charge-mode.sh
+if [ -s /tmp/utsugi-unlock-message ]; then
+	UTSUGI_MESSAGE="$(cat /tmp/utsugi-unlock-message)"
+	export UTSUGI_MESSAGE
+	exec sh /usr/bin/fde-unlock.message "$@"
+fi
+exec sh /usr/bin/fde-unlock.orig "$@"
+WRAPPER
+	chmod 755 "$F"
+	log "fde-unlock can show the alarm message"
+}
+
 arm_buzzer() {
 	[ -n "$ALARM" ] || return 0
 	ring=$(( ALARM + 120 ))
@@ -104,7 +134,8 @@ arm_buzzer() {
 	find_root_partition ROOT
 	[ "$(get_partition_type "$ROOT")" = crypto_LUKS ] || { log "root not encrypted: the desktop rings the alarm"; return 0; }
 	[ -x /usr/libexec/utsugi-surya/alarm-sound ] || { log "no alarm-sound in this initramfs"; return 0; }
-	setsid sh /usr/libexec/utsugi-surya/alarm-sound "$ring" </dev/null >/dev/null 2>&1 &
+	message_on_passphrase_screen
+	setsid sh /usr/libexec/utsugi-surya/alarm-sound "$ring" "$ALARM_TEXT" </dev/null >/dev/null 2>&1 &
 	log "alarm ringer armed for rtc $ring"
 }
 
@@ -142,10 +173,14 @@ paint() {
 	key="$cap/$st"
 	[ "$key" = "$last" ] && return
 	last="$key"
+	# The gauge keeps saying "Charging" at 100 % while it tops off. For the
+	# owner that is full: say so, and the theme draws it green.
+	[ "$st" = Full ] && cap=100
+	[ "$cap" -ge 100 ] 2>/dev/null && { cap=100; st=Full; }
 	plymouth update --status="charge-$cap" 2>/dev/null; log "status charge-$cap rc=$?"
 	case "$st" in
 		Charging) words="$cap %  charging" ;;
-		Full)     words="$cap %  full" ;;
+		Full)     words="Fully charged" ;;
 		*)        words="$cap %" ;;
 	esac
 	[ -n "$ALARM_TEXT" ] && words="$words\nAlarm $ALARM_TEXT"
