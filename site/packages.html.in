@@ -177,7 +177,7 @@
 		<p>Because Plasma Mobile's logout greeter does not render on this shell, the
 		power menu is one it draws itself &mdash; a layer-shell overlay you configure
 		(reorder, enable, add, list or grid). Two modules in <b>Settings &rarr;
-		Hardware</b> &mdash; <i>Phone keys</i> and <i>Power menu</i> &mdash; edit it
+		Hardware</b> &mdash; <i>Phone buttons</i> and <i>Power menu</i> &mdash; edit it
 		all, sharing one library of named actions (open an app, or a command) reused
 		by gestures and menu buttons alike. The decisions are a state machine in
 		plain C++ with a test per rule.
