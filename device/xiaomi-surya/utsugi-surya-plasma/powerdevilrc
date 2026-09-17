@@ -13,3 +13,25 @@ TurnOffDisplayIdleTimeoutSec=120
 
 [LowBattery][Display]
 TurnOffDisplayIdleTimeoutSec=120
+
+# The power profile, balanced in all three, and it has to be WRITTEN.
+#
+# Left unset, the phone runs balanced (tuned-ppd's default), but Settings >
+# Energy shows "Power Save": the mobile module looks the saved profile up in
+# its list, finds nothing, and falls back to row 0, which is Power Save
+# (powerdevil kcm_mobile/mobilepower.cpp, powerProfileIdx). Measured on a
+# freshly flashed phone on 2026-09-17: ActiveProfile "balanced", the page said
+# Power Save. With the value present the page finds it and shows the truth.
+#
+# The cost, which is Plasma's own once anyone touches that page: with a
+# configured profile PowerDevil sets it again on each change between mains and
+# battery, so a Power Saving tile left on is turned back to balanced when the
+# cable goes in or out.
+[AC][Performance]
+PowerProfile=balanced
+
+[Battery][Performance]
+PowerProfile=balanced
+
+[LowBattery][Performance]
+PowerProfile=balanced
