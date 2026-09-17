@@ -1,7 +1,7 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=smart-unlock
-pkgver=1.3
-pkgrel=2
+pkgver=1.4
+pkgrel=0
 pkgdesc="Skip the PIN on a trusted wifi, after unlocking, or in chosen time slots"
 url="https://github.com/utsugi-pmos/smart-unlock"
 arch="all"
@@ -55,6 +55,6 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-98e83af195d9098b33944831989e523f0827d44553a0430beddac3be14b194d9675813de4c503caf6d345886db0b2c1921be327c2602384f444821673586a7b1  smart-unlock-1.3.tar.gz
+512f73ed08fce230f0e998d3488233d10522d5756b802658512434a0deb6a12ce040abf4590c4bc847c3ce3f36af97bc538451287684ff4d5fe715dfc1b06597  smart-unlock-1.4.tar.gz
 f8b5642475a7c373fa9b62246ea3402f380823527f3aece44f41ad44f9e8a6900bb06d9b77618f1b9bd8d1f958a5774a82db7c5ed628ea450247647cbfa145af  80-smart-unlock.preset
 "

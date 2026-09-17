@@ -12,7 +12,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # cannot grab the same evdev device, and the one that owns the buttons has to
 # be the one that knows every gesture.
 pkgname=phone-keyconfig
-pkgver=1.2
+pkgver=1.3
 pkgrel=0
 pkgdesc="Configurable power and volume button actions for Plasma Mobile"
 url="https://github.com/utsugi-pmos/phone-keyconfig"
@@ -61,5 +61,5 @@ systemd() {
 	default_systemd
 }
 sha512sums="
-15d321acbaa7edda9127fc6728faeead4cde8bcec30d8e63447ee8f1c75d882d8cb68aaa6265dd7a5fec125991ddf1e31b7e3e18ce6c9a0304346b00b63041cd  phone-keyconfig-1.2.tar.gz
+35a3e0b42df2f1d6c480f8a4e2998d606752082e1f82da85998b5902b3b81f57fc3678b00ab18e90c6df67fb51874f81738892982bd91e297aca440373bfb4cd  phone-keyconfig-1.3.tar.gz
 "
