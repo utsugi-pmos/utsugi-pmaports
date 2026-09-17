@@ -1,0 +1,106 @@
+#!/bin/sh
+# The app drawer and the favourites bar, set up before plasmashell starts.
+#
+# Runs as ExecStartPre of plasma-plasmashell.service, so on every start of the
+# shell and before it has read anything. That matters for the favourites: Folio
+# reads them once, when the homescreen loads, and keeps its own copy. Writing the
+# config while the shell runs (evaluateScript, reloadConfig) changed the file
+# and nothing on screen -- measured on 2026-09-17 -- and the next change the
+# owner made on the homescreen would have written the old set back.
+#
+# THE DRAWER
+# ----------
+# A .desktop file in ~/.local/share/applications with the same name wins over
+# the one in /usr/share. That is the per-user layer made for this, and it leaves
+# the other packages' files alone. Each override is regenerated from the file it
+# replaces, so it follows upgrades of the application, and it is removed when
+# the application goes. Only files carrying our marker are touched: one the
+# owner made by hand is theirs.
+#
+# THE FAVOURITES
+# --------------
+# Plasma Mobile's look-and-feel starts the bar with Angelfish, Phone and
+# Messages. This phone ships Firefox as its browser. New installs get Firefox
+# from the start (the trigger changes that default); for a phone set up before,
+# the bar is changed here once, and only if it is still the stock set.
+
+set -u
+
+apps="${XDG_DATA_HOME:-$HOME/.local/share}/applications"
+state="${XDG_STATE_HOME:-$HOME/.local/state}/utsugi-surya"
+marker="X-Utsugi-Generated=utsugi-surya-plasma"
+changed=0
+
+# Rewrites the [Desktop Entry] group of /usr/share/applications/$1.desktop with
+# the awk program in $2 into the user's layer; removes our override when the
+# application is not installed.
+override() {
+	src="/usr/share/applications/$1.desktop"
+	dest="$apps/$1.desktop"
+	if [ -e "$dest" ] && ! grep -qx "$marker" "$dest"; then
+		return
+	fi
+	if [ ! -e "$src" ]; then
+		if [ -e "$dest" ]; then
+			rm -f "$dest"
+			changed=1
+		fi
+		return
+	fi
+	mkdir -p "$apps"
+	awk -v marker="$marker" "
+		/^\[/ { group = \$0; print; if (group == \"[Desktop Entry]\") { print marker; $2 } next }
+		group == \"[Desktop Entry]\" && /^X-Utsugi-Generated=/ { next }
+		$3
+		{ print }
+	" "$src" > "$dest.new" || { rm -f "$dest.new"; return; }
+	if cmp -s "$dest.new" "$dest"; then
+		rm -f "$dest.new"
+	else
+		mv "$dest.new" "$dest"
+		changed=1
+	fi
+}
+
+hide() {
+	override "$1" 'print "NoDisplay=true"' \
+		'group == "[Desktop Entry]" && /^NoDisplay=/ { next }'
+}
+
+# Neither shows anything useful on a phone: a screenshot is taken with the
+# buttons, and the contacts are Phonebook's.
+hide org.kde.spectacle
+hide org.kde.merkuro.contact
+# Printing, the crash viewer and Visual Voicemail come in as dependencies of the
+# desktop and the dialer; the owner asked for them out of the drawer.
+hide cups
+hide org.kde.drkonqi.coredump.gui
+hide org.kop316.vvmplayer
+
+# "Alligator" says nothing about what it is.
+override org.kde.alligator 'print "Name=RSS Reader"; print "Name[es]=Lector RSS"' \
+	'group == "[Desktop Entry]" && /^Name(\[[^]]*\])?=/ { next }'
+
+if [ "$changed" = 1 ]; then
+	kbuildsycoca6 >/dev/null 2>&1
+fi
+
+rc="${XDG_CONFIG_HOME:-$HOME/.config}/plasma-org.kde.plasma.mobileshell-appletsrc"
+done_mark="$state/firefox-favourite"
+stock='[{"storageId":"org.kde.angelfish.desktop","type":"application"},{"storageId":"org.kde.plasma.dialer.desktop","type":"application"},{"storageId":"org.kde.spacebar.desktop","type":"application"}]'
+ours='[{"storageId":"firefox.desktop","type":"application"},{"storageId":"org.kde.plasma.dialer.desktop","type":"application"},{"storageId":"org.kde.spacebar.desktop","type":"application"}]'
+
+if [ ! -e "$done_mark" ] && [ -e /usr/share/applications/firefox.desktop ] &&
+	grep -q '^\[Containments\]\[[0-9]*\]\[Folio\]$' "$rc" 2>/dev/null; then
+	for c in $(sed -n 's/^\[Containments\]\[\([0-9]*\)\]\[Folio\]$/\1/p' "$rc"); do
+		current=$(kreadconfig6 --file "$rc" --group Containments --group "$c" \
+			--group Folio --key favorites)
+		if [ "$current" = "$stock" ]; then
+			kwriteconfig6 --file "$rc" --group Containments --group "$c" \
+				--group Folio --key favorites "$ours"
+		fi
+	done
+	mkdir -p "$state" && touch "$done_mark"
+fi
+
+exit 0

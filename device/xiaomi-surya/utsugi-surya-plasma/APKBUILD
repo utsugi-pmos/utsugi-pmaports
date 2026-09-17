@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=24
+pkgrel=25
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -42,8 +42,12 @@ replaces_priority=100
 # install now gets the panel's real refresh rate instead of half of it --
 # before this, that fix existed only inside surya-setup, where you had to go
 # and pick it by hand.
+# The favourites bar default for new phones: see the trigger itself.
+triggers="$pkgname.trigger=/usr/share/plasma/look-and-feel/org.kde.breeze.mobile/contents/plasmoidsetupscripts:/usr/share/applications"
 subpackages="$pkgname-systemd $pkgname-firefox:_firefox:noarch $pkgname-librewolf:_librewolf:noarch"
 source="surya-120hz.js
+	shell-defaults
+	10-utsugi-shell-defaults.conf
 	console-off-under-desktop.service
 	change-the-password
 	change-the-password.service
@@ -81,7 +85,7 @@ package() {
 		install -Dm755 "$srcdir/$sw" -t "$pkgdir"/usr/bin/
 	done
 	local helper
-	for helper in notification-sound dialer-warmup; do
+	for helper in notification-sound dialer-warmup shell-defaults; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 	# The agent calls the switch too, so it gets the same substitution as the
@@ -134,6 +138,10 @@ package() {
 	done
 	install -Dm644 "$srcdir"/10-utsugi-scale.conf \
 		-t "$pkgdir"/usr/lib/systemd/user/plasma-xdg-desktop-portal-kde.service.d/
+	# The app drawer's names and hidden entries, and the favourites bar, written
+	# before the shell starts: Folio reads its favourites only when it loads.
+	install -Dm644 "$srcdir"/10-utsugi-shell-defaults.conf \
+		-t "$pkgdir"/usr/lib/systemd/user/plasma-plasmashell.service.d/
 
 	# Two session units that fail on every boot and can only fail here. A unit
 	# stuck in "failed" spends the one signal that says something did not start.
@@ -174,6 +182,8 @@ systemd() {
 }
 sha512sums="
 46b560e8104aafebd8e04cd4e133ae975bf3ca9bfb242bc7e55fe7a1bbc772fa411f8d03422208ba13c26717bf8870bbbeb4eb02703befbba8f7367121af4493  surya-120hz.js
+e08a650d10e702f92bb88778b51b6d1577c8d2e52e86973013cc9ba463672e936dce9c4fb6fb1950cbe86fb093228eceb9618a75ebb7d715d70fa4683a7d85f6  shell-defaults
+a6a14868b41b781a7504f13fd5b8cc4c47634f5bc570de40e04eab10b86292bf0d2f0a10955d69b262efed510922e69c977de8cf3ab14ee2f8b69001f43ea8f4  10-utsugi-shell-defaults.conf
 2e235a09d96150b95e91b3260439d8fa2ea40aa0292476b537298fcd2d71f7026064fae291ff21b45a415e1cb9ad90700a9fe7b18fef11ae8c339ed550f27f88  console-off-under-desktop.service
 c72ba9e507704312c08bba1439c017810eb9de09de9f90481f472343307f3c4ad6163a053145ca912dd5242b9bccc8d2ce9f1fcb5bb1389d441a49abb6a0811a  change-the-password
 2c7ff25dd7d816c5ecf07986ac97234d4629261c78b3d6664879ab630372b11aa52f327261f528dfea69b18c0eb26f3bdf41e85222bd5f52c7f90cd93e7be5f1  change-the-password.service
