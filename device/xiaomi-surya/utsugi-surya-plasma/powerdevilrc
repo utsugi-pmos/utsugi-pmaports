@@ -23,10 +23,9 @@ TurnOffDisplayIdleTimeoutSec=120
 # freshly flashed phone on 2026-09-17: ActiveProfile "balanced", the page said
 # Power Save. With the value present the page finds it and shows the truth.
 #
-# The cost, which is Plasma's own once anyone touches that page: with a
-# configured profile PowerDevil sets it again on each change between mains and
-# battery, so a Power Saving tile left on is turned back to balanced when the
-# cable goes in or out.
+# A configured profile is re-applied by PowerDevil on each change between mains
+# and battery. That would undo a Power Saving tile left on, so the tile writes
+# its choice here too (power-saving-switch choose), as the Energy page does.
 [AC][Performance]
 PowerProfile=balanced
 
