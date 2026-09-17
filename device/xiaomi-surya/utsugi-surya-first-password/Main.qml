@@ -43,12 +43,23 @@ Kirigami.ApplicationWindow {
     // before the session starts.
     property bool restartToRename: false
 
+    // With a rename pending, say so before restarting: the phone going dark
+    // the instant Save was pressed looked like a crash (2026-09-17), and the
+    // boot then stops at the encryption passphrase, which made it look like a
+    // boot loop.
     function done() {
         if (restartToRename) {
-            identity.reboot();
+            pageStack.replace(restartPage);
+            restartTimer.start();
         } else {
             Qt.quit();
         }
+    }
+
+    Timer {
+        id: restartTimer
+        interval: 4000
+        onTriggered: identity.reboot()
     }
 
     readonly property string supportUrl: "https://utsugi-pmos.github.io/utsugi-pmaports/"
@@ -294,6 +305,38 @@ Kirigami.ApplicationWindow {
                     Layout.preferredHeight: Kirigami.Units.gridUnit * 3
                     font.pointSize: Kirigami.Theme.defaultFont.pointSize * 1.3
                     onClicked: root.applyPassword(pwFirst, pwSecond)
+                }
+            }
+        }
+    }
+
+    // ----------------------------------------------------------------- restart
+    Component {
+        id: restartPage
+        Kirigami.Page {
+            ColumnLayout {
+                anchors.centerIn: parent
+                width: parent.width - Kirigami.Units.gridUnit * 2
+                spacing: Kirigami.Units.largeSpacing
+
+                QQC2.BusyIndicator {
+                    running: true
+                    Layout.alignment: Qt.AlignHCenter
+                }
+                Kirigami.Heading {
+                    text: "Restarting to rename your account"
+                    level: 1
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    Layout.fillWidth: true
+                }
+                QQC2.Label {
+                    text: "The phone restarts now. Your folder is renamed while it starts, "
+                        + "before the desktop, which takes a few seconds more than usual."
+                    wrapMode: Text.Wrap
+                    horizontalAlignment: Text.AlignHCenter
+                    opacity: 0.8
+                    Layout.fillWidth: true
                 }
             }
         }
