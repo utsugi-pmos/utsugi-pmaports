@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # belongs with the keepalive application that manages its list.
 pkgname=utsugi-surya-plasma
 pkgver=1
-pkgrel=19
+pkgrel=20
 pkgdesc="Plasma Mobile quick settings, defaults and session services for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -80,9 +80,17 @@ package() {
 		install -Dm755 "$srcdir/$sw" -t "$pkgdir"/usr/bin/
 	done
 	local helper
-	for helper in power-saving-agent notification-sound dialer-warmup; do
+	for helper in notification-sound dialer-warmup; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
+	# The agent calls the switch too, so it gets the same substitution as the
+	# tile. It was installed as is, and every login logged
+	# "power-saving-agent: line 35: @SWITCH@: not found": brightness and the
+	# idle timeouts never followed the profile. Found on 2026-09-17.
+	sed "s|@SWITCH@|/usr/bin/power-saving-switch|g" "$srcdir"/power-saving-agent \
+		> "$srcdir"/power-saving-agent.fixed
+	install -Dm755 "$srcdir"/power-saving-agent.fixed \
+		"$pkgdir"/usr/libexec/utsugi-surya/power-saving-agent
 
 	# The quick settings. @SWITCH@ is substituted here because Plasma's executable
 	# data engine expands no variables and plasmashell's PATH is not ours.
