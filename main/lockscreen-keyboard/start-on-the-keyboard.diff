@@ -1,0 +1,34 @@
+--- a/shell/contents/lockscreen/LockScreenState.qml
++++ b/shell/contents/lockscreen/LockScreenState.qml
+@@ -1,6 +1,7 @@
+ // SPDX-FileCopyrightText: 2022-2024 Devin Lin <devin@kde.org>
+ // SPDX-License-Identifier: GPL-2.0-or-later
+ 
++import QtCore
+ import QtQml
+ import QtQuick
+ 
+@@ -24,8 +25,22 @@
+     // whether the device can log in with fingerprint
+     readonly property bool isFingerprintSupported: authenticator.authenticatorTypes & ScreenLocker.Authenticator.Fingerprint
+ 
++    // Which keyboard the lock screen starts on, written by the first-boot
++    // Advanced setup:
++    //
++    //     [General]
++    //     startWithKeyboard=true
++    //
++    // Read once. That is enough: the greeter quits on every unlock and a new
++    // one reads it at the next lock. No category, because QSettings reserves
++    // "General" and would look for a [%General] section instead.
++    readonly property Settings unlockSettings: Settings {
++        location: StandardPaths.writableLocation(StandardPaths.GenericConfigLocation) + "/utsugi-lockscreenrc"
++    }
++
+     // whether we are in keyboard mode (hiding the numpad)
+-    property bool isKeyboardMode: false
++    // (utsugi: starts on the keyboard when the password is not a PIN)
++    property bool isKeyboardMode: String(unlockSettings.value("startWithKeyboard", false)) === "true"
+ 
+     property string pinLabel: enterPinLabel
+     readonly property string enterPinLabel: i18n("Enter PIN")
