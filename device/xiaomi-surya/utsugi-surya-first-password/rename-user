@@ -64,12 +64,17 @@ fi
 # tidies up, and a failure in it is logged, not undone.
 
 # Absolute paths to the old home in the account's own settings: wallpapers,
-# download folders, recent files. Text files only (grep -I), and not the caches,
-# which rebuild themselves. sed -i writes a new file, so owner and mode are put
-# back from the original.
-find "$newhome" -xdev -type f -size -4M ! -path "$newhome/.cache/*" \
-	-exec grep -lIF "$oldhome" {} + 2>/dev/null |
+# download folders, recent files. Not the caches, which rebuild themselves, and
+# text files only: a path rewritten inside a SQLite database changes its length
+# and breaks the file. busybox grep takes -I and ignores it, so a file with a
+# NUL byte in it is taken for binary and skipped here. sed -i writes a new file,
+# so owner and mode are put back from the original.
+find "$newhome" -xdev -type f -size -4096k ! -path "$newhome/.cache/*" \
+	-exec grep -lF "$oldhome" {} + 2>/dev/null |
 while IFS= read -r f; do
+	if ! tr -d '\000' < "$f" | cmp -s - "$f"; then
+		continue
+	fi
 	owner=$(stat -c '%u:%g' "$f")
 	mode=$(stat -c '%a' "$f")
 	if sed -i -E "s#${oldhome}([^A-Za-z0-9_.-]|\$)#${newhome}\\1#g" "$f"; then
