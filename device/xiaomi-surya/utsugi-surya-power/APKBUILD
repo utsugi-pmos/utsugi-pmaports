@@ -19,7 +19,7 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # is 30 and systemd arms NOTHING if the value is out of range.
 pkgname=utsugi-surya-power
 pkgver=1
-pkgrel=25
+pkgrel=26
 pkgdesc="Power-off, watchdog, charge mode and power saving for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
@@ -63,6 +63,8 @@ source="power-reason
 	50-utsugi-surya-watchdog.conf
 	tuned.conf
 	80-utsugi-surya-power.preset
+	90-utsugi-no-charger-wakeup.rules
+	90-utsugi-big-core-no-rail-collapse.rules
 	"
 
 build() {
@@ -102,6 +104,15 @@ package() {
 	# Run by systemd-sleep before and after every suspend. See the file.
 	install -Dm755 "$srcdir"/bluetooth-off-while-asleep \
 		-t "$pkgdir"/usr/lib/systemd/system-sleep/
+
+	# The phone must only wake for calls, alarms or the power key: the charger
+	# chain wakes it thousands of times and aborts suspend, and a big core does
+	# not always wake from its deepest idle state during s2idle. Both are shut
+	# off by udev at boot. See surya task 028 and bug-reports/04.
+	install -Dm644 "$srcdir"/90-utsugi-no-charger-wakeup.rules \
+		-t "$pkgdir"/usr/lib/udev/rules.d/
+	install -Dm644 "$srcdir"/90-utsugi-big-core-no-rail-collapse.rules \
+		-t "$pkgdir"/usr/lib/udev/rules.d/
 
 	# The charging screen lives in the initramfs (so that it runs on an
 	# encrypted phone too; the systemd version it replaced could not). /usr/share/mkinitfs/* is a trigger directory:
@@ -169,4 +180,6 @@ e77c9169650f943a42b082428b8bf7a945ea20278ee879aa6e553b99ee5908bca03cc0821f72c903
 84f5c593026d9007267af2ccfbfca7cae7161eb8b3dba684c48a3917cc4a4a05ff68ebe8c206a8fee849bd2e7d9f6a9e0932073824e39a8c03b016d47b44f2be  50-utsugi-surya-watchdog.conf
 090c7f0022030eb0fe71a55863059d3df169335fbe30088bdaba080e58b717ca61fa77067cc9473a4db72a9eb4fdb037f24908fde3757646f635abb3edb39772  tuned.conf
 04862371b9a9a37fe9a5638f9c943093814cc3a6450830adea75951ee2d48c0dd2de60ff2da50e50c890b664ace03bd9949f04e065a5dee793e376072bc4a9cd  80-utsugi-surya-power.preset
+9b21c89fb5fa21bdc7a943cf7fe5e912734ec4764b06df7d1e89e544a5cc64c6ffedf4478143cd186072880bd085863738e7f6e9e4efa025f0d046f068f87b6e  90-utsugi-no-charger-wakeup.rules
+9c9127ab6c94ee9325f84a81d722429a1810064e898c99148cce9174c945b323dad22e72446af67d725f5f2e71bfbf02fa6d43493a334fd06d2622205c01ce2c  90-utsugi-big-core-no-rail-collapse.rules
 "
