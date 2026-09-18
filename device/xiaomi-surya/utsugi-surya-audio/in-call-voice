@@ -1,0 +1,148 @@
+#!/bin/sh
+# Keeps the call audio working on the POCO X3 NFC (surya).
+#
+# WHAT THIS FILE USED TO DO, AND WHY IT WAS WRONG
+# -----------------------------------------------
+# For two days this script opened an inaudible playback and a recording
+# in parallel for the duration of the call, starting from this premise:
+#
+#     "q6voice-dai passes the DSP the port identifiers but does not
+#      turn them on; nobody starts the AFE ports during a call"
+#
+# It is FALSE. Verified on 2026-08-10 by tracing soc-pcm with dynamic debug:
+# with the microphone free, the voice path starts its two backends by itself,
+# whole and to the end:
+#
+#     TX Capture:   open BE / hw_params BE / prepare BE / trigger BE cmd 1
+#     I2S Playback: open BE / hw_params BE / prepare BE / trigger BE cmd 1
+#
+# The premise seemed true because there was almost always ANOTHER stream using the
+# ports: PulseAudio keeps the speaker open, and the recording that
+# this same script opened used the microphone. When a backend already has users,
+# DPCM silently skips all operations for the second frontend
+# (dpcm_be_dai_startup: "if (be->dpcm[stream].users++ != 0) continue"). Since
+# the port was already on, it looked like the recording turned it on.
+#
+# And there was the transmission fault: on the OUTPUT sharing the port does
+# not matter, because the DSP mixes the voice with what already plays. On the INPUT it does:
+# the recording grabbed the microphone port BEFORE the voice session,
+# the voice was left without its own port and nothing reached the far end.
+#
+# The workaround was the cause. This script no longer opens audio streams: it prepares the
+# path, pushes aside whoever holds the microphone and lets the voice session
+# be the sole owner of its two ports.
+#
+# THE SECOND MISSING THING: STARTING
+#
+# q6voiced opens the voice PCM, sets its parameters and prepares it, but never
+# calls snd_pcm_start(): both directions stay in PREPARED. And in ASoC a
+# backend only fires when its frontend fires.
+#
+# The OUTPUT slipped through by chance, because PulseAudio's normal playback
+# fires that same shared port. The INPUT nobody fired: the
+# microphone port stayed stopped, the SoundWire stream never got
+# enabled and the DSP read from a port with no data.
+#
+# That is now handled by voice-ports, which replaces q6voiced.
+
+set -u
+
+OUTPUT=${OUTPUT:-audifono}     # speaker | earpiece | headphones
+VOL=${VOL:-45}                 # the top one is a real speaker: do not raise
+
+# Transmission topology. Changed from the systemd unit so candidates can be
+# tried without touching the script:
+#
+#   69488  VSS_IVOCPROC_TOPOLOGY_ID_NONE      no processing at all
+#   69489  ..._TX_SM_ECNS                     echo and noise cancellation
+#
+# These are the only two the DSP on this board accepts: 69490 and 69491 return
+# an error when creating the session (verified on 2026-08-10).
+TX_TOPO=${TX_TOPO:-69488}
+RX_TOPO=${RX_TOPO:-69495}
+ACTIVE=""
+PORTS=""
+
+log() { echo "in-call-voice: $*"; }
+
+in_a_call() {
+	mmcli -m 0 --voice-list-calls 2>/dev/null | grep -qE "active|ringing-in"
+}
+
+# The microphone path cannot depend on PulseAudio applying the UCM,
+# because during a call no capture stream is opened and therefore the
+# "Mic" device of the UCM never gets activated. It is set by hand, just
+# like audio-output does with the amplifiers.
+mic_path() {
+	c() { amixer -c0 cset name="$1" "$2" >/dev/null 2>&1; }
+	c 'TX_AIF1_CAP Mixer DEC0' 1
+	c 'TX DEC0 MUX' SWR_MIC
+	c 'TX SMIC MUX0' ADC0
+	# Turned on they put a second SoundWire port into the same stream.
+	c 'DMIC0 Switch' 0
+	c 'DMIC1 Switch' 0
+	c 'ADC1 Switch' 1
+	c 'ADC1_MIXER Switch' 1
+	c 'ADC1 Volume' 20
+	c 'TX_DEC0 Volume' 104
+	# The mixer that joins the microphone port to the voice session.
+	c 'VoiceMMode1 Capture Mixer TX_CODEC_DMA_TX_3' 1
+	c 'TERT_MI2S_RX Voice Mixer VoiceMMode1' 1
+}
+
+start() {
+	[ -n "$ACTIVE" ] && return 0
+	ACTIVE=si
+	log "call detected: preparing the voice path"
+
+	# The topologies are set BEFORE restarting q6voiced, because the DSP
+	# session is created with whatever values are present at that moment.
+	#
+	# TX at NONE (0x00010F70) and not at TX_SM_ECNS: that one carries echo
+	# cancellation, and the session is created with internal echo mixing but
+	# WITHOUT a reference port. A canceller with no reference can eat all the voice.
+	amixer -c0 cset name="VoiceMMode1 TX Topology" "$TX_TOPO" >/dev/null 2>&1
+	amixer -c0 cset name="VoiceMMode1 RX Topology" "$RX_TOPO" >/dev/null 2>&1
+	log "topologies: transmission=$TX_TOPO reception=$RX_TOPO"
+
+	mic_path
+	# Positional, not by environment: 'VOL=$VOL audio-output ...' had no
+	# effect (sudo does not propagate the environment, and the script also overrode
+	# it with its own default value). The result was the earpiece at 85% held to
+	# the ear on every call, instead of the 45 the header asks for.
+	/usr/bin/audio-output "$OUTPUT" "$VOL" >/dev/null 2>&1
+
+	# PulseAudio keeps the microphone source OPEN even when there is not
+	# a single client recording. While it holds it, the voice path is
+	# left without a port: DPCM silently skips the operations of the second
+	# frontend. Suspending it closes it for real.
+	su cidwel -c "XDG_RUNTIME_DIR=/run/user/10000 pactl suspend-source @DEFAULT_SOURCE@ 1" >/dev/null 2>&1
+
+	# q6voiced opens the voice PCM but does NOT start it, and without starting
+	# the microphone port is not fired. voice-ports does both things, so
+	# q6voiced is redundant and also gets in the way (it would compete for the same PCM).
+	systemctl stop q6voiced 2>/dev/null
+	sleep 1
+	/usr/libexec/utsugi-surya/voice-ports &
+	PORTS=$!
+	sleep 1
+
+	log "voice: playback=$(head -1 /proc/asound/card0/pcm5p/sub0/status 2>/dev/null) capture=$(head -1 /proc/asound/card0/pcm5c/sub0/status 2>/dev/null)"
+}
+
+stop() {
+	[ -z "$ACTIVE" ] && return 0
+	log "call ended"
+	[ -n "${PORTS:-}" ] && kill "$PORTS" 2>/dev/null
+	PORTS=""
+	su cidwel -c "XDG_RUNTIME_DIR=/run/user/10000 pactl suspend-source @DEFAULT_SOURCE@ 0" >/dev/null 2>&1
+	ACTIVE=""
+}
+
+trap 'stop; exit 0' TERM INT
+
+log "watching for calls (output: $OUTPUT, volume $VOL%)"
+while :; do
+	if in_a_call; then start; else stop; fi
+	sleep 2
+done

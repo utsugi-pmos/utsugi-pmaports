@@ -3,3 +3,4 @@
 enable adsp-audio-init.service
 enable audio-volume.service
 enable ucm-before-pulseaudio.service
+enable in-call-voice.service

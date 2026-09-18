@@ -1,0 +1,21 @@
+[Unit]
+Description=In-call audio for the surya (starts the AFE ports for the duration of the call)
+After=ModemManager.service audio-volume.service
+Wants=ModemManager.service
+
+[Service]
+Type=simple
+ExecStart=/usr/libexec/utsugi-surya/in-call-voice
+Restart=always
+RestartSec=5
+# Through the TOP speaker, which is how you hold a phone. It does sound now: what
+# had it muted was the amplifier's source selector (see audio-output). At 45%
+# because it is not a small earpiece but the second stereo speaker, and pressed
+# against the ear at 85% it hurts.
+Environment=OUTPUT=earpiece
+Environment=VOL=45
+# The candidate to try. 69488 = no processing, 69489 = with cancellation.
+Environment=TX_TOPO=69488
+
+[Install]
+WantedBy=multi-user.target
