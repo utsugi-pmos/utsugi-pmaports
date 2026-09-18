@@ -16,21 +16,25 @@
 maintainer="Dr. Utsugi <cidwel@gmail.com>"
 pkgname=utsugi-surya-audio
 pkgver=1
-pkgrel=4
-pkgdesc="Audio for the Xiaomi POCO X3 NFC: both speakers, saved volume, UCM ordering"
+pkgrel=5
+pkgdesc="Audio for the Xiaomi POCO X3 NFC: both speakers, saved volume, UCM ordering, in-call voice"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
-depends="alsa-utils"
+# python3 for voice-ports; modemmanager (mmcli) for in-call-voice to see calls.
+depends="alsa-utils python3 modemmanager"
 subpackages="$pkgname-systemd"
 source="adsp-audio-init
 	audio-volume
 	audio-output
 	ucm-before-pulseaudio
+	in-call-voice
+	voice-ports
 	adsp-audio-init.service
 	audio-volume.service
 	ucm-before-pulseaudio.service
+	in-call-voice.service
 	q6voiced.conf
 	80-utsugi-surya-audio.preset
 	"
@@ -42,7 +46,8 @@ package() {
 	# Unit-only helpers. They used to live in /usr/local/bin, which no package
 	# may own.
 	local helper
-	for helper in adsp-audio-init audio-volume ucm-before-pulseaudio; do
+	for helper in adsp-audio-init audio-volume ucm-before-pulseaudio \
+	              in-call-voice voice-ports; do
 		install -Dm755 "$srcdir/$helper" -t "$pkgdir"/usr/libexec/utsugi-surya/
 	done
 
@@ -52,7 +57,7 @@ package() {
 	install -Dm644 "$srcdir"/q6voiced.conf -t "$pkgdir"/usr/share/q6voiced/
 
 	local unit
-	for unit in adsp-audio-init audio-volume ucm-before-pulseaudio; do
+	for unit in adsp-audio-init audio-volume ucm-before-pulseaudio in-call-voice; do
 		install -Dm644 "$srcdir/$unit.service" -t "$pkgdir"/usr/lib/systemd/system/
 	done
 	install -Dm644 "$srcdir"/80-utsugi-surya-audio.preset \
@@ -69,9 +74,12 @@ sha512sums="
 f7bed1404573f0d8b3d009cf8bbc710f6d6c3bc7d7fa72d838d1692850663458edbf0d840a93b7d4b2822a9ef459b5f28f58818881d52adfcc50bdbf8a5e120c  audio-volume
 9f76c82864443ca86772a8b4e91806c4e7ed65167d58f728a457f6aa66d0ec3dce5ebbce60de7e4de2879819be78abf311e9387aa634672524e59075ef391c41  audio-output
 afffeded471926e239510730670d10934cc60604b034b75c4c20aeb263b5f429d606e4fadd088702af30daaf3f2099eef1d8c201cd22ebbecd2420f69d6a4030  ucm-before-pulseaudio
+623558b6141dd8bebe52ea29f67f7d8b20221009d8bebbcb27db46326215d1f4a895b043dfb7d74eda812fb509f4260cf1876f7fbb9969cb532ebbd90bfcfb2d  in-call-voice
+1faa42f50dd0cc45917d79e1e9a30a7cc9af4454b94f5b4b6c5ea0ed344bd1f7ed59a3d65cba1129a046306bae44435f023353206974bdbf24b10142b5dfc34a  voice-ports
 db5b6563bdde81ac0b826c0481f8a8eb3798baa8a6a79f38f0983eb5793c1f96d416001932b141bd45bb4d27ede0aae85c065dd1c69e49363aedf6c999b693e9  adsp-audio-init.service
 45b26fd4d9d1b58d4be20861ebd283c8c69dfe6a283a1160e6dbbae5a7b593e69c19f67e4cb049354d7de63914662fd65fe696a2edd319eef38ee8e594626d8d  audio-volume.service
 dcde039fa6936e36f871b23bba746f393c829df97f18ceeda2dc74af4fc5410bc0e6025f36c753864499fc122aabd6a3473080f3e56e7a089aa171fd8d917068  ucm-before-pulseaudio.service
+32b3430cab959d907414d0d5bdd244e8c0de9aea1455864822aa8c71fa7897732a76c54de4d39144967a270de4d3bab894b774a9a690eba55365e7d6dafc395f  in-call-voice.service
 1c71788e4b6be4713b2149ccd5920dd27d400b3d61835b5d54bc410dd7c044b23f41215d2b0427816c97c10bcd75f6459db2875825bb413efe1cf68aded874d8  q6voiced.conf
-f6b4b47e6169b3a353543b442d5b4f399f81c2101a782c1644203b53340538a87e83b4ac6cbbad2e5c0de1b17c18942c1ae1a658202d044142505984dc0fc611  80-utsugi-surya-audio.preset
+f4e309b85eb22decac4a3df1a1f9fbb1b843fab8cdceab29f06bdcc35644f4f0bccf82c59fe646effacf78d78b8891e033ca28287c19430cbca1d323960169be  80-utsugi-surya-audio.preset
 "

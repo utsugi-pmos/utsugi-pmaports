@@ -1,0 +1,123 @@
+#!/usr/bin/env python3
+"""Opens the DSP voice session and STARTS its two ports.
+
+WHY THIS EXISTS
+---------------
+q6voiced opens the voice PCM, sets its parameters and prepares it... but never
+starts it: both directions stay in PREPARED. Checked on 2026-08-10
+tracing soc-pcm.
+
+In ASoC a backend only triggers when its frontend triggers. Consequence:
+
+  - OUTPUT works by bounce, because PulseAudio keeps a normal
+    playback on the same shared port and it is THAT which triggers it. That is why
+    the other end can be heard.
+  - INPUT is triggered by nobody. The microphone port stays stopped, the
+    SoundWire stream is never enabled and the DSP reads from a port with no data.
+    That is why the other end cannot hear us.
+
+This program does the same as q6voiced and additionally calls snd_pcm_start() on
+both directions. It does not transfer data: a voice PCM does not move it, the audio goes
+inside the DSP between the modem and the codec.
+
+Usage:  voice-ports [seconds]        (with no argument, until killed)
+"""
+
+import ctypes
+import signal
+import sys
+import time
+
+PCM = "hw:0,5"
+RATE = 8000
+CHANNELS = 1
+
+SND_PCM_STREAM_PLAYBACK = 0
+SND_PCM_STREAM_CAPTURE = 1
+SND_PCM_FORMAT_S16_LE = 2
+SND_PCM_ACCESS_RW_INTERLEAVED = 3
+
+alsa = ctypes.CDLL("libasound.so.2")
+alsa.snd_strerror.restype = ctypes.c_char_p
+
+
+def failure(what, code):
+    msg = alsa.snd_strerror(code).decode()
+    print(f"voice-ports: {what}: {msg} ({code})", file=sys.stderr)
+    return None
+
+
+def open_it(address, name, require_boot):
+    """Opens, configures, prepares and STARTS one direction of the voice PCM.
+
+    require_boot=False for playback: there snd_pcm_start() with the
+    empty buffer gives EPIPE (underrun) and nothing happens, because that port is
+    already triggered by PulseAudio's normal playback. It is left open and prepared,
+    just as q6voiced did.
+    """
+    h = ctypes.c_void_p()
+    r = alsa.snd_pcm_open(ctypes.byref(h), PCM.encode(), address, 0)
+    if r < 0:
+        return failure(f"open {name}", r)
+
+    # set_params does hw_params and sw_params at once and leaves the PCM in
+    # PREPARED, which is exactly where q6voiced stops.
+    r = alsa.snd_pcm_set_params(h, SND_PCM_FORMAT_S16_LE,
+                                SND_PCM_ACCESS_RW_INTERLEAVED,
+                                CHANNELS, RATE, 1, 100000)
+    if r < 0:
+        alsa.snd_pcm_close(h)
+        return failure(f"parameters for {name}", r)
+
+    # And this is THE step that was missing: going from PREPARED to RUNNING, which is
+    # what triggers the backend and with it the AFE port.
+    r = alsa.snd_pcm_start(h)
+    if r < 0:
+        if require_boot:
+            alsa.snd_pcm_close(h)
+            return failure(f"start {name}", r)
+        print(f"voice-ports: {name} prepared (does not start: "
+              f"{alsa.snd_strerror(r).decode()}), not needed")
+        return h
+
+    print(f"voice-ports: {name} RUNNING")
+    return h
+
+
+def main():
+    seconds = float(sys.argv[1]) if len(sys.argv) > 1 else None
+
+    # Capture first: if something is occupying the microphone I want to find out
+    # before having set anything up.
+    cap = open_it(SND_PCM_STREAM_CAPTURE, "capture", True)
+    rep = open_it(SND_PCM_STREAM_PLAYBACK, "playback", False)
+    if cap is None:
+        # Without capture there is no transmission, which is exactly what this program
+        # exists to fix. It almost always means that something is holding
+        # the microphone (PulseAudio keeps it open even if nobody records).
+        print("voice-ports: NO MICROPHONE; someone is holding the port",
+              file=sys.stderr)
+        if rep:
+            alsa.snd_pcm_close(rep)
+        return 1
+
+    def leave(*_):
+        for h in (cap, rep):
+            if h:
+                alsa.snd_pcm_close(h)
+        print("voice-ports: closed")
+        sys.exit(0)
+
+    signal.signal(signal.SIGTERM, leave)
+    signal.signal(signal.SIGINT, leave)
+
+    if seconds:
+        time.sleep(seconds)
+        leave()
+    else:
+        while True:
+            time.sleep(3600)
+
+
+if __name__ == "__main__":
+    sys.exit(main())
