@@ -1,0 +1,375 @@
+From: noemdespertis <noemdespertis@gmail.com>
+Date: Sat, 19 Sep 2026 00:00:00 +0000
+Subject: [PATCH] media: venus: support the sm7150, and enable it on the surya
+
+The POCO X3 NFC decodes every video in software: the Venus node
+(qcom,sm7150-venus) is disabled in sm7150.dtsi, and even enabled nothing
+would bind to it, because the driver has no entry for the sm7150. The
+sm7150-mainline tree stopped at the node ("WIP! arm64: dts: qcom: sm7150:
+Add venus node") and left `&venus { //status = "okay"; }` commented out.
+
+Everything else is already there: CONFIG_VIDEO_QCOM_VENUS=m, videocc-sm7150,
+the interconnects, venus.mbn under qcom/sm7150/xiaomi/surya/ with the
+firmware-name pointing at it, and a reserved region at 0x93400000 identical
+to Xiaomi's pil_video_region.
+
+What the hardware is. Xiaomi's sdmmagpie-vidc.dtsi has ONE video core on
+MVS0 (vcodec-supply = mvs0_gdsc); MVS1 is the CVP (cvp-supply), not a second
+codec. The HFI is 4.x like the sc7180. But msm_vidc_platform.c puts the
+sc7180 (atoll), sm6150 and sdm845 on VPU_VERSION_4 and the sdmmagpie together
+with the sm8150 on VPU_VERSION_5 -- the generation mainline calls IRIS1 and
+has an enum for but no user. The firmware agrees: it reports itself as
+"14:VIDEO.IR.1.2-00054-PROD-1" on a wrapper of hw version 5.11.20a. So:
+sc7180's resources (one vcodec, HFI 4XX) with .vpu_version =
+VPU_VERSION_IRIS1, and the things the downstream driver does only for VPU 5.
+
+Measured on the phone, 2026-09-19, by editing the installed DTB and loading
+the module by hand. With "qcom,sc7180-venus": TZ authenticates venus.mbn,
+the firmware boots and answers SYS_INIT 100 ms later, and then the first
+power collapse fails:
+
+    wait for cpu and video core idle fail (-110)
+
+The same with "qcom,sdm845-venus-v2". With a first cut of this patch
+(IRIS1 profile, CGC config, interrupt mask, DSP queue registers) the probe
+completes and /dev/video10-11 appear, but the two status bits read
+
+    cpu status 0x0, ctrl status 0x1
+
+and a decoder session gets no answer at all: SESSION_INIT times out, the
+Venus interrupt count does not move. The firmware answers SYS_INIT and
+then nothing, and never reaches WFI.
+
+The difference that fits: WHEN the video core is powered. In mainline's v4
+path, core_power_v4() powers only the venus GDSC and the core clocks; the
+vcodec0 domain and its clocks are brought up per session (poweron_coreid),
+and the sc7180 firmware is happy to boot with the video core off. Downstream
+enables every GDSC (mvsc, mvs0, mvs1) and hands them to hardware control
+BEFORE loading the firmware, and keeps the CVP clock in the proxy set. An
+IRIS1 firmware that initialises the video core and the CVP at boot has
+nothing to talk to. So on IRIS1 both vcodec domains are powered with the
+core, clocks on, and handed to hardware control (HW_CTRL_TRIGGER is set on
+both in videocc-sm7150); sessions still only take core 1.
+
+The other VPU 5 differences are carried too, as downstream has them:
+WRAPPER_CPU_CGC_DIS and WRAPPER_CPU_CLOCK_CONFIG written to 0 on power on
+(mainline does that only on the no-TZ path), the interrupt mask unmasked
+bit by bit (A2HCPU and A2HWD) instead of written to 0x8, and the DSP view of
+the queue table (CPU_CS_VMIMSG, VMIMSGAG0, VMIMSGAG1) pointed at the CPU
+queues, since there is no CVP client. None of those alone changed the
+status bits.
+
+For the next time this fails: the idle timeout prints both status
+registers, and on IRIS1 returns -EAGAIN instead of -ETIMEDOUT. Downstream
+treats a busy core as "skip power collapse, try later"; -EAGAIN is the
+runtime-PM spelling of that, whereas -ETIMEDOUT sets runtime_error and
+leaves the device unusable until it is unbound. The probe tolerates that
+-EAGAIN. The F/W version parser learns the "VIDEO.IR" form.
+
+Clock table: the three rates of the sm7150 OPP table (240/338/365 MHz),
+which are also the only ones Xiaomi allows. Bandwidth tables are the
+sc7180's until measured.
+
+Enabled in sm7150-xiaomi-surya.dtsi, not in the common dtsi: this tree
+only tests on the surya.
+
+Sources, so every claim above can be checked:
+
+  Mainline (sm7150-mainline/linux, tag v7.1_rc3 -- the tree this aport builds):
+    https://github.com/sm7150-mainline/linux/tree/v7.1_rc3
+    arch/arm64/boot/dts/qcom/sm7150.dtsi            venus node, status = "disabled"
+    arch/arm64/boot/dts/qcom/sm7150-xiaomi-common.dtsi   `&venus { //status = "okay"; }`
+    arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi    firmware-name
+    commit 266961c24e57 "WIP! arm64: dts: qcom: sm7150: Add venus node"
+    drivers/media/platform/qcom/venus/core.c        venus_dt_match, sc7180_res, sdm845_res_v2
+    drivers/media/platform/qcom/venus/core.h        enum vpu_version (IRIS1 unused), IS_IRIS1()
+    drivers/media/platform/qcom/venus/hfi_venus.c   venus_boot_core, venus_run, venus_power_on,
+                                                    venus_suspend_3xx, venus_cpu_and_video_core_idle
+    drivers/media/platform/qcom/venus/hfi_venus_io.h  CPU_CS_*, WRAPPER_* offsets
+    drivers/media/platform/qcom/venus/hfi_msgs.c    sys_get_prop_image_version
+    drivers/media/platform/qcom/venus/firmware.c    venus_reset_cpu (CGC on the no-TZ path),
+                                                    firmware-name override
+    drivers/media/platform/qcom/venus/pm_helpers.c  core_power_v4, poweron_coreid, vcodec_control_v4
+    drivers/clk/qcom/videocc-sm7150.c               vcodec0/1 GDSCs with HW_CTRL_TRIGGER
+    include/dt-bindings/clock/qcom,sm7150-videocc.h
+
+  Xiaomi's kernel for this phone (MiCode/Xiaomi_Kernel_OpenSource, branch surya-q-oss):
+    https://github.com/MiCode/Xiaomi_Kernel_OpenSource/tree/surya-q-oss
+    arch/arm64/boot/dts/qcom/sdmmagpie-vidc.dtsi    one vcodec (mvs0), cvp-supply = mvs1,
+                                                    the seven clocks, allowed-clock-rates
+    arch/arm64/boot/dts/qcom/sdmmagpie.dtsi         pil_video_region@93400000
+    drivers/media/platform/msm/vidc/msm_vidc_platform.c   sdmmagpie = VPU_VERSION_5,
+                                                    sc7180/sm6150/sdm845 = VPU_VERSION_4,
+                                                    sdmmagpie_common_data (power-collapse-delay,
+                                                    sw-power-collapse, domain-cvp, max-hw-load)
+    drivers/media/platform/msm/vidc/venus_hfi.c     vpu5_ops: interrupt_init_vpu5,
+                                                    setup_dsp_uc_memmap_vpu5,
+                                                    clock_config_on_enable_vpu5;
+                                                    __power_collapse (same idle registers);
+                                                    __enable_regulators / __hand_off_regulators;
+                                                    venus_hfi_core_init (what is sent after SYS_INIT)
+    drivers/media/platform/msm/vidc/vidc_hfi_io.h   VIDC_CPU_CS_VMIMSG*, VIDC_WRAPPER_CPU_STATUS,
+                                                    VIDC_WRAPPER_CPU_CGC_DIS, ..._CLOCK_CONFIG
+
+  Measurements: all on a POCO X3 NFC (Huaxing), postmarketOS, this aport at r266..r267,
+  2026-09-19. The DTB experiments used fdtput on the installed
+  sm7150-xiaomi-surya-huaxing.dtb with the module blacklisted and loaded by hand;
+  the decode checks are ffmpeg's h264/hevc/vp9_v4l2m2m against its software decoders
+  through the psnr filter (inf = identical), and mpv 0.41 with --hwdec=v4l2m2m-copy.
+
+Signed-off-by: noemdespertis <noemdespertis@gmail.com>
+---
+diff -ruN a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+--- a/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
++++ b/arch/arm64/boot/dts/qcom/sm7150-xiaomi-surya.dtsi
+@@ -454,6 +454,7 @@
+ 
+ &venus {
+ 	firmware-name = "qcom/sm7150/xiaomi/surya/venus.mbn";
++	status = "okay";
+ };
+ 
+ &vreg_l18a_2p8 {
+diff -ruN a/drivers/media/platform/qcom/venus/core.c b/drivers/media/platform/qcom/venus/core.c
+--- a/drivers/media/platform/qcom/venus/core.c
++++ b/drivers/media/platform/qcom/venus/core.c
+@@ -496,7 +496,13 @@
+ 		goto err_of_depopulate;
+ 
+ 	ret = pm_runtime_put_sync(dev);
+-	if (ret) {
++	if (ret == -EAGAIN) {
++		/*
++		 * The core was still busy (IRIS1 says so instead of failing):
++		 * it stays powered and the suspend is retried on the next put.
++		 */
++		ret = 0;
++	} else if (ret) {
+ 		pm_runtime_get_noresume(dev);
+ 		goto err_of_depopulate;
+ 	}
+@@ -949,6 +955,54 @@
+ 	.enc_nodename = "video-encoder",
+ };
+ 
++/* The rates the sm7150 OPP table allows; Xiaomi's tree lists the same three. */
++static const struct freq_tbl sm7150_freq_table[] = {
++	{ 0, 365000000 },
++	{ 0, 338000000 },
++	{ 0, 240000000 },
++};
++
++/*
++ * SM7150 (Snapdragon 730/732): one video core on VCODEC0; the second MVS core
++ * is the CVP, which the firmware also drives, so it is powered along with the
++ * core but never given a session. HFI 4.x like the sc7180, but the VPU is the
++ * sm8150 generation (downstream VPU_VERSION_5, "IRIS1"), which needs the IRIS1
++ * handling in hfi_venus.c and pm_helpers.c. Bandwidth tables borrowed from
++ * the sc7180 until measured.
++ */
++static const struct venus_resources sm7150_res = {
++	.freq_tbl = sm7150_freq_table,
++	.freq_tbl_size = ARRAY_SIZE(sm7150_freq_table),
++	.bw_tbl_enc = sc7180_bw_table_enc,
++	.bw_tbl_enc_size = ARRAY_SIZE(sc7180_bw_table_enc),
++	.bw_tbl_dec = sc7180_bw_table_dec,
++	.bw_tbl_dec_size = ARRAY_SIZE(sc7180_bw_table_dec),
++	.clks = {"core", "iface", "bus" },
++	.clks_num = 3,
++	.vcodec0_clks = { "vcodec0_core", "vcodec0_bus" },
++	.vcodec1_clks = { "vcodec1_core", "vcodec1_bus" },
++	.vcodec_clks_num = 2,
++	.vcodec_pmdomains = (const char *[]) { "venus", "vcodec0", "vcodec1" },
++	.vcodec_pmdomains_num = 3,
++	.opp_pmdomain = (const char *[]) { "cx" },
++	/* Sessions only ever go to core 1; core 2 is the CVP, see core_power_v4 */
++	.vcodec_num = 1,
++	.max_load = 3110400,	/* 4096x2160@90 */
++	.hfi_version = HFI_VERSION_4XX,
++	.vpu_version = VPU_VERSION_IRIS1,
++	.vmem_id = VIDC_RESOURCE_NONE,
++	.vmem_size = 0,
++	.vmem_addr = 0,
++	.dma_mask = 0xe0000000 - 1,
++	.cp_start = 0,
++	.cp_size = 0x70800000,
++	.cp_nonpixel_start = 0x1000000,
++	.cp_nonpixel_size = 0x24800000,
++	.fwname = "qcom/sm7150/venus.mbn",
++	.dec_nodename = "video-decoder",
++	.enc_nodename = "video-encoder",
++};
++
+ static const struct freq_tbl sm8250_freq_table[] = {
+ 	{ 0, 444000000 },
+ 	{ 0, 366000000 },
+@@ -1129,6 +1183,7 @@
+ 	{ .compatible = "qcom,sdm660-venus", .data = &sdm660_res, },
+ 	{ .compatible = "qcom,sdm845-venus", .data = &sdm845_res, },
+ 	{ .compatible = "qcom,sdm845-venus-v2", .data = &sdm845_res_v2, },
++	{ .compatible = "qcom,sm7150-venus", .data = &sm7150_res, },
+ 	{ .compatible = "qcom,sm8250-venus", .data = &sm8250_res, },
+ 	{ }
+ };
+diff -ruN a/drivers/media/platform/qcom/venus/hfi_msgs.c b/drivers/media/platform/qcom/venus/hfi_msgs.c
+--- a/drivers/media/platform/qcom/venus/hfi_msgs.c
++++ b/drivers/media/platform/qcom/venus/hfi_msgs.c
+@@ -321,7 +321,13 @@
+ 	if (ret)
+ 		goto done;
+ 
+-	dev_err(dev, VDBGL "error reading F/W version\n");
++	/* IRIS1 (sm7150): "14:VIDEO.IR.1.2-00054-PROD-1" */
++	ret = sscanf(img_ver, "14:VIDEO.IR.%u.%u-%u",
++		     &core->venus_ver.major, &core->venus_ver.minor, &core->venus_ver.rev);
++	if (ret)
++		goto done;
++
++	dev_err(dev, VDBGL "error reading F/W version (%s)\n", (const char *)img_ver);
+ 	return;
+ 
+ done:
+diff -ruN a/drivers/media/platform/qcom/venus/hfi_venus.c b/drivers/media/platform/qcom/venus/hfi_venus.c
+--- a/drivers/media/platform/qcom/venus/hfi_venus.c
++++ b/drivers/media/platform/qcom/venus/hfi_venus.c
+@@ -477,6 +477,17 @@
+ 		mask_val = readl(wrapper_base + WRAPPER_INTR_MASK);
+ 		mask_val &= ~(WRAPPER_INTR_MASK_A2HWD_BASK_V6 |
+ 			      WRAPPER_INTR_MASK_A2HCPU_MASK);
++	} else if (IS_IRIS1(hdev->core)) {
++		/*
++		 * Like IRIS2: unmask only the CPU and watchdog lines and keep
++		 * the rest of the reset value. This is what the downstream
++		 * driver does for its VPU 5 (interrupt_init_vpu5), where
++		 * the AR50 write below would also unmask lines it never
++		 * handles.
++		 */
++		mask_val = readl(wrapper_base + WRAPPER_INTR_MASK);
++		mask_val &= ~(WRAPPER_INTR_MASK_A2HWD_BASK |
++			      WRAPPER_INTR_MASK_A2HCPU_MASK);
+ 	} else {
+ 		mask_val = WRAPPER_INTR_MASK_A2HVCODEC_MASK;
+ 	}
+@@ -544,6 +555,17 @@
+ 
+ 	writel(hdev->ifaceq_table.da, cpu_cs_base + UC_REGION_ADDR);
+ 	writel(SHARED_QSIZE, cpu_cs_base + UC_REGION_SIZE);
++	if (IS_IRIS1(hdev->core)) {
++		/*
++		 * IRIS1 firmware also serves a DSP (CVP) client and keeps a
++		 * second view of the queue table for it. Downstream
++		 * (setup_dsp_uc_memmap_vpu5) points it at the CPU queues
++		 * when there is no CVP client, as here.
++		 */
++		writel(hdev->ifaceq_table.da, cpu_cs_base + CPU_CS_VMIMSG);
++		writel(hdev->ifaceq_table.da, cpu_cs_base + CPU_CS_VMIMSGAG0);
++		writel(SHARED_QSIZE, cpu_cs_base + CPU_CS_VMIMSGAG1);
++	}
+ 	writel(hdev->ifaceq_table.da, cpu_cs_base + CPU_CS_SCIACMDARG2);
+ 	writel(0x01, cpu_cs_base + CPU_CS_SCIACMDARG1);
+ 	if (hdev->sfr.da)
+@@ -674,6 +696,22 @@
+ 	if (ret)
+ 		goto err;
+ 
++	if (IS_IRIS1(hdev->core)) {
++		void __iomem *wrapper_base = hdev->core->wrapper_base;
++
++		/*
++		 * Downstream writes these after every clock enable, and only
++		 * on VPU 5 (clock_config_on_enable_vpu5). Mainline writes
++		 * them only on the non-TZ path (venus_reset_cpu), which a
++		 * production phone never takes: TZ boots the firmware. Left
++		 * at their reset values, the ARM9 on the sm7150 answered
++		 * SYS_INIT but never showed WFI in WRAPPER_CPU_STATUS, and
++		 * the first power collapse timed out (measured 2026-09-19).
++		 */
++		writel(0x0, wrapper_base + WRAPPER_CPU_CGC_DIS);
++		writel(0x0, wrapper_base + WRAPPER_CPU_CLOCK_CONFIG);
++	}
++
+ 	ret = venus_run(hdev);
+ 	if (ret)
+ 		goto err_suspend;
+@@ -1539,6 +1577,16 @@
+ 	return 0;
+ }
+ 
++static u32 venus_cpu_status(struct venus_hfi_device *hdev)
++{
++	struct venus_core *core = hdev->core;
++
++	if (IS_IRIS2(core) || IS_IRIS2_1(core) || IS_AR50_LITE(core))
++		return readl(core->wrapper_tz_base + WRAPPER_TZ_CPU_STATUS_V6);
++
++	return readl(core->wrapper_base + WRAPPER_CPU_STATUS);
++}
++
+ static bool venus_cpu_and_video_core_idle(struct venus_hfi_device *hdev)
+ {
+ 	void __iomem *wrapper_base = hdev->core->wrapper_base;
+@@ -1615,7 +1663,17 @@
+ 	ret = readx_poll_timeout(venus_cpu_and_video_core_idle, hdev, val, val,
+ 				 1500, 100 * 1500);
+ 	if (ret) {
+-		dev_err(dev, "wait for cpu and video core idle fail (%d)\n", ret);
++		dev_err(dev, "wait for cpu and video core idle fail (%d): cpu status %#x, ctrl status %#x\n",
++			ret, venus_cpu_status(hdev),
++			readl(cpu_cs_base + CPU_CS_SCIACMDARG0));
++		/*
++		 * A core that is still busy is not an error downstream: it
++		 * skips the power collapse and tries again later. -EAGAIN
++		 * gives the PM core that meaning; -ETIMEDOUT would set
++		 * runtime_error and leave the device unusable until unbind.
++		 */
++		if (IS_IRIS1(hdev->core))
++			return -EAGAIN;
+ 		return ret;
+ 	}
+ 
+diff -ruN a/drivers/media/platform/qcom/venus/hfi_venus_io.h b/drivers/media/platform/qcom/venus/hfi_venus_io.h
+--- a/drivers/media/platform/qcom/venus/hfi_venus_io.h
++++ b/drivers/media/platform/qcom/venus/hfi_venus_io.h
+@@ -54,6 +54,11 @@
+ #define CPU_CS_VCICMD				0x20
+ #define CPU_CS_VCICMD_ARP_OFF			BIT(0)
+ 
++/* IRIS1: the DSP (CVP) view of the HFI queue table */
++#define CPU_CS_VMIMSG				0x34
++#define CPU_CS_VMIMSGAG0			0x38
++#define CPU_CS_VMIMSGAG1			0x3c
++
+ #define SFR_ADDR				0x5c
+ #define MMAP_ADDR				0x60
+ #define UC_REGION_ADDR				0x64
+diff -ruN a/drivers/media/platform/qcom/venus/pm_helpers.c b/drivers/media/platform/qcom/venus/pm_helpers.c
+--- a/drivers/media/platform/qcom/venus/pm_helpers.c
++++ b/drivers/media/platform/qcom/venus/pm_helpers.c
+@@ -1045,11 +1045,27 @@
+ 		ret = core_clks_enable(core);
+ 		if (ret < 0 && pmctrl)
+ 			pm_runtime_put_sync(pmctrl);
++
++		/*
++		 * IRIS1: the firmware drives the video core and the CVP from
++		 * the moment it boots. Downstream enables every GDSC (mvsc,
++		 * mvs0, mvs1) and hands them to hardware control before
++		 * loading it. Powered per session as on the sc7180, this
++		 * firmware answers SYS_INIT and then never goes idle nor
++		 * answers a session (measured 2026-09-19). Sessions still only
++		 * take core 1 (vcodec_num = 1); this just keeps both blocks
++		 * powered and under hardware control while the core is on.
++		 */
++		if (!ret && IS_IRIS1(core))
++			ret = poweron_coreid(core, VIDC_CORE_ID_1 | VIDC_CORE_ID_2);
+ 	} else {
+ 		/* Drop the performance state vote */
+ 		if (core->opp_pmdomain)
+ 			dev_pm_opp_set_rate(dev, 0);
+ 
++		if (IS_IRIS1(core))
++			poweroff_coreid(core, VIDC_CORE_ID_1 | VIDC_CORE_ID_2);
++
+ 		core_clks_disable(core);
+ 
+ 		ret = core_resets_reset(core);
