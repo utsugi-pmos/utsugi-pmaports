@@ -1,0 +1,29 @@
+maintainer="noemdespertis <noemdespertis@gmail.com>"
+# Hardware video decoding on the POCO X3 NFC, the user-space half. The kernel
+# half is 0120-venus-for-the-sm7150 in linux-postmarketos-qcom-sm7150-utsugi:
+# with it the Venus block shows up as a V4L2 mem2mem decoder (H.264, HEVC,
+# VP8, VP9, MPEG-2) and encoder.
+#
+# GStreamer needs nothing: gst-plugins-good registers v4l2h264dec & co. from
+# the device nodes, one rank above the software decoders, so Showtime and the
+# rest pick it up on their own. mpv does not: v4l2m2m is never chosen unless
+# asked for, so this ships the two lines that ask (H.264 and HEVC only: see
+# mpv.conf for why VP9 is left out), in the system-wide config under the
+# user's own (~/.config/mpv wins, as always).
+pkgname=utsugi-surya-video
+pkgver=1
+pkgrel=1
+pkgdesc="Hardware video decoding defaults for the Xiaomi POCO X3 NFC"
+url="https://github.com/utsugi-pmos/utsugi-pmaports"
+arch="noarch"
+license="MIT"
+options="!check"
+depends="linux-postmarketos-qcom-sm7150-utsugi>=7.1_rc3-r267"
+source="mpv.conf"
+
+package() {
+	install -Dm644 "$srcdir"/mpv.conf "$pkgdir"/etc/mpv/mpv.conf
+}
+sha512sums="
+2860c003b8612d84fb1c6bfcef110cfb741a7facc1ff7078c7e306906017a599781eea2821910db2a40d9f76c9a2861914fc3a092eb0aeb26ca4b397c2334cbd  mpv.conf
+"

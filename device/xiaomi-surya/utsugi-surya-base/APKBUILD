@@ -23,8 +23,8 @@ maintainer="Dr. Utsugi <cidwel@gmail.com>"
 # abort the WHOLE transaction and the rest ends up uninstalled without warning.
 pkgname=utsugi-surya-base
 pkgver=8
-pkgrel=1
-pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras, power, the Plasma Mobile fixes and six applications"
+pkgrel=2
+pkgdesc="Xiaomi POCO X3 NFC: kernel, audio, sensors, GPS, cameras, video decoding, power, the Plasma Mobile fixes and six applications"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
@@ -50,6 +50,7 @@ depends="
 	utsugi-surya-plasma
 	utsugi-surya-first-password
 	utsugi-surya-encrypt
+	utsugi-surya-video
 	poconav
 	screenglaze
 	phone-keyconfig
