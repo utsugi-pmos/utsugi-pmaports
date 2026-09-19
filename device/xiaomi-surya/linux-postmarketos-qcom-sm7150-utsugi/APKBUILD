@@ -5,7 +5,7 @@ _flavor="postmarketos-qcom-sm7150"
 _orig=linux-$_flavor
 pkgname=$_orig-utsugi
 pkgver=7.1_rc3
-pkgrel=266
+pkgrel=267
 
 # FORK of linux-postmarketos-qcom-sm7150. _flavor is deliberately NOT renamed:
 # /boot/vmlinuz, /lib/modules/<release> and /usr/share/kernel/<flavor> must stay
@@ -124,6 +124,7 @@ source="
 	0117-sm7150-interconnect-qup0-keepalive.patch
 	0118-dw9807-the-subdev-outlives-the-unbind.patch
 	0119-ath-world-regd-for-cn-locked-card.patch
+	0125-venus-for-the-sm7150.patch
 "
 builddir="$srcdir/linux-$_tag"
 
@@ -242,4 +243,5 @@ a452de707f40bf1f660bd5465677979247da40c54c418dfb333c7a5263d5f7082ca4ad4d3e80dcff
 d6df0f7be10112bb0cafcc2a42ed68674874967aa6166101509cacb06c550f62fc3a4703385ab1374499a52bba377e06f6714c08307443428e24940fd0f8e162  0117-sm7150-interconnect-qup0-keepalive.patch
 53df96d3663a5d0f8dfe4868ded6ed3a931821a4a0df56ea98e1ee2752794561f8770ef9ebf23aca46957000e2f216b2c81d5abfa112f9009ee8f8409c4db228  0118-dw9807-the-subdev-outlives-the-unbind.patch
 09afe280c6f85e10709feae73a10f989e03c551f6ef633eac2f13c4a62d796de0d7abeeb5652d0897256bcd3579cae5a8e4911022557266a5a7a6ededb9ae059  0119-ath-world-regd-for-cn-locked-card.patch
+55eeaf64aea091d6f8bb243978330e40cbc3afb5ecac93f2f8e537e7afea115797010581fcf21f3a2220414e202e2d3e13216ff1ff651d3d810dd61cb3c44c55  0125-venus-for-the-sm7150.patch
 "

@@ -91,6 +91,13 @@
 			user-space engine against a measured curve. It has to be a service: the driver
 			returns the lens to origin and powers the chip off the moment the node is
 			closed, so someone must hold that descriptor open.</td></tr>
+			<tr><td class="mono">utsugi-surya-video</td><td>Video decoded by the
+			Venus block instead of the CPU: H.264 and HEVC, bit for bit what the software
+			decoder produces, at a few percent of one core for 1080p instead of most of it.
+			The kernel half is a patch of ours (the driver did not know the SM7150, an
+			IRIS1 the way the SM8150 is); this package is the mpv default that asks for it.
+			VP9 is deliberately left in software: the block decodes libvpx streams
+			perfectly and YouTube's wrongly, and that is not understood yet.</td></tr>
 			<tr><td class="mono">utsugi-surya-blackbox</td><td>So a freeze leaves a trace:
 			the console level raised above what <code>quiet</code> allows, the previous
 			boot's journal archived, and <b>freeze-watchdog</b>, which

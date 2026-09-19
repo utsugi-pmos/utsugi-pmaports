@@ -8,7 +8,7 @@ postmarketOS is Alpine-based, so this is **apk**, not apt.
 
 | Device | Codename | Status |
 |---|---|---|
-| POCO X3 NFC | `xiaomi-surya` (generic port `qcom-sm7150`) | cameras, in-call voice, volume, sensors, GPS, real power-off |
+| POCO X3 NFC | `xiaomi-surya` (generic port `qcom-sm7150`) | cameras, in-call voice, volume, sensors, GPS, hardware video decoding, real power-off |
 | POCO X3 Pro | `xiaomi-vayu` | **experimental**, the modem does not work |
 
 ## Status
@@ -42,7 +42,7 @@ sudo apk add utsugi-surya-base
 Two packages, and only one of them is a decision:
 
 - **`utsugi-surya-base`** -- the phone. The patched kernel, audio, sensors, GPS,
-  cameras, power-off, charge mode, the Plasma Mobile fixes and the six own
+  cameras, video decoding, power-off, charge mode, the Plasma Mobile fixes and the six own
   applications. There is nothing to weigh up here: all of it is something that
   did not work.
 - **`utsugi-surya-extras`** -- applications anybody could pick for themselves:
