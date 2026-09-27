@@ -1,0 +1,115 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Install postmarketOS first &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=94828a95">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html" aria-current="page">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Route 3 &middot; from scratch</div>
+		<h1>Install postmarketOS yourself</h1>
+		<p class="lede">Four steps: Xiaomi unlocks the phone, U-Boot goes on it,
+		pmbootstrap builds a system, and this repository fills in the hardware.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Unlock the bootloader</h2></div>
+		<p>Xiaomi's own procedure: a Mi account, seven days of waiting and a
+		Windows-only tool, and it wipes the phone. It gates everything else, so if
+		you have not started it, start it now.</p>
+		<p><a class="btn" href="unlock.html">The unlock, step by step &rarr;</a></p>
+
+		<div class="h" style="margin-top:34px"><span>02</span><h2>Find out which panel you have</h2></div>
+		<p>The POCO X3 NFC shipped with two different screens &mdash; <b>Tianma</b>
+		and <b>Huaxing</b> &mdash; and U-Boot comes as one build per panel. The wrong
+		one leaves the screen black: the phone boots fine, it just draws nothing.
+		You flash the other one and it comes back.</p>
+		<p>The quick way, from MIUI, with USB debugging on (you turned the developer
+		options on in step 01) and <code>adb</code> installed:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC</span></div>
+			<pre>adb shell cat /proc/cmdline | tr ' ' '\n' | grep -i dsi</pre>
+		</div>
+		<p>Xiaomi's kernel names the panel in there: the line has
+		<code>tianma</code> or <code>huaxing</code> in it. That is your answer.</p>
+		<p>If that prints nothing useful, do it the blunt way: flash one, power the
+		phone on, look at the screen. Black means it was the other one. Nothing
+		breaks and you can reflash as many times as you like.</p>
+
+		<div class="h" style="margin-top:34px"><span>03</span><h2>U-Boot goes on <code>boot</code></h2></div>
+		<p>The generic <code>qcom-sm7150</code> port does not boot a kernel from
+		the <code>boot</code> partition &mdash; it boots U-Boot from there, and
+		U-Boot loads the kernel out of the system on <code>userdata</code>. So
+		<code>boot</code> gets written once, with U-Boot, and never again.</p>
+		<p>Download the image for your panel from the releases page of
+		<a href="https://github.com/sm7150-mainline/u-boot/releases">sm7150-mainline/u-boot</a>
+		(<code>u-boot-sm7150-xiaomi-surya-tianma.img</code> or
+		<code>&hellip;-huaxing.img</code>), put the phone in fastboot &mdash; off,
+		then volume-down + power &mdash; and:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>sudo fastboot devices        <b># must print your phone</b>
+sudo fastboot erase dtbo     <i># MIUI's device tree overlay would fight U-Boot</i>
+sudo fastboot flash boot u-boot-sm7150-xiaomi-surya-tianma.img
+sudo fastboot reboot</pre>
+		</div>
+		<p>On Windows drop the <code>sudo</code> and call it
+		<code>.\fastboot</code>; on a Mac drop the <code>sudo</code>. If
+		<code>fastboot</code> is not installed yet, the front page lists the package
+		for each system.</p>
+		<p>What you should see: a text console instead of the MIUI logo, complaining
+		that it has nothing to boot. That complaint is the good outcome &mdash; there
+		is no system on <code>userdata</code> yet. A screen that stays black means
+		the other panel.</p>
+
+		<div class="h" style="margin-top:34px"><span>04</span><h2>Build a system with pmbootstrap</h2></div>
+		<p><b>pmbootstrap</b> is postmarketOS's build tool. It runs on Linux (a VM
+		is fine), downloads its own Alpine chroots and builds the whole system
+		image for you:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>IN A TERMINAL ON YOUR PC (LINUX)</span></div>
+			<pre>pipx install pmbootstrap      <i># or: pip install --user pmbootstrap</i>
+
+pmbootstrap init              <i># vendor: qcom &middot; device: sm7150 &middot; UI: plasma-mobile</i>
+pmbootstrap config service_manager systemd   <b># OpenRC gives a broken image here</b>
+pmbootstrap install           <i># asks for a user name and password</i>
+
+<i># phone in fastboot again, then:</i>
+pmbootstrap flasher flash_rootfs             <b># userdata. never flash_kernel.</b></pre>
+		</div>
+		<p>Answer <code>edge</code> when it asks for the channel. The first
+		<code>install</code> takes a while &mdash; it is downloading and assembling a
+		distribution. First boot is slow too, a couple of minutes.</p>
+		<p>What you get is stock postmarketOS on this phone: it boots, the screen
+		and the touch work, wifi works. No cameras, no voice on calls, silent
+		speakers, GPS that never locks. That is what the last step fixes.</p>
+
+		<div class="h" style="margin-top:34px"><span>05</span><h2>Add this repository</h2></div>
+		<p>Three commands on the phone and it turns into the one the front page
+		describes: kernel with the hardware patched, audio, sensors, GPS, cameras.</p>
+		<p><a class="btn" href="install-repo.html">The three commands &rarr;</a></p>
+		<div class="next">
+			<a href="install-image.html"><b>Shorter</b><span>Flash the ready image</span></a>
+			<a href="contribute.html"><b>Building packages?</b><span>Contribute</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz">https://utsugi-pmos.github.io/utsugi-pmaports/main</a></span>
+	<span>key <a href="https://utsugi-pmos.github.io/utsugi-pmaports/keys/utsugi-pmaports-6aa024e2.rsa.pub">utsugi-pmaports-6aa024e2.rsa.pub</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>

@@ -1,0 +1,124 @@
+<!doctype html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Contribute &mdash; utsugi-pmaports</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css?v=94828a95">
+<header><div>
+	<a class="brand" href="index.html"><i></i>utsugi/pmaports</a>
+	<nav>
+	<a href="index.html">Start</a>
+	<a href="install.html">Install</a>
+	<a href="devices.html">Devices</a>
+	<a href="packages.html">What is inside</a>
+	<a href="contribute.html" aria-current="page">Contribute</a>
+	</nav>
+</div></header>
+<section class="panel">
+	<div class="wrap">
+		<div class="eyebrow">Seven repositories, MIT and GPL</div>
+		<h1>Contribute</h1>
+		<p class="lede">Patches, recipes, build scripts and the reasoning behind every
+		decision. Reporting a phone that boots, or does not, already helps.</p>
+		<div class="grid">
+			<a href="https://github.com/utsugi-pmos/utsugi-pmaports">
+				<div class="n">utsugi-pmaports</div>
+				<p>Packages, the 78 kernel patches, metapackages, build and publish
+				scripts.</p></a>
+			<a href="https://github.com/utsugi-pmos/poconav">
+				<div class="n">poconav</div><p>Car navigation.</p></a>
+			<a href="https://github.com/utsugi-pmos/screenglaze">
+				<div class="n">screenglaze</div><p>Screenshots.</p></a>
+			<a href="https://github.com/utsugi-pmos/keepalive">
+				<div class="n">keepalive</div><p>Apps that minimise instead of closing.</p></a>
+			<a href="https://github.com/utsugi-pmos/app-usage">
+				<div class="n">app-usage</div><p>Battery per application.</p></a>
+			<a href="https://github.com/utsugi-pmos/smart-unlock">
+				<div class="n">smart-unlock</div><p>Skip the PIN when it is safe.</p></a>
+			<a href="https://github.com/utsugi-pmos/lost-phone">
+				<div class="n">lost-phone</div><p>Find the phone without Google.</p></a>
+		</div>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>01</span><h2>Build it</h2></div>
+		<div class="sh">
+			<div class="bar"><i></i><span>ON YOUR PC</span></div>
+			<pre>git clone https://github.com/utsugi-pmos/utsugi-pmaports
+cd utsugi-pmaports
+scripts/setup-workdir   <i># own work dir, pinned pmaports, a signing key</i>
+scripts/build --all     <i># the kernel takes about 20 minutes</i>
+scripts/lint            <i># forks, version bumps, unreachable packages</i>
+scripts/check-upstream  <i># says when a fork has fallen behind</i>
+scripts/publish --push</pre>
+		</div>
+		<h3>Three rules that will bite otherwise</h3>
+		<div class="scroll">
+		<table>
+			<tr><th>Always bump</th><td>pmbootstrap skips a build whose version already
+			exists in any index it knows and reports success. Use
+			<code>scripts/bump</code>.</td></tr>
+			<tr><th>Never move a tag</th><td>The old tarball stays in the distfile cache
+			under the same name and the build silently uses it.</td></tr>
+			<tr><th>The chroot builds as uid 12345</th><td>Anything it writes to must
+			belong to <code>12345</code>: the signing key, the ccache. Both have cost a
+			day.</td></tr>
+		</table>
+		</div>
+	</div>
+</section>
+
+<section class="panel">
+	<div class="wrap">
+		<div class="h"><span>02</span><h2>How the packages are put together</h2></div>
+		<p>A patched package is forked under its own name and claims upstream's with a
+		versioned <code>provides</code>:</p>
+		<div class="sh">
+			<div class="bar"><i></i><span>APKBUILD</span></div>
+			<pre>_orig=hexagonrpcd
+pkgname=$_orig-utsugi
+provides="$_orig=$pkgver-r$pkgrel"
+replaces="$_orig"</pre>
+		</div>
+		<p>apk then refuses to have both installed, anything depending on
+		<code>hexagonrpcd</code> is satisfied by ours, and an upstream release cannot
+		quietly take its place.</p>
+		<p>Each kernel patch carries its own write-up above the diff: what broke, what
+		was measured, what was ruled out. If you send one, write it the same way.</p>
+	</div>
+</section>
+
+<section>
+	<div class="wrap">
+		<div class="h"><span>03</span><h2>Where help would land</h2></div>
+		<div class="scroll">
+		<table>
+			<tr><th>Fingerprint</th><td>Four routes are documented dead ends. A fifth
+			would be new ground.</td></tr>
+			<tr><th>Echo on calls</th><td>Tunable at runtime. Needs patience and a
+			second phone.</td></tr>
+			<tr><th>ADSP recovery deadlock</th><td>Takes the filesystem with it. The
+			measurements are written up; the cause is not found.</td></tr>
+			<tr><th>Vayu modem</th><td>Pinned to one firmware assertion. Nobody has got
+			past it.</td></tr>
+			<tr><th>Upstreaming</th><td>The GPS engine lock affects every Qualcomm device
+			on postmarketOS. The dialpad fix belongs in KDE.</td></tr>
+			<tr><th>Stereo audio</th><td>Kernel work on
+			<code>TERT_MI2S_RX</code>.</td></tr>
+		</table>
+		</div>
+		<div class="next">
+			<a href="packages.html"><b>See</b><span>What is inside</span></a>
+			<a href="index.html"><b>Back to</b><span>Start</span></a>
+		</div>
+	</div>
+</section>
+<footer><div>
+	<span>index <a href="https://utsugi-pmos.github.io/utsugi-pmaports/main/aarch64/APKINDEX.tar.gz">https://utsugi-pmos.github.io/utsugi-pmaports/main</a></span>
+	<span>key <a href="https://utsugi-pmos.github.io/utsugi-pmaports/keys/utsugi-pmaports-6aa024e2.rsa.pub">utsugi-pmaports-6aa024e2.rsa.pub</a></span>
+	<span class="end">packaging MIT &middot; kernel GPL-2.0 &middot; not affiliated with Xiaomi, POCO or KDE e.V.</span>
+</div></footer>
