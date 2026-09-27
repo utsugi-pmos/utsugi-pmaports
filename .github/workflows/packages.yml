@@ -81,24 +81,6 @@ jobs:
           retention-days: 14
           if-no-files-found: ignore
 
-      # The cache is saved here, after the apks are safe, and it is allowed to
-      # fail: a slow or stuck upload must never cost the publish. The chroot left
-      # it owned by 12345 (see the action), so it goes back to the runner first.
-      - name: give the cache back to the runner
-        if: always()
-        run: |
-          W=~/.local/var/pmbootstrap-utsugi
-          sudo chown -R "$(id -u):$(id -g)" "$W/cache_ccache_aarch64" "$W/cache_distfiles"
-      - uses: actions/cache/save@v4
-        if: always()
-        continue-on-error: true
-        timeout-minutes: 30
-        with:
-          path: |
-            ~/.local/var/pmbootstrap-utsugi/cache_ccache_aarch64
-            ~/.local/var/pmbootstrap-utsugi/cache_distfiles
-          key: pmb-${{ runner.arch }}-${{ hashFiles('upstream.lock') }}-${{ github.run_id }}
-
   publish:
     needs: build
     runs-on: ubuntu-24.04

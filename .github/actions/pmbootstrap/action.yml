@@ -78,11 +78,7 @@ runs:
           fi
         } > .local/pmbootstrap-release.cfg
 
-    # Restore only. Saving is a step of its own in packages.yml: as the post
-    # step of this action it hung for over two hours on a 4.9 GB ccache on
-    # 2026-09-27, after a green build, until the job timeout killed it and took
-    # the publish job down with it.
-    - uses: actions/cache/restore@v4
+    - uses: actions/cache@v4
       with:
         path: |
           ~/.local/var/pmbootstrap-utsugi/cache_ccache_aarch64
