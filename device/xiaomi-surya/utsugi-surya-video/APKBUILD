@@ -10,20 +10,31 @@ maintainer="noemdespertis <noemdespertis@gmail.com>"
 # asked for, so this ships the two lines that ask (H.264 and HEVC only: see
 # mpv.conf for why VP9 is left out), in the system-wide config under the
 # user's own (~/.config/mpv wins, as always).
+#
+# VP9 has to be kept away from GStreamer as well, since it picks the hardware
+# decoder by itself: the profile script ranks v4l2vp9dec out of autoplugging.
 pkgname=utsugi-surya-video
 pkgver=1
-pkgrel=1
+pkgrel=2
 pkgdesc="Hardware video decoding defaults for the Xiaomi POCO X3 NFC"
 url="https://github.com/utsugi-pmos/utsugi-pmaports"
 arch="noarch"
 license="MIT"
 options="!check"
 depends="linux-postmarketos-qcom-sm7150-utsugi>=7.1_rc3-r267"
-source="mpv.conf"
+source="
+	mpv.conf
+	60-utsugi-surya-video.conf
+	utsugi-surya-video.profile
+	"
 
 package() {
 	install -Dm644 "$srcdir"/mpv.conf "$pkgdir"/etc/mpv/mpv.conf
+	install -Dm644 "$srcdir"/60-utsugi-surya-video.conf -t "$pkgdir"/usr/lib/environment.d/
+	install -Dm644 "$srcdir"/utsugi-surya-video.profile "$pkgdir"/etc/profile.d/utsugi-surya-video.sh
 }
 sha512sums="
 2860c003b8612d84fb1c6bfcef110cfb741a7facc1ff7078c7e306906017a599781eea2821910db2a40d9f76c9a2861914fc3a092eb0aeb26ca4b397c2334cbd  mpv.conf
+6fc3d267e2a1a7883d020b257cae94b72bc5baf5a8010585ccc040e7fb89340659adac2b4fdc8196d82a528e67a48007218478e84d987ca6e771b7263e4bf377  60-utsugi-surya-video.conf
+03de83de1f3023951f7a9f6812d7ceda382957218fc6ff628e4ec6a9a26f5eaeb57de0a296f2a1bf2d99ca7084943fecc2fb8b721202d915ef1443ba557e238e  utsugi-surya-video.profile
 "
